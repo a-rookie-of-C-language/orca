@@ -25,7 +25,7 @@ function GitHistoryRefBadge({ itemRef }: { itemRef: GitHistoryItemRef }): React.
           {itemRef.name}
         </span>
       </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={6} className="max-w-72">
+      <TooltipContent variant="surface" side="bottom" sideOffset={6} className="max-w-72">
         {refLabel}
       </TooltipContent>
     </Tooltip>
@@ -115,7 +115,7 @@ export const GitHistoryRow = React.forwardRef<HTMLElement, GitHistoryRowProps>(
                     +{hiddenRefs.length}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={6} className="max-w-72">
+                <TooltipContent variant="surface" side="bottom" sideOffset={6} className="max-w-72">
                   {hiddenRefs.map((ref) => ref.name).join(', ')}
                 </TooltipContent>
               </Tooltip>

@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import type { GitHistoryItemRef } from '../../../../../../shared/git-history'
 import type { GitHistoryItemViewModel } from '../../../../../../shared/git-history-graph'
 import { GitHistoryRow } from './git-history-row'
 
@@ -20,6 +21,47 @@ function viewModel(commitMessage = message): GitHistoryItemViewModel {
 afterEach(cleanup)
 
 describe('Git history commit details', () => {
+  it.each([
+    {
+      label: 'branch',
+      references: [
+        { id: 'refs/heads/feature', name: 'feature', category: 'branches' }
+      ] satisfies GitHistoryItemRef[],
+      trigger: 'feature',
+      content: 'feature (branches)'
+    },
+    {
+      label: 'hidden refs',
+      references: [
+        { id: 'refs/heads/feature', name: 'feature', category: 'branches' },
+        { id: 'refs/remotes/origin/main', name: 'origin/main', category: 'remote branches' },
+        { id: 'refs/tags/v1', name: 'v1', category: 'tags' }
+      ] satisfies GitHistoryItemRef[],
+      trigger: '+1',
+      content: 'v1'
+    }
+  ])('uses theme-aware colors for the $label tooltip and arrow', async (testCase) => {
+    const model = viewModel()
+    model.historyItem.references = testCase.references
+    render(
+      <TooltipProvider>
+        <GitHistoryRow viewModel={model} />
+      </TooltipProvider>
+    )
+
+    fireEvent.pointerMove(screen.getByText(testCase.trigger), { pointerType: 'mouse' })
+
+    await waitFor(() => {
+      const tooltip = document.querySelector('[data-slot="tooltip-content"]')
+      expect(tooltip?.textContent).toContain(testCase.content)
+      expect(tooltip?.classList.contains('bg-popover')).toBe(true)
+      expect(tooltip?.classList.contains('text-popover-foreground')).toBe(true)
+      const arrow = tooltip?.querySelector('svg')
+      expect(arrow?.classList.contains('fill-popover')).toBe(true)
+      expect(arrow?.classList.contains('bg-foreground')).toBe(false)
+    })
+  })
+
   it('uses a theme-aware hover card for the full commit message', async () => {
     render(
       <TooltipProvider>
