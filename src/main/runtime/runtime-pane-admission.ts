@@ -1,5 +1,8 @@
 import { toSshExecutionHostId } from '../../shared/execution-host'
-import type { TerminalPaneAdmission } from '../persistence/terminal-topology/terminal-pane-admission'
+import type {
+  TerminalPaneAdmission,
+  TerminalPaneAdmissionOutcome
+} from '../persistence/terminal-topology/terminal-pane-admission'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
 import type { RuntimeStore } from './runtime-store-contract'
 
@@ -48,38 +51,80 @@ export async function withdrawRuntimePane(
   store: RuntimeStore | null | undefined,
   args: AdmittedSpawnArgs
 ): Promise<void> {
+  await withdrawAdmittedPane(store, admissionFor(args), hostIdOf(args))
+}
+
+/** Never the user's close: main stops no launch for it, unlike a window's closePane. */
+async function withdrawAdmittedPane(
+  store: RuntimeStore | null | undefined,
+  admission: TerminalPaneAdmission,
+  hostId: string | undefined
+): Promise<void> {
+  const leafId = admission.type === 'createTerminalTab' ? admission.leafId : admission.newLeafId
   await store?.withdrawTerminalPane?.(
-    { type: 'closePane', workspace: args.worktreeId, tabId: args.tabId, leafId: args.leafId },
-    hostIdOf(args)
+    { type: 'closePane', workspace: admission.workspace, tabId: admission.tabId, leafId },
+    hostId
   )
 }
 
 /**
- * Starts a runtime-originated terminal (design 4.1): its pane, tab-bar entry and group are written
- * first, then the process starts and binds to that pane. A start that fails, or that attaches to a
- * session already running in another pane, takes back the pane it wrote.
+ * Writes a pane before what fills it starts (design 4.1), then runs `start`. A start that fails
+ * takes back a pane this wrote, unless `shown` says a client already holds it.
+ */
+export async function startInAdmittedPane<T>(
+  store: RuntimeStore | null | undefined,
+  admission: TerminalPaneAdmission,
+  hostId: string | undefined,
+  start: (outcome: TerminalPaneAdmissionOutcome | undefined) => Promise<T>,
+  options: {
+    shown?: () => boolean
+    /** A thrown write is rolled back, so the start may go ahead without the pane. */
+    startIfWriteFails?: true
+  } = {}
+): Promise<{ outcome: TerminalPaneAdmissionOutcome | undefined; result: T }> {
+  let outcome: TerminalPaneAdmissionOutcome | undefined
+  try {
+    outcome = await store?.admitTerminalPane?.(admission, hostId)
+  } catch (error) {
+    if (!options.startIfWriteFails) {
+      throw error
+    }
+    console.warn('[layout-owner] pane not written before its start:', error)
+  }
+  try {
+    return { outcome, result: await start(outcome) }
+  } catch (error) {
+    if (outcome === 'admitted' && !options.shown?.()) {
+      await withdrawAdmittedPane(store, admission, hostId)
+    }
+    throw error
+  }
+}
+
+/**
+ * Starts a runtime-originated terminal: its pane, tab-bar entry and group are written first, then
+ * the process starts and binds to that pane. A start that fails, or that attaches to a session
+ * already running in another pane, takes back the pane it wrote.
  */
 export async function spawnInAdmittedPane(
   store: RuntimeStore | null | undefined,
   controller: Pick<RuntimePtyController, 'spawn'>,
   args: AdmittedSpawnArgs
 ): ReturnType<Spawn> {
-  const outcome = await store?.admitTerminalPane?.(admissionFor(args), hostIdOf(args))
-  if (outcome !== undefined && outcome !== 'admitted' && outcome !== 'exists') {
-    // Only a split is refused: its parent pane left the layout.
-    throw new Error('terminal_split_source_not_found')
-  }
   const { groupId: _groupId, ...spawnArgs } = args
-  let result: Awaited<ReturnType<Spawn>>
-  try {
-    // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
-    result = await controller.spawn!(spawnArgs)
-  } catch (error) {
-    if (outcome === 'admitted') {
-      await withdrawRuntimePane(store, args)
+  const { outcome, result } = await startInAdmittedPane(
+    store,
+    admissionFor(args),
+    hostIdOf(args),
+    async (admitted) => {
+      if (admitted !== undefined && admitted !== 'admitted' && admitted !== 'exists') {
+        // Only a split is refused: its parent pane left the layout.
+        throw new Error('terminal_split_source_not_found')
+      }
+      // SAFETY: Callers require spawn; a lost capability during admission keeps the original failure.
+      return controller.spawn!(spawnArgs)
     }
-    throw error
-  }
+  )
   const started = result.agentSessionEnsure?.owner.surface ?? result.stablePaneOwner
   const elsewhere = started && (started.tabId !== args.tabId || started.leafId !== args.leafId)
   if (outcome === 'admitted' && elsewhere) {

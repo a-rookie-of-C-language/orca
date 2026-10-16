@@ -4,7 +4,10 @@
 import { randomUUID } from 'node:crypto'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
-import { locatePane } from '../../../shared/workspace-layout/workspace-layout-command-steps'
+import {
+  leafIdsOf,
+  locatePane
+} from '../../../shared/workspace-layout/workspace-layout-command-steps'
 import type {
   CommandOf,
   LayoutApplyOutcome,
@@ -26,6 +29,7 @@ import {
   followRemoteSessionAfterPaneDetach
 } from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
 export type TerminalPaneAdmission =
@@ -49,7 +53,7 @@ export function admitPaneToSession(
   if (workspace && locatePane(workspace, paneKeyOf(admission.tabId, leafId))) {
     return { value: 'exists', session: null }
   }
-  const change = applyToSession(loaded, admission)
+  const change = applyToSession(loaded, admission, touchedRecordsWrite(session, loaded))
   return { ...change, value: change.value.ok ? 'admitted' : change.value.code }
 }
 
@@ -58,8 +62,23 @@ export function withdrawPaneFromSession(
   session: WorkspaceSessionState,
   pane: CommandOf<'closePane'>
 ): PaneLayoutChange<LayoutRefusalCode | null> {
-  const change = applyToSession(loadWorkspaceLayout(hostId, session, nameBasedLoadContext()), pane)
+  const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
+  const change = applyToSession(loaded, pane, touchedRecordsWrite(session, loaded))
   return { ...change, value: change.value.ok ? null : change.value.code }
+}
+
+/** Switch point: in a layout-owner build a runtime pane writes only the records it changes, as
+ *  `layout.apply` does; window-owned builds rewrite the whole partition. */
+function touchedRecordsWrite(
+  session: WorkspaceSessionState,
+  loaded: LoadedWorkspaceLayout
+): ((after: WorkspaceSessionState) => WorkspaceSessionState | null) | undefined {
+  return ORCA_LAYOUT_OWNER_IS_MAIN
+    ? (after) => {
+        const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+        return patched === session ? null : patched
+      }
+    : undefined
 }
 
 /**
@@ -72,7 +91,12 @@ export function applyCommandToSession(
   command: LayoutCommand
 ): PaneLayoutChange<LayoutApplyOutcome> {
   const loaded = loadWorkspaceLayout(hostId, session, nameBasedLoadContext())
-  const taken = command.type === 'createTerminalTab' ? takenTabId(loaded.layout, command) : null
+  const taken =
+    command.type === 'createTerminalTab'
+      ? takenTabId(loaded.layout, command)
+      : command.type === 'splitPane'
+        ? takenLeafId(loaded.layout, command)
+        : null
   if (taken) {
     return { value: taken, session: null }
   }
@@ -143,4 +167,27 @@ function takenTabId(
     entry.tabs.some((tab) => tab.id === tabId || tab.entityId === tabId)
   )
   return holds ? { ok: false, code: 'tab_exists' } : null
+}
+
+/**
+ * A window's split under its own pane id: the same split again finds its pane and changes nothing;
+ * another tab holding the id refuses it.
+ */
+function takenLeafId(
+  layout: WorkspaceLayoutModel,
+  command: CommandOf<'splitPane'>
+): LayoutApplyOutcome | null {
+  const { workspace: key, tabId, newLeafId } = command
+  const workspace = layout.workspaces[key]
+  if (!newLeafId || !workspace) {
+    return null
+  }
+  const paneKey = paneKeyOf(tabId, newLeafId)
+  if (locatePane(workspace, paneKey)) {
+    return { ok: true, result: { leafId: newLeafId, paneKey } }
+  }
+  const held = workspace.tabs.some(
+    (tab) => tab.kind === 'terminal' && leafIdsOf(tab).includes(newLeafId)
+  )
+  return held ? { ok: false, code: 'pane_in_other_tab' } : null
 }

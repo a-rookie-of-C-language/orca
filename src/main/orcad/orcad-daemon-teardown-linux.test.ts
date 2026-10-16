@@ -264,22 +264,30 @@ describe('profile daemon cleanup after loss of contact', () => {
   it('waits for a recorded daemon that deleted its pid record before exiting', async ({
     onTestFinished
   }) => {
+    // Exits only when told, so the wait is observed without racing a timer or a zombie reap.
     const retiring = spawnProcess({
       program: process.execPath,
-      args: ['-e', 'setTimeout(() => {}, 1_000)'],
+      args: ['-e', "process.stdin.resume(); process.stdin.on('end', () => process.exit(0))"],
       timeoutMs: null
     })
     const closed = new Promise<void>((resolve, reject) => {
       retiring.once('error', reject)
       retiring.once('close', () => resolve())
     })
-    onTestFinished(() => closed)
+    onTestFinished(async () => {
+      retiring.stdin.end()
+      await closed
+    })
     const root = profile(retiring.pid!, onTestFinished)
     await recordProfileDaemons(root)
     rmSync(join(root, 'daemon', 'daemon-v1.pid'))
     vi.mocked(cleanupDaemonForProtocol).mockClear()
-    await killProfileDaemons(root)
-    expect(() => process.kill(retiring.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }))
+    let settled = false
+    const teardown = killProfileDaemons(root).finally(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(settled).toBe(false)
+    retiring.stdin.end()
+    await expect(teardown).resolves.toBeUndefined()
     expect(cleanupDaemonForProtocol).not.toHaveBeenCalled()
   })
 

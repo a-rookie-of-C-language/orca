@@ -1,7 +1,9 @@
 /**
  * Tests for the presence-based mobile driver lock (see docs/mobile-presence-lock.md).
  */
+import './mobile-subscribe-integration.spec'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { listWorktrees } from '../git/worktree'
 import type * as GitUsernameModule from '../git/git-username'
 import { OrcaRuntimeService } from './orca-runtime'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
@@ -69,6 +71,7 @@ const store = {
 
 // Why (#7588): held-modal repro needs indefinite hold (null); legacy tests need the finite 5s default. Wrap per-test without mutating the shared stub.
 function createRuntime(mobileAutoRestoreFitMs: number | null = 5_000) {
+  vi.mocked(listWorktrees).mockResolvedValue([])
   const effectiveStore = {
     ...store,
     getSettings: () => ({ ...store.getSettings(), mobileAutoRestoreFitMs })

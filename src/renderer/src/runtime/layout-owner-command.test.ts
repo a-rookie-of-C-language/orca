@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { endLayoutFramePositions, noteLayoutFramePosition } from './layout-frame-position'
 import { sendLayoutCommandToOwner } from './layout-owner-command'
 
 const mocks = vi.hoisted(
@@ -29,6 +30,8 @@ function handlers() {
 }
 
 describe('sendLayoutCommandToOwner', () => {
+  afterEach(() => endLayoutFramePositions())
+
   beforeEach(() => {
     mocks.callRuntimeRpc.mockReset()
     mocks.ownerEnvironmentId = null
@@ -47,6 +50,24 @@ describe('sendLayoutCommandToOwner', () => {
     expect(on.apply).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(on.apply).toHaveBeenCalledWith({ leafId: 'leaf-minted' }))
     expect(on.asToday).not.toHaveBeenCalled()
+  })
+
+  it('shows main’s result only once the window holds the frame with main’s change', async () => {
+    noteLayoutFramePosition(4)
+    mocks.callRuntimeRpc.mockResolvedValue({
+      ok: true,
+      result: { leafId: 'leaf-minted' },
+      frameSeq: 5
+    })
+    const on = handlers()
+
+    sendLayoutCommandToOwner('worktree-1', SPLIT, on)
+    await vi.waitFor(() => expect(mocks.callRuntimeRpc).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(on.apply).not.toHaveBeenCalled()
+
+    noteLayoutFramePosition(5)
+    expect(on.apply).toHaveBeenCalledWith({ leafId: 'leaf-minted' })
   })
 
   it('changes nothing itself after a refusal', async () => {

@@ -74,7 +74,7 @@ describe('layout.apply', () => {
     expect(MOBILE_RPC_METHOD_ALLOWLIST.has('layout.apply')).toBe(false)
   })
 
-  it('is registered in a layout-owner build and accepts no id main should mint', async () => {
+  it('is registered in a layout-owner build; a split keeps only a valid window pane id', async () => {
     const apply = (await registeredMethods(true)).find((method) => method.name === 'layout.apply')
     if (!apply || isStreamingMethod(apply)) {
       throw new Error('layout.apply is not a request method')
@@ -82,12 +82,19 @@ describe('layout.apply', () => {
     const applyLayoutCommand = vi.fn(async () => ({ ok: true, result: {} }))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler calls only applyLayoutCommand.
     const runtime = { applyLayoutCommand } as unknown as OrcaRuntimeService
+    const newLeafId = '33333333-3333-4333-8333-333333333333'
 
-    const params = apply.params?.parse({ command: { ...SPLIT, newLeafId: 'window-minted' } })
+    const params = apply.params?.parse({ command: { ...SPLIT, newLeafId, groupId: 'window-g' } })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only runtime from its context.
     await apply.handler(params, { runtime } as RpcContext)
 
-    expect(applyLayoutCommand).toHaveBeenCalledWith(SPLIT)
+    expect(applyLayoutCommand).toHaveBeenCalledWith({ ...SPLIT, newLeafId })
+    expect(apply.params?.parse({ command: { ...SPLIT, id: 'window-id' } })).toEqual({
+      command: SPLIT
+    })
+    expect(
+      apply.params?.safeParse({ command: { ...SPLIT, newLeafId: 'window-minted' } }).success
+    ).toBe(false)
   })
 
   it('takes no close semantics or blank title from the window', async () => {
@@ -471,9 +478,47 @@ describe('layout.apply', () => {
 
     await expect(runtime.applyLayoutCommand(SPLIT)).resolves.toEqual({
       ok: true,
-      result: { leafId: 'minted' }
+      result: { leafId: 'minted' },
+      // No one subscribes, so the stream has sent nothing.
+      frameSeq: 0
     })
     expect(applyLayoutCommand).toHaveBeenCalledWith(SPLIT, ['ssh:target-1'])
+  })
+
+  it('names the stream position of the frame its write produced, sent before the reply', async () => {
+    let session = sessionListing('tab-1')
+    const written = new Set<(hostId: string | null) => void>()
+    const order: string[] = []
+    const store = {
+      getRepo: () => undefined,
+      getWorkspaceSessionHostIds: () => ['local'],
+      getWorkspaceSession: () => session,
+      onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {
+        written.add(listener)
+        return () => written.delete(listener)
+      },
+      applyLayoutCommand: vi.fn(async () => {
+        session = { ...session, activeTabId: null, tabsByWorktree: {} }
+        written.forEach((listener) => listener('local'))
+        return { ok: true, result: { leafId: 'minted' } }
+      })
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the apply and stream paths read only these store methods.
+    const runtime = new OrcaRuntimeService(store as never)
+    const sent: number[] = []
+    const { seq } = runtime.subscribeWorkspaceLayouts((event) => {
+      order.push('frame')
+      sent.push(event.seq!)
+    })
+
+    const reply = await runtime.applyLayoutCommand(SPLIT).then((value) => {
+      order.push('reply')
+      return value
+    })
+
+    expect(sent).toEqual([seq + 1])
+    expect(reply.frameSeq).toBe(seq + 1)
+    expect(order).toEqual(['frame', 'reply'])
   })
 
   it('refuses a paired server’s workspace, which keeps its mirrored layout', async () => {
@@ -481,7 +526,8 @@ describe('layout.apply', () => {
 
     await expect(runtime.applyLayoutCommand(SPLIT)).resolves.toEqual({
       ok: false,
-      code: 'host_not_owned'
+      code: 'host_not_owned',
+      frameSeq: 0
     })
     expect(applyLayoutCommand).not.toHaveBeenCalled()
   })

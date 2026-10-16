@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
@@ -20,6 +20,7 @@ import { reportWindowSessionWriteActivity } from '../lib/window-session-write-ac
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { createTestStore } from '../store/slices/store-test-helpers'
 import type { LayoutFrameSlices } from '../store/workspace-layout-frame-slices'
+import { afterLayoutFrame, endLayoutFramePositions } from './layout-frame-position'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -31,18 +32,26 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
 type StreamDouble = {
   onFrame: ((frame: WorkspaceLayoutChangeFrame) => void) | null
   onStatus: ((status: { state: string }) => void) | null
+  onPosition: ((seq: number) => void) | null
   close: () => void
 }
-const stream = vi.hoisted((): StreamDouble => ({ onFrame: null, onStatus: null, close: () => {} }))
+const stream = vi.hoisted((): StreamDouble => ({
+  onFrame: null,
+  onStatus: null,
+  onPosition: null,
+  close: () => {}
+}))
 vi.mock('./runtime-layout-client', () => ({
   subscribeRuntimeLayout: (
     _target: unknown,
     _params: unknown,
     onFrame: (frame: WorkspaceLayoutChangeFrame) => void,
-    onStatus: (status: { state: string }) => void
+    onStatus: (status: { state: string }) => void,
+    onPosition: (seq: number) => void
   ) => {
     stream.onFrame = onFrame
     stream.onStatus = onStatus
+    stream.onPosition = onPosition
     return { close: stream.close }
   }
 }))
@@ -114,6 +123,8 @@ beforeEach(() => {
   reportWindowSessionWriteActivity(false)
 })
 
+afterEach(() => endLayoutFramePositions())
+
 describe('the window drawn from layout frames', () => {
   it.each(
     [...WORKSPACE_LAYOUT_PROFILES, ...LEGACY_WORKSPACE_LAYOUT_PROFILES]
@@ -162,6 +173,49 @@ describe('the window drawn from layout frames', () => {
     })
     // Restore marks every row it builds; a row whose terminal bound since must not get it back.
     expect(shell).not.toHaveProperty('restoredFromSession')
+    sync.close()
+  })
+
+  it('runs a reply waiting on a frame after the store shows it, and every waiter when the stream ends', async () => {
+    const { store, sync, layouts } = await bootWithFrames('local', localDesktopSession())
+    sync.start()
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: layouts[GIT_KEY]!, seq: 1 })
+    stream.onPosition!(1)
+    await flushMicrotasks()
+    const shellTitle = () =>
+      store.getState().tabsByWorktree[GIT_KEY]!.find((tab) => tab.id === 'tab-shell')!.customTitle
+    const seen: (string | null | undefined)[] = []
+    afterLayoutFrame(2, () => seen.push(shellTitle()))
+    expect(seen).toEqual([])
+
+    const renamed = structuredClone(layouts[GIT_KEY]!)
+    renamed.tabs.find((tab) => tab.id === 'tab-shell')!.customTitle = 'renamed'
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: renamed, seq: 2 })
+    stream.onPosition!(2)
+    await flushMicrotasks()
+    expect(seen).toEqual(['renamed'])
+
+    // A held frame still releases its reply: the window's own save carries what it changed.
+    reportWindowSessionWriteActivity(true)
+    const held = structuredClone(renamed)
+    held.tabs.find((tab) => tab.id === 'tab-shell')!.customTitle = 'held'
+    afterLayoutFrame(3, () => seen.push(shellTitle()))
+    stream.onFrame!({ type: 'workspace', key: GIT_KEY, layout: held, seq: 3 })
+    stream.onPosition!(3)
+    await flushMicrotasks()
+    expect(seen).toEqual(['renamed', 'renamed'])
+    reportWindowSessionWriteActivity(false)
+
+    const released = vi.fn()
+    afterLayoutFrame(9, released)
+    stream.onStatus!({ state: 'lost' })
+    expect(released).toHaveBeenCalledTimes(1)
+    // A position counted before the end but noted after it does not reopen the wait.
+    stream.onPosition!(4)
+    await flushMicrotasks()
+    const later = vi.fn()
+    afterLayoutFrame(10, later)
+    expect(later).toHaveBeenCalledTimes(1)
     sync.close()
   })
 
