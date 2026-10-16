@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { PALETTE_MATCH_BUDGET } from './palette-match-budget'
 import { matchPaletteDocument, type PaletteMatchDiagnostics } from './match-document'
 import * as matchFieldModule from './match-field'
@@ -8,6 +8,8 @@ import { searchWorktreeDocuments } from '../worktree-palette-search'
 import { comparePaletteEntityRanks, createPaletteSearchContext } from './palette-ranking'
 import { buildPaletteDocument, type PaletteDocument } from './palette-document'
 import type { PaletteQueryToken } from './palette-query'
+import { issueCacheKey } from '@/store/github/cache-identity'
+import { getPaletteWorktreeIdentity } from '../palette-repo-resolution'
 import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 
@@ -80,7 +82,7 @@ const ports = new Map(
 )
 const issueCache = Object.fromEntries(
   worktrees.map((worktree, index) => [
-    `/repos/orca::${worktree.id}`,
+    issueCacheKey('/repos/orca', worktree.repoId, 1000 + index),
     { data: { number: 1000 + index, title: `${QUERY_TEXT} issue ${index}` } }
   ])
 )
@@ -165,14 +167,32 @@ function timeRepeatedly(work: () => void, rounds: number): number[] {
 }
 
 describe('palette matcher performance budget', () => {
+  let documents: ReadonlyMap<string, PaletteDocument>
+
+  beforeAll(() => {
+    documents = buildWarmDocuments()
+  })
+
+  function buildWarmDocuments(): ReadonlyMap<string, PaletteDocument> {
+    const documents = buildWorktreePaletteDocuments(worktrees, sources)
+    expect(documents.size).toBe(candidateCount)
+    expect(preparedQuery.tokens).toHaveLength(tokenCount)
+    for (const [index, worktree] of worktrees.entries()) {
+      expect(
+        documents
+          .get(getPaletteWorktreeIdentity(worktree))
+          ?.evidenceUnits.get(`issue:${1000 + index}`)?.text
+      ).toContain(`${QUERY_TEXT} issue ${index}`)
+    }
+    return documents
+  }
+
   it('normalizes a cold corpus within budget', () => {
     const samples = timeRepeatedly(() => buildWorktreePaletteDocuments(worktrees, sources), 5)
     expect(fastestSample(samples)).toBeLessThan(PALETTE_MATCH_BUDGET.coldBuildMs)
   })
 
   it('matches a 16-token query against warm documents within budget', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
-
     // Warm the matcher before timing so JIT compilation is not part of the samples.
     expect(matchEveryDocument(documents).filter(Boolean)).toHaveLength(candidateCount)
 
@@ -181,7 +201,6 @@ describe('palette matcher performance budget', () => {
   })
 
   it('bounds field-match fan-out per candidate', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
     const fieldMatch = vi.spyOn(matchFieldModule, 'matchPaletteField')
     try {
       matchEveryDocument(documents)
@@ -195,9 +214,9 @@ describe('palette matcher performance budget', () => {
   })
 
   it('bounds candidate selection work per accepted candidate', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
     const diagnostics: PaletteMatchDiagnostics = { selectionCandidateVisits: 0 }
-    matchEveryDocument(documents, diagnostics)
+    expect(matchEveryDocument(documents, diagnostics).filter(Boolean)).toHaveLength(candidateCount)
+    expect(diagnostics.selectionCandidateVisits).toBeGreaterThan(0)
     expect(diagnostics.selectionCandidateVisits / documents.size).toBeLessThan(
       PALETTE_MATCH_BUDGET.selectionCandidateVisitsPerCandidate
     )
@@ -240,12 +259,14 @@ describe('palette matcher performance budget', () => {
     }
     const selectionVisits = (document: PaletteDocument): number => {
       const diagnostics: PaletteMatchDiagnostics = { selectionCandidateVisits: 0 }
-      matchPaletteDocument({
+      const match = matchPaletteDocument({
         document,
         tokens: query.tokens,
         normalizedQuery: query.normalized,
         diagnostics
       })
+      expect(match).not.toBeNull()
+      expect(diagnostics.selectionCandidateVisits).toBeGreaterThan(0)
       return diagnostics.selectionCandidateVisits
     }
 
@@ -296,6 +317,7 @@ describe('palette matcher performance budget', () => {
         diagnostics
       })
       expect(match?.supportingEvidence).toEqual([])
+      expect(diagnostics.selectionCandidateVisits).toBeGreaterThan(0)
       return diagnostics.selectionCandidateVisits
     }
 
@@ -303,17 +325,21 @@ describe('palette matcher performance budget', () => {
   })
 
   it('keeps retained match and range payload within budget', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
     const matches = matchEveryDocument(documents)
+    expect(matches.filter(Boolean)).toHaveLength(candidateCount)
+    expect(
+      matches.every(
+        (match) => match && match.assignments.length > 0 && match.rangesByField.size > 0
+      )
+    ).toBe(true)
     expect(retainedMatchPayloadBytes(matches) / (1024 * 1024)).toBeLessThan(
       PALETTE_MATCH_BUDGET.matchPayloadMb
     )
   })
 
   it('searches and sorts the accepted corpus within budget', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
     const context = createPaletteSearchContext(Date.UTC(2026, 8, 5))
-    const searchAndSort = (): void => {
+    const searchAndSort = () =>
       searchWorktreeDocuments({
         worktrees,
         query: WORST_QUERY,
@@ -336,14 +362,18 @@ describe('palette matcher performance budget', () => {
           }
         )
       )
-    }
-    searchAndSort()
+    const warmResults = searchAndSort()
+    expect(warmResults).toHaveLength(candidateCount)
+    expect(new Set(warmResults.map((result) => result.worktreeId)).size).toBe(candidateCount)
+    expect(
+      warmResults.every((result) => result.rank !== null && result.displayNameRanges.length > 0)
+    ).toBe(true)
+    expect(warmResults[0].worktreeId).toBe(`wt-${candidateCount - 1}`)
     const samples = timeRepeatedly(searchAndSort, 10)
     expect(fastestSample(samples)).toBeLessThan(PALETTE_MATCH_BUDGET.fullSearchSortMs)
   })
 
   it('keeps the retained document payload within budget', () => {
-    const documents = buildWorktreePaletteDocuments(worktrees, sources)
     expect(documents.size).toBe(candidateCount)
 
     let bytes = 0

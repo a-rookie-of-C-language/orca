@@ -21,10 +21,10 @@ export const PALETTE_MATCH_BUDGET = {
    * Ceiling on `matchPaletteField` calls per candidate for the worst query.
    * Deterministic — it counts work, not time — so it catches a fan-out
    * regression (re-matching every field per evidence unit, say) on any machine.
-   * Measured 240: 15 fields across every token in the accepted fixture.
+   * The accepted fixture has 16 indexed fields across each of its 16 tokens.
    */
   fieldMatchesPerCandidate: 280,
-  /** Fixed-domain selection visits per accepted candidate. Measured 3,008. */
+  /** Fixed-domain selection visits per accepted candidate. */
   selectionCandidateVisitsPerCandidate: 3_600,
   /** Milliseconds to normalize every document once (cold open), fastest sample. */
   coldBuildMs: 900,

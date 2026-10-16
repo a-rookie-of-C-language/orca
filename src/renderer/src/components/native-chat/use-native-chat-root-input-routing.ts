@@ -59,7 +59,11 @@ export function useNativeChatRootInputRouting(
 
   const onPointerDownCapture = useCallback(
     (event: ReactPointerEvent) => {
-      if (event.button === 0 && shouldFocusNativeChatPaneFromPointerTarget(event.target)) {
+      if (
+        !event.defaultPrevented &&
+        event.button === 0 &&
+        shouldFocusNativeChatPaneFromPointerTarget(event.target)
+      ) {
         rootRef.current?.focus({ preventScroll: true })
       }
     },

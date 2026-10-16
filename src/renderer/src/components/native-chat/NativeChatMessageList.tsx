@@ -245,21 +245,22 @@ export function NativeChatMessageList({
     newRowsMarkerIndex: nativeChatSlotIndexOf(slots, newRowsMarker?.key),
     typography
   })
+  const transcriptScroll = useNativeChatTranscriptScroll({
+    scrollRef,
+    contentRef,
+    itemCount: slots.length,
+    isWorking,
+    showsTailRow: tailRow !== null,
+    isVisible,
+    alignToViewportTop: transcriptWindow.alignToViewportTop,
+    isAlignPending: transcriptWindow.isAlignPending,
+    scrollToEnd: transcriptWindow.scrollToEnd,
+    restoreScrollOffset: transcriptWindow.restoreScrollOffset,
+    consumeProgrammaticScroll: transcriptWindow.consumeProgrammaticScroll,
+    reconcileReaderScroll: transcriptWindow.reconcileReaderScroll
+  })
   const { showJump, onScroll, scrollToBottom, scrollMessageToTop, readerLeavesEnd } =
-    useNativeChatTranscriptScroll({
-      scrollRef,
-      contentRef,
-      itemCount: slots.length,
-      isWorking,
-      showsTailRow: tailRow !== null,
-      isVisible,
-      alignToViewportTop: transcriptWindow.alignToViewportTop,
-      isAlignPending: transcriptWindow.isAlignPending,
-      scrollToEnd: transcriptWindow.scrollToEnd,
-      restoreScrollOffset: transcriptWindow.restoreScrollOffset,
-      consumeProgrammaticScroll: transcriptWindow.consumeProgrammaticScroll,
-      reconcileReaderScroll: transcriptWindow.reconcileReaderScroll
-    })
+    transcriptScroll
   const olderHistory = useNativeChatOlderHistoryAutoload({
     scrollRef,
     historyKey: `${session.agent}:${session.sessionId ?? ''}:${session.olderHistoryGeneration}`,
@@ -323,9 +324,11 @@ export function NativeChatMessageList({
   const readerScrollInput = useNativeChatReaderScrollInput(scrollRef, {
     onReaderScroll: beginNavigation,
     onTakeScroll: transcriptWindow.cancelAlign,
-    onLeaveEnd: readerLeavesEnd
+    onLeaveEnd: readerLeavesEnd,
+    onScrollGesture: transcriptScroll.forwardedGesture
   })
-  useNativeChatMessageListHandle(ref, jumpToLatest, readerScrollInput.revealFindMatch, dismiss)
+  const { revealFindMatch } = readerScrollInput
+  useNativeChatMessageListHandle(ref, jumpToLatest, revealFindMatch, dismiss, allSlots)
   useNativeChatRailJumpLanding({
     railJump,
     slots,
@@ -405,6 +408,7 @@ export function NativeChatMessageList({
                   context={rowContext}
                   window={transcriptWindow}
                   newRowsMarker={newRowsMarker}
+                  forwardGesture={readerScrollInput.forwardedGesture}
                 />
                 {liveLine ? (
                   <NativeChatTurnActivityLine

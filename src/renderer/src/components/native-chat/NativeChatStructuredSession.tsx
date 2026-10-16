@@ -110,17 +110,6 @@ export function NativeChatStructuredSession(
   const [optionPickerRequest, setOptionPickerRequest] =
     useState<NativeChatOptionPickerRequest | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
-  const paneCommands = useStructuredNativeChatPaneCommands({
-    tabId: props.tabId,
-    groupId: props.groupId,
-    isVisible: props.isVisible,
-    rootRef,
-    composerRef,
-    questionAnswerInputRef,
-    terminalPaneActions: props.contextMenuActions,
-    sessionId: props.sessionId,
-    target: props.target
-  })
   const historyPhase = structuredChatHistoryPhase(provisionalLaunch, controller.status)
   const hostOutage = useNativeChatHostOutage(props.target)
   const hostNotice = useNativeChatHostOutageNotice(hostOutage)
@@ -189,6 +178,21 @@ export function NativeChatStructuredSession(
     rootRef,
     { sessionId: props.sessionId, isVisible: props.isVisible }
   )
+  const paneCommands = useStructuredNativeChatPaneCommands({
+    tabId: props.tabId,
+    groupId: props.groupId,
+    isVisible: props.isVisible,
+    rootRef,
+    composerRef,
+    questionAnswerInputRef,
+    terminalPaneActions: props.contextMenuActions,
+    sessionId: props.sessionId,
+    target: props.target,
+    messageListRef: submits.messageListRef,
+    fileLinkContext,
+    rewind: controller.rewind.surface,
+    onFind: find.open
+  })
   const prompt = controller.prompts[0] ?? null
   // Prompts this build cannot answer leave the composer open: a send starts a turn, whose card
   // cancel then works.

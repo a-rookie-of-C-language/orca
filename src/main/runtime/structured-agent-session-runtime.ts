@@ -64,6 +64,7 @@ import {
   type RuntimeAgentAccountHomeResolver
 } from './structured-agent-model-catalog-wiring'
 import type { ClaudeCliFlagSupport } from '../claude/claude-cli-flag-support'
+import { migrateLegacyNativeChatVisualsFolders } from '../native-chat/native-chat-scratch-folder-migration'
 import { scheduleNativeChatVisualsSweep } from '../native-chat/native-chat-visuals-sweep'
 import { readJournalSessionLastActivityAt } from '../native-chat/agent-session-journal/journal-row-table'
 
@@ -268,6 +269,8 @@ async function install(deps: StructuredAgentSessionRuntimeDeps): Promise<Install
       error
     })
   }
+  // Before the host serves reads: a chat opened right after an update finds its visuals in place.
+  await migrateLegacyNativeChatVisualsFolders(deps.stateDirectory, logger)
   return await installOnJournal({ ...deps, logger }, recordStore)
 }
 
