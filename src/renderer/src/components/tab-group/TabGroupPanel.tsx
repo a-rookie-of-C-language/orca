@@ -26,6 +26,7 @@ import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-br
 import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { resolveClientHostedBrowserRowStripGroupId } from '../tab-bar/client-hosted-browser-row-strip-placement'
 import { useEditorGroupFileDropOwner } from '../editor/use-editor-group-file-drop-owner'
+import { ChatPanelHeader, DockChatButton } from './ChatPanelHeader'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
@@ -92,6 +93,10 @@ export default function TabGroupPanel({
     tabBarOrder,
     terminalTabs
   } = model
+  const isChatPanel =
+    model.group?.isChatPanel === true &&
+    activeTab?.contentType === 'agent-session' &&
+    model.groupTabs.every((tab) => tab.contentType === 'agent-session')
   // Why: one strip owns the worktree's client-hosted rows, or every split repeats them.
   const ownsClientHostedRows = useAppStore(
     (state) =>
@@ -305,16 +310,32 @@ export default function TabGroupPanel({
                 }
               />
             ) : null}
-            <div className="min-w-0 flex-1 h-full">{tabBar}</div>
+            <div className="min-w-0 flex-1 h-full">
+              {isChatPanel ? (
+                <ChatPanelHeader
+                  worktreeId={worktreeId}
+                  groupId={groupId}
+                  chats={agentSessionItems}
+                  activeTabId={activeTab.id}
+                  onActivate={commands.activateAgentSession}
+                  onClose={commands.closeItem}
+                />
+              ) : (
+                tabBar
+              )}
+            </div>
             <div
               className="ml-1.5 flex shrink-0 items-center gap-0.5"
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
+              {!isChatPanel && activeTab?.contentType === 'agent-session' ? (
+                <DockChatButton tabId={activeTab.id} />
+              ) : null}
               <div className={focusedActionChromeClassName}>
-                {isFocused ? (
+                {isFocused && !isChatPanel ? (
                   <TabBarQuickCommandsButton worktreeId={worktreeId} groupId={groupId} />
                 ) : null}
-                {isFocused && hasSplitGroups ? (
+                {isFocused && hasSplitGroups && !isChatPanel ? (
                   <Tooltip>
                     <DropdownMenu modal={false}>
                       <TooltipTrigger asChild>

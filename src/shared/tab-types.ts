@@ -82,6 +82,8 @@ export type Tab = {
 export type TabGroup = {
   id: string
   worktreeId: string
+  /** A dedicated chat surface; files open in a neighboring group. */
+  isChatPanel?: boolean
   activeTabId: string | null
   tabOrder: string[] // canonical visual order of tab IDs
   /** Per-group MRU stack (oldest → most-recent at the tail). Drives which tab

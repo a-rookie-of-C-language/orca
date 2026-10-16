@@ -173,6 +173,7 @@ const tabSchema = z.object({
 const tabGroupSchema = z.object({
   id: z.string(),
   worktreeId: z.string(),
+  isChatPanel: z.boolean().optional().catch(undefined),
   activeTabId: z.string().nullable(),
   tabOrder: z.array(z.string()),
   recentTabIds: z.array(z.string()).optional()

@@ -52,7 +52,7 @@ export type LayoutContentTab = LayoutTabFields & { kind: Exclude<TabContentType,
 
 export type LayoutTab = LayoutTerminalTab | LayoutContentTab
 
-export type LayoutGroup = { id: string; tabOrder: string[] }
+export type LayoutGroup = { id: string; tabOrder: string[]; isChatPanel?: boolean }
 
 /** An open editor file minus its unsaved draft (the view's) and what its tab and workspace hold. */
 export type LayoutEditorFile = Omit<

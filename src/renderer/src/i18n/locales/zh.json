@@ -1,4 +1,10 @@
 {
+  "chatPanel": {
+    "dock": "固定聊天面板",
+    "restoreTabs": "恢复聊天标签栏",
+    "close": "关闭聊天",
+    "title": "聊天"
+  },
   "source-control": {
     "history": {
       "label": "提交历史",

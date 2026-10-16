@@ -12,12 +12,14 @@ import { createTabsDropActions } from './tabs-drop-actions'
 import { createTabsSplitRatioActions } from './tabs-split-ratio-actions'
 import { createTabsDragPreviewActions } from './tabs-drag-preview-actions'
 import { createTabsSessionActions } from './tabs-session-actions'
+import { createChatPanelActions } from './chat-panel-actions'
 
 export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, get) => ({
   unifiedTabsByWorktree: {},
   groupsByWorktree: {},
   activeGroupIdByWorktree: {},
   layoutByWorktree: {},
+  ...createChatPanelActions(set, get),
   ...createTabsCreateActions(set, get),
   ...createTabsFocusActions(set, get),
   ...createTabsCloseActions(set, get),
