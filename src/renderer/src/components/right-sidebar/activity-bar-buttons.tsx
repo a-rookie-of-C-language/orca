@@ -145,14 +145,18 @@ export function ActivityBarButton({
       <TooltipTrigger asChild>
         <button
           type="button"
+          data-tools-sidebar-tab={item.id}
           className={cn(
-            'relative flex shrink-0 items-center justify-center transition-colors',
+            'relative flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
             RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME,
             isTop ? 'h-[36px] w-9' : 'w-10 h-10',
-            active ? 'text-foreground' : 'text-muted-foreground/60 hover:text-muted-foreground'
+            active
+              ? 'text-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           )}
           onClick={onClick}
           aria-label={activityItemAriaLabel(item, effectiveStatus)}
+          aria-current={active ? 'page' : undefined}
         >
           <Icon size={isTop ? 16 : 18} />
 

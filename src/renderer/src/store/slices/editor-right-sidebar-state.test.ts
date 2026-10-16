@@ -95,6 +95,16 @@ describe('createEditorSlice right sidebar state', () => {
     expect(store.getState().rightSidebarOpen).toBe(false)
   })
 
+  it('defaults to a vertical activity bar and still supports the top layout', () => {
+    const store = createEditorStore()
+
+    expect(store.getState().activityBarPosition).toBe('side')
+    store.getState().setActivityBarPosition('top')
+    expect(store.getState().activityBarPosition).toBe('top')
+    store.getState().setActivityBarPosition('side')
+    expect(store.getState().activityBarPosition).toBe('side')
+  })
+
   it('toggleRightSidebar flips the state', () => {
     const store = createEditorStore()
     expect(store.getState().rightSidebarOpen).toBe(false)

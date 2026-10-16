@@ -46,7 +46,7 @@ export function createRightSidebarState(set: EditorSet, _get: EditorGet): RightS
     rightSidebarTabByWorktree: {},
     rightSidebarExplorerViewByWorktree: {},
     rightSidebarEffectiveTab: null,
-    activityBarPosition: 'top',
+    activityBarPosition: 'side',
     toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
     setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
     setRightSidebarWidth: (width) => set({ rightSidebarWidth: width }),

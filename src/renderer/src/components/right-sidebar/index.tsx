@@ -181,7 +181,7 @@ function RightSidebarInner({
             activityBarPosition={activityBarPosition}
             onChangeActivityBarPosition={setActivityBarPosition}
           />
-        ) : (
+        ) : onLeft && reserveTitlebarSpace ? null : (
           /* ── Side layout: static title header ── */
           <div
             className={cn(
@@ -217,11 +217,20 @@ function RightSidebarInner({
           <ContextMenuTrigger asChild>
             <div
               className={cn(
-                'flex flex-col items-center w-10 min-w-[40px] bg-sidebar border-border',
+                'flex min-h-0 w-10 shrink-0 flex-col items-center bg-sidebar border-border',
                 onLeft ? 'order-first border-r' : 'border-l side-activity-bar-windows-inset'
               )}
             >
-              <TooltipProvider delayDuration={400}>{sideActivityBarIcons}</TooltipProvider>
+              <TooltipProvider delayDuration={400}>
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-sleek">
+                  {sideActivityBarIcons}
+                </div>
+                {onLeft && reserveTitlebarSpace ? (
+                  <div className="flex h-10 shrink-0 items-center justify-center border-t border-border">
+                    {closeButton}
+                  </div>
+                ) : null}
+              </TooltipProvider>
             </div>
           </ContextMenuTrigger>
           <ActivityBarPositionMenu

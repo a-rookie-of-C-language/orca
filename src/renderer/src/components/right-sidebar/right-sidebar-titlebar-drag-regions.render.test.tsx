@@ -250,7 +250,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
     expectNoDrag(buttonOpeningTag(markup, 'Explorer'))
     expectNoDrag(buttonOpeningTag(markup, 'Source Control'))
     expectNoDrag(buttonOpeningTag(markup, 'Checks'))
-    expect(buttonOpeningTag(markup, 'Toggle right sidebar')).toContain('sidebar-toggle')
+    expect(buttonOpeningTag(markup, 'Toggle tools sidebar')).toContain('sidebar-toggle')
     expect(markup).toContain(RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME)
   })
 
@@ -311,7 +311,87 @@ describe('rendered right sidebar titlebar drag regions', () => {
     expectNoDrag(buttonOpeningTag(markup, 'Explorer'))
     expectNoDrag(buttonOpeningTag(markup, 'Source Control'))
     expectNoDrag(buttonOpeningTag(markup, 'Checks'))
-    expect(buttonOpeningTag(markup, 'Toggle right sidebar')).toContain('sidebar-toggle')
+    expect(buttonOpeningTag(markup, 'Toggle tools sidebar')).toContain('sidebar-toggle')
+  })
+
+  it.each(['win32', 'linux', 'darwin'] as const)(
+    'removes the duplicate header below floating left chrome on %s',
+    (platform) => {
+      setRendererPlatform(platform)
+      mockAppState.activityBarPosition = 'side'
+
+      const markup = renderToStaticMarkup(<RightSidebar side="left" reserveTitlebarSpace />)
+      const explorerButton = buttonOpeningTag(markup, 'Explorer')
+
+      expect(markup).toContain('pt-9')
+      expect(markup).toContain('order-first border-r')
+      expect(markup).toContain('overflow-y-auto')
+      expect(markup).toContain('data-file-explorer')
+      expect(markup).not.toContain('right-sidebar-header-drag')
+      expect(markup).not.toContain('side-activity-bar-windows-inset')
+      expect(explorerButton).toContain('aria-current="page"')
+      expect(explorerButton).toContain('focus-visible:ring-inset')
+      expectNoDrag(explorerButton)
+      expect(buttonOpeningTag(markup, 'Toggle tools sidebar')).toContain('sidebar-toggle')
+    }
+  )
+
+  it('preserves the left titlebar row when it is not reserved by floating chrome', () => {
+    mockAppState.activityBarPosition = 'side'
+
+    const markup = renderToStaticMarkup(<RightSidebar side="left" />)
+
+    expect(markup).toContain('right-sidebar-header-drag')
+    expect(markup).toContain('order-first border-r')
+    expect(markup).not.toContain('right-sidebar-header-side-inset')
+  })
+
+  it('keeps the compact left layout available for folder workspaces', () => {
+    mockAppState.activityBarPosition = 'side'
+    mockAppState.activeWorktreeId = 'folder:folder-1'
+    mockAppState.activeRepo = null
+
+    const markup = renderToStaticMarkup(<RightSidebar side="left" reserveTitlebarSpace />)
+
+    expect(markup).toContain('data-file-explorer')
+    expect(markup).toContain('aria-label="Attached worktrees')
+    expect(markup).toContain('aria-label="PR Checks')
+    expect(markup).not.toContain('aria-label="Source Control')
+    expect(markup).not.toContain('right-sidebar-header-drag')
+  })
+
+  it('switches views from the compact left rail and restores Explorer', async () => {
+    mockAppState.activityBarPosition = 'side'
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(<RightSidebar side="left" reserveTitlebarSpace />)
+      })
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('[data-tools-sidebar-tab="source-control"]')
+          ?.click()
+      })
+      expect(
+        container
+          .querySelector('button[aria-current="page"]')
+          ?.getAttribute('data-tools-sidebar-tab')
+      ).toBe('source-control')
+      expect(container.querySelector('[data-source-control]')).not.toBeNull()
+
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('[data-tools-sidebar-tab="explorer"]')?.click()
+      })
+      expect(
+        container
+          .querySelector('button[aria-current="page"]')
+          ?.getAttribute('data-tools-sidebar-tab')
+      ).toBe('explorer')
+      expect(container.querySelector('[data-file-explorer]')).not.toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+    }
   })
 
   it('hides git-only activity buttons for folder workspace ids without a backing repo', () => {
