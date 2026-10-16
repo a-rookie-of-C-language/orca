@@ -88,7 +88,7 @@ export const GitHistoryRow = React.forwardRef<HTMLElement, GitHistoryRowProps>(
               )}
             />
           )}
-          <HoverCard openDelay={0}>
+          <HoverCard openDelay={400} closeDelay={100}>
             <HoverCardTrigger asChild>
               <span className="block min-w-0 flex-1 truncate text-foreground">{item.subject}</span>
             </HoverCardTrigger>

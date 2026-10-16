@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { GitHistoryItemRef } from '../../../../../../shared/git-history'
@@ -18,9 +18,53 @@ function viewModel(commitMessage = message): GitHistoryItemViewModel {
   }
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('Git history commit details', () => {
+  it('opens only after hovering for 400ms and closes shortly after leaving', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    render(
+      <TooltipProvider>
+        <GitHistoryRow viewModel={viewModel()} />
+      </TooltipProvider>
+    )
+    const trigger = screen.getByText(subject)
+    fireEvent.pointerEnter(trigger, { pointerType: 'mouse' })
+    await act(() => vi.advanceTimersByTimeAsync(399))
+    expect(document.querySelector('[data-slot="hover-card-content"]')).toBeNull()
+
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    expect(document.querySelector('[data-slot="hover-card-content"]')?.textContent).toBe(message)
+
+    fireEvent.pointerLeave(trigger, { pointerType: 'mouse' })
+    await act(() => vi.advanceTimersByTimeAsync(100))
+    expect(document.querySelector('[data-slot="hover-card-content"]')).toBeNull()
+  })
+
+  it('cancels the preview when the pointer quickly passes over a commit', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    render(
+      <TooltipProvider>
+        <GitHistoryRow viewModel={viewModel()} />
+      </TooltipProvider>
+    )
+    const trigger = screen.getByText(subject)
+    fireEvent.pointerEnter(trigger, { pointerType: 'mouse' })
+    await act(() => vi.advanceTimersByTimeAsync(150))
+    fireEvent.pointerLeave(trigger, { pointerType: 'mouse' })
+    await act(() => vi.advanceTimersByTimeAsync(500))
+    expect(document.querySelector('[data-slot="hover-card-content"]')).toBeNull()
+
+    fireEvent.pointerEnter(trigger, { pointerType: 'mouse' })
+    await act(() => vi.advanceTimersByTimeAsync(399))
+    expect(document.querySelector('[data-slot="hover-card-content"]')).toBeNull()
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    expect(document.querySelector('[data-slot="hover-card-content"]')?.textContent).toBe(message)
+  })
+
   it.each([
     {
       label: 'branch',
