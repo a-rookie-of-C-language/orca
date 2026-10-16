@@ -22,3 +22,30 @@ it('shows the host message in place of the terminal-backed default', () => {
   expect(screen.getByText('disk full')).toBeInTheDocument()
   expect(screen.queryByText(/Toggle back to the terminal/)).toBeNull()
 })
+
+it.each(['claude', 'codex', 'opencode'] as const)(
+  'shows the %s brand icon on the welcome screen',
+  (agent) => {
+    const { container } = render(<NativeChatEmptyState kind="empty" agent={agent} />)
+    expect(container.querySelector(`[data-agent-icon="${agent}"] svg`)).toBeInTheDocument()
+    expect(container.querySelector('.lucide-message-square')).toBeNull()
+  }
+)
+
+it('updates the welcome icon with the conversation provider', () => {
+  const { container, rerender } = render(<NativeChatEmptyState kind="empty" agent="claude" />)
+  rerender(<NativeChatEmptyState kind="empty" agent="codex" />)
+  expect(container.querySelector('[data-agent-icon="codex"] svg')).toBeInTheDocument()
+  expect(container.querySelector('[data-agent-icon="claude"]')).toBeNull()
+})
+
+it('keeps the error warning instead of displaying a provider logo', () => {
+  const { container } = render(<NativeChatEmptyState kind="error" agent="codex" />)
+  expect(container.querySelector('.lucide-triangle-alert')).toBeInTheDocument()
+  expect(container.querySelector('[data-agent-icon]')).toBeNull()
+})
+
+it('retains the neutral icon when the provider is not known', () => {
+  const { container } = render(<NativeChatEmptyState kind="not-agent" />)
+  expect(container.querySelector('.lucide-message-square')).toBeInTheDocument()
+})

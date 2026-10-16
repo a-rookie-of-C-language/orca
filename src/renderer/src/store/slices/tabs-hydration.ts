@@ -15,6 +15,7 @@ import {
   selectHydratedActiveGroupId
 } from './tab-group-state'
 import { dedupeTabOrder } from '../../../../shared/workspace-layout/tab-order'
+import { applyDefaultChatPanelLayout } from './tabs/chat-panel-layout'
 
 type HydratedTabState = {
   unifiedTabsByWorktree: Record<string, Tab[]>
@@ -224,10 +225,14 @@ export function buildHydratedTabState(
 
   adoptGrouplessTabs(tabsByWorktree, groupsByWorktree, activeGroupIdByWorktree, layoutByWorktree)
 
-  return {
+  let hydrated: HydratedTabState = {
     unifiedTabsByWorktree: tabsByWorktree,
     groupsByWorktree,
     activeGroupIdByWorktree,
     layoutByWorktree
   }
+  for (const worktreeId of Object.keys(groupsByWorktree)) {
+    hydrated = applyDefaultChatPanelLayout(hydrated, worktreeId)
+  }
+  return hydrated
 }

@@ -3,12 +3,10 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { TooltipProvider } from '../ui/tooltip'
-import { ChatPanelHeader, DockChatButton } from './ChatPanelHeader'
+import { ChatPanelHeader } from './ChatPanelHeader'
 
 const state = vi.hoisted(() => ({
-  settings: { tabAutoGenerateTitle: false },
-  dockChatTab: vi.fn(),
-  restoreChatTabBar: vi.fn()
+  settings: { tabAutoGenerateTitle: false }
 }))
 vi.mock('../../store', () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state)
@@ -34,27 +32,81 @@ afterEach(() => {
 })
 
 describe('fixed chat panel header', () => {
-  it('offers an accessible dock action without bubbling stale group focus', () => {
-    const outerClick = vi.fn()
-    render(
+  it('does not show a different provider icon when the agent is unknown', () => {
+    const { container } = render(
       <TooltipProvider>
-        <div onClick={outerClick}>
-          <DockChatButton tabId={chat.id} />
-        </div>
+        <ChatPanelHeader
+          chats={[{ ...chat, agentSessionAgent: 'future-agent' }]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+        />
       </TooltipProvider>
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Dock chat panel' }))
-    expect(state.dockChatTab).toHaveBeenCalledWith(chat.id)
-    expect(outerClick).not.toHaveBeenCalled()
+    expect(
+      container.querySelector('[data-chat-panel-header] > [data-agent-icon]')?.textContent
+    ).toBe('?')
+  })
+  it.each(['claude', 'codex', 'opencode'] as const)(
+    'uses the existing %s provider icon in the header',
+    (agent) => {
+      const { container } = render(
+        <TooltipProvider>
+          <ChatPanelHeader
+            chats={[{ ...chat, agentSessionAgent: agent }]}
+            activeTabId={chat.id}
+            onActivate={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </TooltipProvider>
+      )
+      expect(
+        container.querySelector(`[data-chat-panel-header] > [data-agent-icon="${agent}"] svg`)
+      ).toBeTruthy()
+      expect(container.querySelector('.lucide-message-square')).toBeNull()
+    }
+  )
+
+  it('updates the provider icon when the active conversation changes', async () => {
+    const chats = [
+      chat,
+      { ...chat, id: 'chat-2', label: 'Review changes', agentSessionAgent: 'codex' as const }
+    ]
+    const props = { chats, onActivate: vi.fn(), onClose: vi.fn() }
+    const view = render(
+      <TooltipProvider>
+        <ChatPanelHeader {...props} activeTabId={chat.id} />
+      </TooltipProvider>
+    )
+    expect(
+      view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="claude"]')
+    ).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Chat' }))
+    })
+    expect(
+      screen
+        .getByRole('option', { name: 'Review changes' })
+        .querySelector('[data-agent-icon="codex"] svg')
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('option', { name: 'Review changes' }))
+    expect(props.onActivate).toHaveBeenCalledWith('chat-2')
+    view.rerender(
+      <TooltipProvider>
+        <ChatPanelHeader {...props} activeTabId="chat-2" />
+      </TooltipProvider>
+    )
+    expect(
+      view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="codex"] svg')
+    ).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Chat' }).textContent).toBe('Review changes')
   })
 
-  it('shows the conversation title instead of a tab, with restore and close actions', () => {
+  it('shows the conversation title instead of a tab, with only a close action', () => {
     const close = vi.fn()
     render(
       <TooltipProvider>
         <ChatPanelHeader
-          worktreeId="workspace"
-          groupId="chat-group"
           chats={[chat]}
           activeTabId={chat.id}
           onActivate={vi.fn()}
@@ -64,8 +116,8 @@ describe('fixed chat panel header', () => {
     )
     expect(screen.getByText('Fix build errors')).toBeTruthy()
     expect(screen.queryByRole('tab')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Restore chat tab bar' }))
-    expect(state.restoreChatTabBar).toHaveBeenCalledWith('workspace', 'chat-group')
+    expect(screen.queryByRole('button', { name: 'Restore chat tab bar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dock chat panel' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Close chat' }))
     expect(close).toHaveBeenCalledWith(chat.id)
   })
@@ -75,8 +127,6 @@ describe('fixed chat panel header', () => {
     render(
       <TooltipProvider>
         <ChatPanelHeader
-          worktreeId="workspace"
-          groupId="chat-group"
           chats={[chat, { ...chat, id: 'chat-2', label: 'Review changes' }]}
           activeTabId={chat.id}
           onActivate={activate}

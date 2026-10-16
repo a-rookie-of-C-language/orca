@@ -26,7 +26,7 @@ import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-br
 import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import { resolveClientHostedBrowserRowStripGroupId } from '../tab-bar/client-hosted-browser-row-strip-placement'
 import { useEditorGroupFileDropOwner } from '../editor/use-editor-group-file-drop-owner'
-import { ChatPanelHeader, DockChatButton } from './ChatPanelHeader'
+import { ChatPanelHeader } from './ChatPanelHeader'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
@@ -313,8 +313,6 @@ export default function TabGroupPanel({
             <div className="min-w-0 flex-1 h-full">
               {isChatPanel ? (
                 <ChatPanelHeader
-                  worktreeId={worktreeId}
-                  groupId={groupId}
                   chats={agentSessionItems}
                   activeTabId={activeTab.id}
                   onActivate={commands.activateAgentSession}
@@ -328,9 +326,6 @@ export default function TabGroupPanel({
               className="ml-1.5 flex shrink-0 items-center gap-0.5"
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
-              {!isChatPanel && activeTab?.contentType === 'agent-session' ? (
-                <DockChatButton tabId={activeTab.id} />
-              ) : null}
               <div className={focusedActionChromeClassName}>
                 {isFocused && !isChatPanel ? (
                   <TabBarQuickCommandsButton worktreeId={worktreeId} groupId={groupId} />

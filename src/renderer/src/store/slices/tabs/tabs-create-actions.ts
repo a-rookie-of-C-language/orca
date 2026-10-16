@@ -19,6 +19,7 @@ import {
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import { emptySplitGroup, insertSplitGroup } from './tabs-group-actions'
 import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
+import { applyDefaultChatPanelLayout } from './chat-panel-layout'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -146,26 +147,32 @@ export function createTabsCreateActions(
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizedRecent, created.id)
           : sanitizedRecent
-        return {
-          unifiedTabsByWorktree: {
-            ...state.unifiedTabsByWorktree,
-            [worktreeId]: [...nextTabs, created]
+        return applyDefaultChatPanelLayout(
+          {
+            unifiedTabsByWorktree: {
+              ...state.unifiedTabsByWorktree,
+              [worktreeId]: [...nextTabs, created]
+            },
+            groupsByWorktree: {
+              ...groupsByWorktree,
+              [worktreeId]: updateGroup(groupsByWorktree[worktreeId] ?? [], {
+                ...group,
+                activeTabId: nextActiveTabId,
+                tabOrder: nextOrder,
+                recentTabIds: nextRecent
+              })
+            },
+            activeGroupIdByWorktree,
+            layoutByWorktree: {
+              ...state.layoutByWorktree,
+              [worktreeId]: state.layoutByWorktree[worktreeId] ?? {
+                type: 'leaf',
+                groupId: group.id
+              }
+            }
           },
-          groupsByWorktree: {
-            ...groupsByWorktree,
-            [worktreeId]: updateGroup(groupsByWorktree[worktreeId] ?? [], {
-              ...group,
-              activeTabId: nextActiveTabId,
-              tabOrder: nextOrder,
-              recentTabIds: nextRecent
-            })
-          },
-          activeGroupIdByWorktree,
-          layoutByWorktree: {
-            ...state.layoutByWorktree,
-            [worktreeId]: state.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
-          }
-        }
+          worktreeId
+        )
       })
       if (init?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('terminal-tabs')
@@ -173,7 +180,7 @@ export function createTabsCreateActions(
       if (splitGroupId) {
         get().recordFeatureInteraction?.('terminal-panes')
       }
-      return created
+      return get().getTab(id) ?? created
     },
 
     createUnifiedTabInSplit: (worktreeId, contentType, target, init) => {
@@ -238,10 +245,15 @@ export function createTabsCreateActions(
         } = insertSplitGroup(state, worktreeId, { ...target, activate: shouldActivate }, newGroup)
         moved = true
         return {
-          unifiedTabsByWorktree: nextUnifiedTabsByWorktree,
-          groupsByWorktree: nextGroupsByWorktree,
-          layoutByWorktree: nextLayoutByWorktree,
-          activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
+          ...applyDefaultChatPanelLayout(
+            {
+              unifiedTabsByWorktree: nextUnifiedTabsByWorktree,
+              groupsByWorktree: nextGroupsByWorktree,
+              layoutByWorktree: nextLayoutByWorktree,
+              activeGroupIdByWorktree: nextActiveGroupIdByWorktree
+            },
+            worktreeId
+          ),
           ...(shouldActivate && state.activeWorktreeId === worktreeId
             ? buildActiveSurfacePatch(
                 {
@@ -263,7 +275,7 @@ export function createTabsCreateActions(
       if (moved && init?.recordInteraction !== false) {
         get().recordFeatureInteraction?.('tab-splits')
       }
-      return created
+      return created ? get().getTab(id) : null
     }
   }
 }

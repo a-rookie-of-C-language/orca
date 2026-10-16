@@ -1,7 +1,5 @@
 {
   "chatPanel": {
-    "dock": "Dock chat panel",
-    "restoreTabs": "Restore chat tab bar",
     "close": "Close chat",
     "title": "Chat"
   },

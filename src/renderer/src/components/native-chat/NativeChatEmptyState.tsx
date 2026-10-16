@@ -1,6 +1,7 @@
 import { MessageSquare, TriangleAlert } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
-import { formatAgentTypeLabel } from '@/lib/agent-status'
+import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
+import { AgentIcon } from '@/lib/agent-catalog'
 import { NATIVE_CHAT_EMPTY_STATE_COPY } from '../../../../shared/native-chat-empty-state'
 import type { NativeChatSession } from '../../../../shared/native-chat-types'
 
@@ -21,6 +22,7 @@ export function NativeChatEmptyState({
   retrying?: boolean
 }): React.JSX.Element {
   const copy = emptyStateCopy(kind, { message, headline }, agent, retrying)
+  const iconAgent = agentTypeToIconAgent(agent)
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
       <div
@@ -32,6 +34,14 @@ export function NativeChatEmptyState({
       >
         {kind === 'error' ? (
           <TriangleAlert className="size-6" />
+        ) : iconAgent ? (
+          <span
+            className="inline-flex size-6 [&>svg]:size-full [&>img]:size-full"
+            data-agent-icon={iconAgent}
+            aria-hidden="true"
+          >
+            <AgentIcon agent={iconAgent} size={24} />
+          </span>
         ) : (
           <MessageSquare className="size-6" />
         )}

@@ -29,8 +29,6 @@ export type TabsSlice = {
   groupsByWorktree: Record<string, TabGroup[]>
   activeGroupIdByWorktree: Record<string, string>
   layoutByWorktree: Record<string, TabGroupLayoutNode>
-  dockChatTab: (tabId: string) => boolean
-  restoreChatTabBar: (worktreeId: string, groupId: string) => void
   createUnifiedTab: (
     worktreeId: string,
     contentType: TabContentType,
