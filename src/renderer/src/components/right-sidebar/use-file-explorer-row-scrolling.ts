@@ -7,6 +7,7 @@ import type { DirCache } from './file-explorer-types'
 import type { FileExplorerRowProjection } from './file-explorer-row-projection'
 import { useFileExplorerAutoReveal } from './useFileExplorerAutoReveal'
 import { useFileExplorerReveal } from './useFileExplorerReveal'
+import { FILE_EXPLORER_ROW_HEIGHT } from './file-explorer-row-layout'
 
 type UseFileExplorerRowScrollingParams = {
   visibleRowCount: number
@@ -67,7 +68,7 @@ export function useFileExplorerRowScrolling({
   const virtualizer = useVirtualizer({
     count: totalCount,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 26,
+    estimateSize: () => FILE_EXPLORER_ROW_HEIGHT,
     overscan: 20,
     getItemKey: (index) => {
       if (inlineInputIndex >= 0) {
