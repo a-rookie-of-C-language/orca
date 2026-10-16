@@ -2,6 +2,7 @@
  * Which relay-era leases the bridge may serve.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
+import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
@@ -33,6 +34,14 @@ export function bridgeableLeasesByRelayId(
   leases: readonly SshRemotePtyLease[]
 ): Map<string, SshRemotePtyLease> {
   return new Map(leases.filter(isBridgeableLease).map((lease) => [lease.ptyId, lease]))
+}
+
+export function leasedAppPtyIds(targetId: string, leases: SshRemotePtyLease[]): Set<string> {
+  return new Set(
+    [...bridgeableLeasesByRelayId(leases).keys()].map((relayPtyId) =>
+      toAppSshPtyId(targetId, relayPtyId)
+    )
+  )
 }
 
 /** One leased pane the bridge tracks, and the relay endpoint that listed it. */

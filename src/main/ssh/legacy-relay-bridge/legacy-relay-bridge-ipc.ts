@@ -13,6 +13,7 @@ import { knownSshHostPlatform } from '../ssh-host-platform-memo'
 import { hostProps } from '../ssh-host-server-telemetry'
 import {
   attachLegacyRelayPane,
+  closeLegacyRelayPane,
   detachLegacyRelayPane,
   installLegacyRelayBridge,
   legacyRelayBridgedPanes,
@@ -74,6 +75,7 @@ export function registerLegacyRelayBridgeIpc(args: {
   })
   ipcMain.removeHandler(CHANNELS.listPanes)
   ipcMain.removeHandler(CHANNELS.attach)
+  ipcMain.removeHandler(CHANNELS.close)
   for (const channel of [
     CHANNELS.write,
     CHANNELS.resize,
@@ -86,6 +88,10 @@ export function registerLegacyRelayBridgeIpc(args: {
   ipcMain.handle(CHANNELS.attach, async (_event, payload: unknown) => {
     const args = PaneArgsSchema.safeParse(payload)
     return args.success ? attachLegacyRelayPane(args.data.ptyId) : { status: 'not-bridged' }
+  })
+  ipcMain.handle(CHANNELS.close, async (_event, payload: unknown) => {
+    const args = PaneArgsSchema.safeParse(payload)
+    return args.success ? closeLegacyRelayPane(args.data.ptyId) : { status: 'not-bridged' }
   })
   ipcMain.on(CHANNELS.write, (_event, payload: unknown) => {
     const args = WriteArgsSchema.safeParse(payload)

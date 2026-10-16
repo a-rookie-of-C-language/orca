@@ -27,8 +27,10 @@ import type { SshConnection } from '../ssh/ssh-connection'
 import { recordSshConnectionOpened } from '../ssh/ssh-connection-attribution'
 import {
   decideHostServer,
+  publishBridgedUnservedHostServer,
   publishHostServerDecisionFailure,
-  publishManagedServerConnect
+  publishManagedServerConnect,
+  publishUnservedHostServer
 } from './ssh-host-server-connect'
 import {
   startLegacyRelayBridge,
@@ -145,6 +147,39 @@ describe('a connect cancelled during its server decision', () => {
     ).rejects.toThrow('SSH connection attempt was cancelled')
     expect(publishManagedServerConnect).not.toHaveBeenCalled()
     expect(stopLegacyRelayBridge).toHaveBeenCalledWith('ssh-1')
+  })
+
+  it('stays connected with the bridge when only relay terminals stop the move (STA-10604)', async () => {
+    const target: SshTarget = {
+      id: 'ssh-1',
+      label: 'Server',
+      host: 'example.com',
+      port: 22,
+      username: 'deploy'
+    }
+    const opened = { id: 'census-transport' }
+    mockSshStore.getTarget.mockReturnValue(target)
+    mockConnectionManager.getConnection.mockReturnValue(undefined)
+    vi.mocked(publishUnservedHostServer).mockClear()
+    vi.mocked(startLegacyRelayBridge).mockClear()
+    const decision = {
+      route: 'unserved' as const,
+      reason: 'relay_terminals_live' as const,
+      terminals: 1,
+      bridged: true as const
+    }
+    vi.mocked(decideHostServer).mockImplementationOnce(async () => {
+      recordSshConnectionOpened(asTransport(opened))
+      mockConnectionManager.getConnection.mockReturnValue(opened)
+      return decision
+    })
+    await expect(handlers.get('ssh:connect')!(null, { targetId: 'ssh-1' })).resolves.toMatchObject({
+      status: 'connected'
+    })
+    expect(startLegacyRelayBridge).toHaveBeenCalledWith('ssh-1')
+    expect(publishBridgedUnservedHostServer).toHaveBeenCalledWith(target, decision)
+    expect(publishUnservedHostServer).not.toHaveBeenCalled()
+    expect(mockConnectionManager.disconnectConnection).not.toHaveBeenCalledWith('ssh-1', opened)
   })
 
   it('closes the transport a still-current decision dialed when that decision fails', async () => {

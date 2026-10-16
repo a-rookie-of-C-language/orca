@@ -5,6 +5,7 @@
 import type { EventProps } from '../../../shared/telemetry-events'
 import type {
   LegacyRelayBridgeAttachResult,
+  LegacyRelayBridgeCloseResult,
   LegacyRelayBridgedPane
 } from '../../../shared/legacy-relay-bridge-contract'
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
@@ -19,7 +20,12 @@ import { createLegacyRelayCliServer } from './legacy-relay-cli-server'
 import { listLegacyRelayEndpoints, type LegacyRelayEndpoint } from './legacy-relay-endpoints'
 import { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
 import { LegacyRelayHiddenOutput } from './legacy-relay-hidden-output'
-import { bridgeableLeasesByRelayId, isBridgeableLease } from './legacy-relay-bridge-leases'
+import { LegacyRelayPaneStops } from './legacy-relay-pane-stops'
+import {
+  bridgeableLeasesByRelayId,
+  isBridgeableLease,
+  leasedAppPtyIds
+} from './legacy-relay-bridge-leases'
 
 /** How long a connect waits for the first look at its relays before publishing the host. */
 const START_BUDGET_MS = 20_000
@@ -53,6 +59,7 @@ const bridges = new Map<string, LegacyRelayTargetBridge>()
  * or the leases go: a hang-up is loss of contact, not exit (docs/reference/ssh-execution-boundary.md).
  */
 const heldPanes = new Map<string, LegacyRelayBridgedPane[]>()
+const paneStops = new Map<string, LegacyRelayPaneStops>()
 
 export function installLegacyRelayBridge(next: LegacyRelayBridgeHost | null): void {
   for (const bridge of bridges.values()) {
@@ -60,6 +67,8 @@ export function installLegacyRelayBridge(next: LegacyRelayBridgeHost | null): vo
   }
   bridges.clear()
   heldPanes.clear()
+  paneStops.forEach((stops) => stops.dispose())
+  paneStops.clear()
   host = next
   hiddenOutput = next
     ? new LegacyRelayHiddenOutput({
@@ -135,6 +144,7 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
       // A running bridge's own listing answers for its target; a disposed one's does not.
       if (bridges.get(targetId) === bridge) {
         heldPanes.delete(targetId)
+        stopsFor(targetId).flush(bridge)
       }
       installed.onPanesChanged(legacyRelayBridgedPanes())
     },
@@ -147,6 +157,16 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
   })
   bridges.set(targetId, bridge)
   return bridge
+}
+
+function stopsFor(targetId: string): LegacyRelayPaneStops {
+  const existing = paneStops.get(targetId)
+  if (existing) {
+    return existing
+  }
+  const created = new LegacyRelayPaneStops(targetId, () => host?.leases(targetId) ?? [])
+  paneStops.set(targetId, created)
+  return created
 }
 
 /** A dead socket is the one failed open that proves its relay gone; Windows pipes never are. */
@@ -213,6 +233,8 @@ export function stopLegacyRelayBridge(targetId: string): void {
 export function forgetLegacyRelayTarget(targetId: string): void {
   stopLegacyRelayBridge(targetId)
   releaseHeldPanes(targetId)
+  paneStops.get(targetId)?.dispose()
+  paneStops.delete(targetId)
 }
 
 function releaseHeldPanes(targetId: string): void {
@@ -288,6 +310,22 @@ export function resizeLegacyRelayPane(ptyId: string, cols: number, rows: number)
 
 export function setLegacyRelayPaneOutputPaused(ptyId: string, paused: boolean): void {
   hiddenOutput?.setPaused(ptyId, paused)
+}
+
+/** Whether this PTY is an older relay's terminal the bridge serves, so only the bridge stops it. */
+export function isLegacyRelayBridgedPty(ptyId: string): boolean {
+  const targetId = parseAppSshPtyId(ptyId)?.connectionId
+  return Boolean(targetId && host && leasedAppPtyIds(targetId, host.leases(targetId)).has(ptyId))
+}
+
+/** Its tab closed: the relay stops the shell, or is asked once it can be reached. */
+export async function closeLegacyRelayPane(ptyId: string): Promise<LegacyRelayBridgeCloseResult> {
+  const targetId = parseAppSshPtyId(ptyId)?.connectionId
+  if (!targetId || !host || !hasBridgeableLeases(targetId)) {
+    return { status: 'not-bridged' }
+  }
+  // Disconnected: recorded now, and the target's next connect lists the relay and sends the stop.
+  return stopsFor(targetId).stop(ptyId, host.connection(targetId) ? bridgeFor(targetId) : null)
 }
 
 export function detachLegacyRelayPane(ptyId: string): void {

@@ -1,5 +1,6 @@
 import { parseExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import type {
+  CommandOf,
   LayoutApplyReply,
   LayoutCommand
 } from '../../shared/workspace-layout/workspace-layout-command-types'
@@ -18,6 +19,7 @@ export type WindowLayoutCommand = LayoutCommand &
     | { type: 'closeTabs'; tabIds: [string] }
     // A browser tab's record lives in its workspace's partition, so it routes by workspace.
     | { browserTabId: string }
+    | { type: 'moveTabToWorkspace' }
   )
 
 /**
@@ -32,6 +34,9 @@ export async function applyWindowLayoutCommand(
   /** Agent status and orchestration records follow a pane moved into a new tab. */
   onPaneMoved: (move: TerminalLeafMoveRequest) => void = () => {}
 ): Promise<LayoutApplyReply> {
+  if (command.type === 'moveTabToWorkspace') {
+    return moveTabToWorkspace(store, hostIdsFor, command)
+  }
   const routedTabId =
     'tabId' in command
       ? (command.tabId ?? null)
@@ -85,6 +90,10 @@ export async function applyWindowLayoutCommand(
     }
     return reply
   }
+  // A pane's sleeping record lives with the pane, in each partition that holds its tab.
+  if (command.type === 'sleep' || command.type === 'wake') {
+    return store.applyLayoutCommand(command, holders)
+  }
   if (command.type !== 'closePane') {
     return store.applyLayoutCommand(command, [hostIds[0]])
   }
@@ -92,6 +101,34 @@ export async function applyWindowLayoutCommand(
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).
   markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
   return store.applyLayoutCommand({ ...command, userPaneClose: true }, holders)
+}
+
+/**
+ * Applied in the one partition holding both workspaces. Workspaces in two partitions are refused:
+ * the window's save carries that move, as today.
+ */
+async function moveTabToWorkspace(
+  store: RuntimeStore,
+  hostIdsFor: (worktreeId: string, tabId: string | null) => ExecutionHostId[],
+  command: CommandOf<'moveTabToWorkspace'>
+): Promise<LayoutApplyReply> {
+  // An editor tab lives in its workspace's routed partition.
+  const [from] = hostIdsFor(command.workspace, null)
+  const [to] = hostIdsFor(command.toWorkspace, null)
+  if (
+    !from ||
+    !to ||
+    [from, to].some((hostId) => parseExecutionHostId(hostId)?.kind === 'runtime')
+  ) {
+    return { ok: false, code: 'host_not_owned' }
+  }
+  if (from !== to) {
+    return { ok: false, code: 'other_partition' }
+  }
+  if (!store.applyLayoutCommand) {
+    throw new Error('layout_store_unavailable')
+  }
+  return store.applyLayoutCommand(command, [from])
 }
 
 /** A tab-bar id's terminal id, which a legacy entry's can differ from. */

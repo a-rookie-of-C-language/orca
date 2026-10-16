@@ -243,6 +243,21 @@ describe('the legacy relay client', () => {
     expect(postOutput).toHaveBeenCalledWith(params, expect.any(AbortSignal))
   })
 
+  it('stops a terminal with the old relay’s own pty.shutdown request', async () => {
+    const client = await open()
+    fake.respond = () => undefined
+    await client.shutdown('pty-1')
+    expect(fake.requests.at(-1)).toEqual({
+      method: 'pty.shutdown',
+      params: { id: 'pty-1', immediate: false, keepHistory: false }
+    })
+    await client.shutdown('pty-1', 'inc-1')
+    expect(fake.requests.at(-1)).toEqual({
+      method: 'pty.shutdown',
+      params: { id: 'pty-1', immediate: false, keepHistory: false, expectedIncarnationId: 'inc-1' }
+    })
+  })
+
   it('hangs up only itself on close', async () => {
     const client = await open()
     const closed = vi.fn()

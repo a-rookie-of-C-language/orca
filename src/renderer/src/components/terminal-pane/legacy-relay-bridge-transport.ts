@@ -278,6 +278,10 @@ export function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransp
       inner.detach?.(options)
     },
     destroy: (options) => {
+      if (bridged()) {
+        // An explicit pane close: stop the shell, as the other transports' destroy does.
+        void api?.close({ ptyId }).catch(() => {})
+      }
       if (bridged() || mode === 'pending') {
         release()
         mode = 'pending'

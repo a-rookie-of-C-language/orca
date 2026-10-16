@@ -318,6 +318,10 @@ export function createRemoteRuntimePtyTransport(
   }
 
   const recoveryInputHold = createRemoteRuntimeRecoveryInputHold({ holdBeforeFirstConnect: true })
+  let heldInputRelease: {
+    stream: RemoteRuntimeMultiplexedTerminal
+    waitingForValidation: boolean
+  } | null = null
   const inputJournal = createRemoteRuntimeInputJournal({
     currentStream: sequencedInputTarget,
     // Why: a refusal that never clears would drop every keystroke behind a connected-looking pane.
@@ -1594,6 +1598,7 @@ export function createRemoteRuntimePtyTransport(
       return !discardExpiredDisconnectedInput()
     }
     return (
+      heldInputRelease?.waitingForValidation === true ||
       (recovery.isActive && !subscriptionAcceptsInput()) ||
       (connecting && !connected) ||
       recoveryInputHold.isHolding()
@@ -1609,6 +1614,7 @@ export function createRemoteRuntimePtyTransport(
   }
 
   function discardPendingInput(): void {
+    heldInputRelease = null
     recoveryInputHold.discard()
     inputJournal.discard()
   }
@@ -1724,16 +1730,89 @@ export function createRemoteRuntimePtyTransport(
     ) {
       return
     }
+    if (heldInputRelease?.stream === stream) {
+      return
+    }
+    if (!recoveryInputHold.isHolding()) {
+      resumeSequencedInput(stream, boundHandle)
+      return
+    }
+    const release = { stream, waitingForValidation: inputBatcher.hasPendingValidation() }
+    heldInputRelease = release
+    if (release.waitingForValidation) {
+      const targetLifecycleEpoch = lifecycleEpoch
+      void (async () => {
+        do {
+          await inputBatcher.drain()
+        } while (heldInputRelease === release && inputBatcher.hasPendingValidation())
+        if (heldInputRelease !== release) {
+          return
+        }
+        release.waitingForValidation = false
+        if (
+          lifecycleEpoch === targetLifecycleEpoch &&
+          handle === boundHandle &&
+          getCurrentMultiplexedStream(boundHandle) === stream
+        ) {
+          releaseValidatedHeldInput(stream, boundHandle)
+        } else {
+          heldInputRelease = null
+        }
+      })()
+      return
+    }
+    releaseValidatedHeldInput(stream, boundHandle)
+  }
+
+  function releaseValidatedHeldInput(
+    stream: RemoteRuntimeMultiplexedTerminal,
+    boundHandle: string
+  ): void {
+    const release = heldInputRelease
+    if (
+      destroyed ||
+      terminalEnded ||
+      !connected ||
+      handle !== boundHandle ||
+      inputBlocked() ||
+      !(attachmentReady || subscriptionAcceptsInput())
+    ) {
+      heldInputRelease = null
+      return
+    }
+    // Why: the debounce suffix belongs after the held prefix, never ahead of its replay.
+    const pending = inputBatcher.takePending()
+    if (pending) {
+      recoveryInputHold.enqueue(holdEndpoint(), pending, 'driving')
+    }
     // Why first: journaled bytes were typed before anything in the hold.
     resumeSequencedInput(stream, boundHandle)
-    recoveryInputHold.release(heldInputEndpoint(boundHandle), {
+    const active = recoveryInputHold.release(heldInputEndpoint(boundHandle), {
       isCurrent: () => connected && handle === boundHandle && !inputBlocked(),
-      sendInput: (data) => sendInputNow(data),
+      // Why: the 1 Mi-code-unit hold fits the 16 MiB ceiling; one journal batch survives a mid-send outage.
+      sendInput: (data) => {
+        const current = getCurrentMultiplexedStream(boundHandle)
+        if (!current?.acknowledgesInput()) {
+          return sendInputNow(data)
+        }
+        inputJournal.send(current, heldInputEndpoint(boundHandle), inputSegments(data))
+        return true
+      },
       sendInputImmediate: (data) => sendInputImmediateNow(data),
       sendInputAccepted: sendInputAcceptedToRuntime,
       continuesAfterFailedWrite: () =>
         getCurrentMultiplexedStream(boundHandle)?.acknowledgesInput() === true
     })
+    const settle = (): void => {
+      if (heldInputRelease === release) {
+        heldInputRelease = null
+      }
+    }
+    if (active) {
+      void active.done.then(settle, settle)
+    } else {
+      settle()
+    }
   }
 
   async function sendInputAcceptedToRuntime(
@@ -1833,6 +1912,10 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
+  // Why: one-shot terminal.send (hosts without input acks) bypasses the journal, so a remount
+  // must learn of its in-flight or refused input here to warn that it may be lost.
+  let fallbackSendsInFlight = 0
+  let fallbackInputRefused = false
   const sendUnacknowledgedInput = (text: string, queryReply = false): boolean => {
     const targetHandle = handle
     const targetLifecycleEpoch = lifecycleEpoch
@@ -1840,6 +1923,12 @@ export function createRemoteRuntimePtyTransport(
       return false
     }
     const stream = getCurrentMultiplexedStream(targetHandle)
+    if (
+      !queryReply &&
+      (heldInputRelease?.waitingForValidation || (!stream && recoveryInputHold.isHolding()))
+    ) {
+      return recoveryInputHold.enqueue(holdEndpoint(), text, 'driving')
+    }
     if (stream?.acknowledgesInput()) {
       // Why true even if unsent: a failed write closes this stream, and the reattach replays the journal.
       inputJournal.send(stream, heldInputEndpoint(targetHandle), [{ text, queryReply }])
@@ -1853,6 +1942,7 @@ export function createRemoteRuntimePtyTransport(
       queuePendingClaimInput(text, queryReply)
       return true
     }
+    fallbackSendsInFlight += 1
     void trackTerminalSend(
       targetHandle,
       callRuntime<{ send: RuntimeTerminalSend }>('terminal.send', {
@@ -1863,6 +1953,7 @@ export function createRemoteRuntimePtyTransport(
       })
     )
       .then((result) => {
+        fallbackInputRefused = result.send.accepted !== true
         if (
           connected &&
           lifecycleEpoch === targetLifecycleEpoch &&
@@ -1877,10 +1968,14 @@ export function createRemoteRuntimePtyTransport(
           return
         }
         if (runtimeTerminalErrorMessage(error).includes('terminal_not_writable')) {
+          fallbackInputRefused = true
           notifyWriteUnavailable()
         } else {
           handleRemoteTerminalError(error)
         }
+      })
+      .finally(() => {
+        fallbackSendsInFlight -= 1
       })
     return true
   }
@@ -2617,6 +2712,10 @@ export function createRemoteRuntimePtyTransport(
         },
         onWriteUnavailable: () => {
           if (isCurrentSubscription()) {
+            // Without input acks the frame answers refused input, which the journal never held.
+            if (handle && getCurrentMultiplexedStream(handle)?.acknowledgesInput() !== true) {
+              fallbackInputRefused = true
+            }
             notifyWriteUnavailable()
           }
         },
@@ -3240,6 +3339,16 @@ export function createRemoteRuntimePtyTransport(
     // Why: a transport with an armed retry or a parked one owns this pane's recovery; a remount would race it (#21195).
     ownsRecovery() {
       return !destroyed && !terminalEnded && recoveryBlocksIo()
+    },
+
+    hasUndeliveredInput() {
+      return (
+        inputJournal.hasUnacknowledgedInput() ||
+        inputBatcher.hasPendingInput() ||
+        recoveryInputHold.hasPendingInput() ||
+        fallbackSendsInFlight > 0 ||
+        fallbackInputRefused
+      )
     },
 
     claimViewport(cols: number, rows: number): boolean {

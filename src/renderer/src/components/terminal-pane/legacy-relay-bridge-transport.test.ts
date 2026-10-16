@@ -9,6 +9,7 @@ const bridge = vi.hoisted(() => ({
   write: vi.fn(),
   resize: vi.fn(),
   detach: vi.fn(),
+  close: vi.fn(async () => ({ status: 'requested' })),
   setOutputPaused: vi.fn(),
   listPanes: vi.fn(async (): Promise<LegacyRelayBridgedPane[]> => []),
   panes: new Set<(panes: LegacyRelayBridgedPane[]) => void>(),
@@ -25,6 +26,7 @@ vi.stubGlobal('window', {
       write: bridge.write,
       resize: bridge.resize,
       detach: bridge.detach,
+      close: bridge.close,
       setOutputPaused: bridge.setOutputPaused,
       onPanes: (listener: (panes: LegacyRelayBridgedPane[]) => void) => {
         bridge.panes.add(listener)
@@ -48,7 +50,8 @@ vi.stubGlobal('window', {
 
 const { createLegacyRelayBridgeTransport: createTransport } =
   await import('./legacy-relay-bridge-transport')
-const { legacyRelayBridgePtyIdForPane } = await import('./legacy-relay-bridge-panes')
+const { legacyRelayBridgePtyIdForPane, legacyRelayBridgedPtyIdsForClosingTab } =
+  await import('./legacy-relay-bridge-panes')
 
 const created: PtyTransport[] = []
 function createLegacyRelayBridgeTransport(ptyId: string, inner: PtyTransport): PtyTransport {
@@ -278,6 +281,40 @@ describe('a runtime pane bridged to an older relay’s terminal', () => {
     bridge.attach.mockResolvedValueOnce({ status: 'exited' })
     publishPanes([])
     await vi.waitFor(() => expect(cb.onExit).toHaveBeenCalledWith(-1))
+  })
+
+  it('stops the old shell when its pane is closed, and never when it is only detached', async () => {
+    bridge.attach.mockResolvedValue({ status: 'attached', replay: '' })
+    const detached = createLegacyRelayBridgeTransport(PTY, innerTransport())
+    await detached.connect({ url: '', sessionId: PTY, callbacks: callbacks() })
+    detached.detach?.()
+    expect(bridge.close).not.toHaveBeenCalled()
+    const closed = createLegacyRelayBridgeTransport(PTY, innerTransport())
+    await closed.connect({ url: '', sessionId: PTY, callbacks: callbacks() })
+    closed.destroy?.()
+    expect(bridge.close).toHaveBeenCalledWith({ ptyId: PTY })
+  })
+
+  it('names the bridged shells a closing tab runs, or only its leaf for a split mirror', () => {
+    const second = 'ssh:ssh-box@@pty-2'
+    publishPanes([
+      { ptyId: PTY, targetId: 'ssh-box', tabId: 'tab-1', leafId: 'leaf-1', state: 'live' },
+      {
+        ptyId: second,
+        targetId: 'ssh-box',
+        tabId: 'tab-1',
+        leafId: 'leaf-2',
+        state: 'unverifiable'
+      },
+      { ptyId: 'ssh:ssh-box@@pty-3', targetId: 'ssh-box', tabId: 'tab-2', state: 'live' }
+    ])
+    expect(legacyRelayBridgedPtyIdsForClosingTab('web-terminal-tab-1', [])).toEqual([PTY, second])
+    const leaf = `web-terminal-${encodeURIComponent('tab-1::leaf-2')}`
+    expect(legacyRelayBridgedPtyIdsForClosingTab(leaf, [])).toEqual([second])
+    // A tab still bound to a bridged shell names it even under another id; others are ignored.
+    expect(
+      legacyRelayBridgedPtyIdsForClosingTab('local-tab', ['ssh:ssh-box@@pty-3', 'pty-local'])
+    ).toEqual(['ssh:ssh-box@@pty-3'])
   })
 
   it('hands any other connect straight to the managed server’s transport', async () => {

@@ -1,10 +1,11 @@
 import { z } from 'zod'
-import { isTerminalLeafId } from '../stable-pane-id'
+import { isTerminalLeafId, parsePaneKey } from '../stable-pane-id'
 import { isValidHostTerminalTabId } from '../terminal-tab-id'
 import type { TuiAgent } from '../tui-agent'
 import { isTuiAgent } from '../tui-agent-config'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
+import { sleepingAgentSessionRecordSchema } from '../workspace-session-sleeping-agents'
 
 export const LayoutSubscribeParams = z
   .object({
@@ -96,6 +97,14 @@ const CloseTabsCommand = z.object({
   recordClose: z.enum(['user', 'cleanup']).optional()
 })
 
+/** An open into a new group, named by the command's groupId, beside this one (NewGroupSplit). */
+const NewGroupSplit = z
+  .object({
+    besideGroupId: z.string().min(1),
+    direction: z.enum(['left', 'right', 'up', 'down'])
+  })
+  .optional()
+
 /** An edit-mode file's restorable record, as the window saves it. */
 const EditorFileRecord = z.object({
   filePath: z.string().min(1),
@@ -118,7 +127,8 @@ const OpenEditorTabCommand = z.object({
   contentType: z.enum(['editor', 'diff', 'conflict-review', 'check-details']),
   file: EditorFileRecord.optional(),
   groupId: z.string().min(1).optional(),
-  preview: z.literal(true).optional()
+  preview: z.literal(true).optional(),
+  split: NewGroupSplit
 })
 
 /** A window's drag-out of one pane into a new tab; main mints the tab's id. */
@@ -154,7 +164,8 @@ const CreateTerminalTabCommand = z.object({
     })
     .optional(),
   /** Only into a workspace with no tab in main's copy; otherwise nothing is created. */
-  initial: z.literal('activation').optional()
+  initial: z.literal('activation').optional(),
+  split: NewGroupSplit
 })
 
 /** The tab bar's rename: a title as the window stores it today; null clears it. */
@@ -186,7 +197,8 @@ const OpenBrowserTabCommand = z.object({
   sessionPartition: z.string().min(1).nullable().optional(),
   groupId: z.string().min(1).optional(),
   afterTabId: z.string().min(1).optional(),
-  index: z.number().int().nonnegative().optional()
+  index: z.number().int().nonnegative().optional(),
+  split: NewGroupSplit
 })
 
 const OnBrowserPage = {
@@ -218,10 +230,58 @@ const SetBrowserTabProfileCommand = z.object({
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
 /**
+ * Restored editor tabs the window moved to the workspace that owns their file (F42): the window
+ * resolved that owner. Main refuses it when the two workspaces are in different partitions.
+ */
+const MoveTabToWorkspaceCommand = z.object({
+  type: z.literal('moveTabToWorkspace'),
+  workspace: OnPane.workspace,
+  toWorkspace: z.string().min(1),
+  tabs: z
+    .array(
+      z.object({
+        tabId: z.string().min(1),
+        newTabId: z.string().min(1),
+        newEntityId: z.string().min(1)
+      })
+    )
+    .min(1),
+  groupId: z.string().min(1),
+  file: EditorFileRecord.optional()
+})
+
+/** Pane keys of the command's own tab only, so a sleep or wake never reaches past it. */
+function paneKeysNameTab(command: { tabId: string; paneKeys: string[] }): boolean {
+  return command.paneKeys.every((paneKey) => parsePaneKey(paneKey)?.tabId === command.tabId)
+}
+
+/** The window's sleep of panes of one tab it already stopped; main records how each resumes. */
+const SleepCommand = z
+  .object({
+    type: z.literal('sleep'),
+    ...OnTab,
+    paneKeys: z.array(z.string().min(1)).min(1),
+    records: z.array(sleepingAgentSessionRecordSchema)
+  })
+  .refine(paneKeysNameTab)
+  .refine((command) =>
+    command.records.every(
+      (record) =>
+        record.worktreeId === command.workspace && command.paneKeys.includes(record.paneKey)
+    )
+  )
+
+/** The window's wake of the one pane it shows; never more, so agents are not resumed in bulk. */
+const WakeCommand = z
+  .object({ type: z.literal('wake'), ...OnTab, paneKeys: z.tuple([z.string().min(1)]) })
+  .refine(paneKeysNameTab)
+
+/**
  * A window's layout command (`layout.apply`, registered only in a layout-owner build). The window
  * names what it acts on; main mints every new id but a created terminal tab's
  * (see CreateTerminalTabCommand), a browser tab's and page's, which the window already shows
- * (see OpenBrowserTabCommand), and an editor tab's (see OpenEditorTabCommand).
+ * (see OpenBrowserTabCommand), an editor tab's (see OpenEditorTabCommand), and the group an open
+ * into a new split makes (see NewGroupSplit).
  */
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
@@ -245,6 +305,9 @@ export const LayoutApplyParams = z.object({
     ReplaceBrowserPageCommand,
     SetBrowserTabProfileCommand,
     OpenEditorTabCommand,
-    PromotePreviewTabCommand
+    PromotePreviewTabCommand,
+    MoveTabToWorkspaceCommand,
+    SleepCommand,
+    WakeCommand
   ])
 })

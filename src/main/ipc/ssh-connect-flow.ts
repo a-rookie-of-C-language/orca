@@ -12,6 +12,7 @@ import {
   decideHostServer,
   recheckWhenManagedFenceClears,
   publishHostServerDecisionFailure,
+  publishBridgedUnservedHostServer,
   publishManagedServerConnect,
   publishUnservedHostServer
 } from './ssh-host-server-connect'
@@ -147,6 +148,16 @@ async function doConnect(
       )
       .catch(() => {})
     return published
+  }
+  if (server.bridged) {
+    // COMPAT(legacy-relay-bridge): the move waits for relay terminals the bridge keeps serving.
+    await startLegacyRelayBridge(targetId)
+    assertSshConnectsNotFenced()
+    if (!isCurrentConnectAttempt(targetId, authority)) {
+      await abandonDecisionTransport(targetId, owner, authority)
+      throw createCancelledConnectAttemptError()
+    }
+    return publishBridgedUnservedHostServer(target, server)
   }
   // This version has no relay to fall back to: a host its managed server doesn't serve fails here.
   await abandonDecisionTransport(targetId, owner, authority)

@@ -6,6 +6,7 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { holdLayoutFramesForWindowCommand } from '@/lib/window-session-write-activity'
 import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type {
@@ -36,9 +37,14 @@ export function terminalTabCreateCommand(
     tabId: tab.id,
     // createTab always lays out a single first pane.
     leafId: root?.type === 'leaf' ? root.leafId : '',
-    // A group main lacks (the workspace's first, or a split made with the tab) falls back to
-    // main's own placement until the window's save names it.
-    ...(entry ? { groupId: entry.groupId } : {}),
+    // Main makes a split made with the tab along with it. Another group main lacks (the
+    // workspace's first) falls back to main's own placement until the window's save names it.
+    ...(entry
+      ? {
+          groupId: entry.groupId,
+          ...newGroupSplitOf(state, tab.worktreeId, entry.groupId, entry.id)
+        }
+      : {}),
     ...(entry?.viewMode ? { viewMode: entry.viewMode } : {}),
     creation
   }

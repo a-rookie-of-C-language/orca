@@ -22,7 +22,18 @@ describe('resolveOrcadOsKeyring', () => {
     expect(await keychain.lookup('acct')).toEqual({ kind: 'found', value: 'a2V5' })
     runner.mockResolvedValueOnce(result({ code: 44 }))
     expect(await keychain.lookup('acct')).toEqual({ kind: 'missing' })
-    runner.mockResolvedValueOnce(result({ code: 36, stderr: 'User interaction is not allowed.' }))
+    // errSecInteractionNotAllowed: locked, and an SSH session may not prompt to unlock it.
+    runner.mockResolvedValueOnce(
+      result({
+        code: 36,
+        stderr: 'security: SecKeychainSearchCopyNext: User interaction is not allowed.\nmore detail'
+      })
+    )
+    expect(await keychain.lookup('acct')).toEqual({
+      kind: 'locked',
+      reason: 'exited 36: security: SecKeychainSearchCopyNext: User interaction is not allowed.'
+    })
+    runner.mockResolvedValueOnce(result({ code: 51, stderr: 'Unknown failure' }))
     expect((await keychain.lookup('acct')).kind).toBe('unreachable')
     runner.mockResolvedValueOnce(result({ code: null, timedOut: true }))
     expect(await keychain.lookup('acct')).toEqual({

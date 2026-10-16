@@ -1,8 +1,17 @@
 /** orcad's key record on disk: naming, reading, and exclusive first publication. */
 import { createHash, randomBytes } from 'node:crypto'
-import { linkSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import {
+  linkSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import {
   bestEffortFsyncDirectorySync,
@@ -149,6 +158,71 @@ export function publishRecordExclusively(path: string, record: StoredKeyState): 
     return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
   } finally {
     rmSync(staging, { force: true })
+  }
+}
+
+/** Replaces the record only while it still holds `expectedCheck`'s key; otherwise says why not. */
+export function replaceRecord(path: string, record: StoredKeyState, expectedCheck: string): string {
+  const staging = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
+  try {
+    if (!writeSecureFile(staging, JSON.stringify(record), { durable: true })) {
+      return `its key record ${path} could not be restricted to this user`
+    }
+    const current = readStoredRecord(path)
+    if (current.kind !== 'record' || current.stored.check !== expectedCheck) {
+      return 'its key record changed while it was being moved'
+    }
+    renameSync(staging, path)
+    bestEffortFsyncDirectorySync(dirname(path))
+    return 'replaced'
+  } catch (error) {
+    return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
+  } finally {
+    rmSync(staging, { force: true })
+  }
+}
+
+function isLiveProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM: alive, owned by someone else.
+    return errorCode(error) === 'EPERM'
+  }
+}
+
+/**
+ * Removes staging files a crashed write of this record left beside it; they can hold a master key.
+ * Why only this record's: on a shared (NFS) home another machine's writer PID means nothing here.
+ * Only this user's regular files, whose local writer is gone.
+ */
+export function sweepStaleRecordStaging(statePath: string): void {
+  const dir = dirname(statePath)
+  const prefix = `${basename(statePath)}.`
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return
+  }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null
+  for (const name of names) {
+    const pid = name.startsWith(prefix)
+      ? /^(\d+)\.[0-9a-f]{8}\.staging$/.exec(name.slice(prefix.length))?.[1]
+      : undefined
+    if (!pid || Number(pid) === process.pid || isLiveProcess(Number(pid))) {
+      continue
+    }
+    const path = join(dir, name)
+    try {
+      const stat = lstatSync(path)
+      if (stat.isFile() && (uid === null || stat.uid === uid)) {
+        rmSync(path, { force: true })
+      }
+    } catch {
+      // Gone already, or not ours to remove.
+    }
   }
 }
 

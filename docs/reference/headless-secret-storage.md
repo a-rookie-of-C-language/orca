@@ -13,10 +13,10 @@ That is the directory the credentials live in, whatever `ORCA_USER_DATA` says, s
 exactly as long as the credentials it seals. There is one record per machine, so hosts that share
 a home each keep their own key.
 
-| Host | Where the key goes |
-| --- | --- |
-| macOS | The login Keychain (through `/usr/bin/security`) if the server can reach it on first start |
-| Linux | The Secret Service keyring (`secret-tool`) if the session has a D-Bus session bus and a keyring answers |
+| Host                      | Where the key goes                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS                     | The login Keychain (through `/usr/bin/security`) if the server can reach it on first start                                                                    |
+| Linux                     | The Secret Service keyring (`secret-tool`) if the session has a D-Bus session bus and a keyring answers                                                       |
 | Otherwise, and on Windows | the record file itself, mode `0600` (an owner-only ACL on Windows), mixed with the machine ID (`/etc/machine-id`, macOS hardware UUID, Windows `MachineGuid`) |
 
 The keyring is never used for a key directory under the system temp directory or `/tmp` (tests),
@@ -29,6 +29,41 @@ keeps the old behavior. It stores credentials unencrypted and never creates a ke
 
 Windows does not use DPAPI. Reaching it from Node takes PowerShell or a native addon, and running
 PowerShell for each operation is an EDR signal.
+
+## A locked macOS login Keychain
+
+The login Keychain is unlocked when you sign in at the Mac's screen. After a reboot, a Mac you
+only reach over SSH keeps it locked. The server's key lookup (`security find-generic-password`)
+then exits 36 (`errSecInteractionNotAllowed`: locked, and the session may not show an unlock
+prompt). The server does not treat that like a missing or broken key:
+
+- It fails closed as usual, and logs one `[secrets]` line saying the Keychain is locked.
+- Linear and Jira status carry `credentialErrorReason: 'keychain_locked'`. The app then names the
+  host and the cause in the integration settings and on the task page, instead of asking you to
+  reconnect. The canonical decrypt error also gets an English hint, for clients too old to read
+  the field.
+- It looks the key up again whenever a credential is used (at most every 2 seconds) and before
+  each Linear or Jira status read. So once the Keychain opens, credentials work again without a
+  server restart.
+
+To unlock it, sign in to the Mac at its screen once. Running `security unlock-keychain` in a
+separate SSH login may not help: the server was started from an earlier SSH login, and macOS can
+track Keychain unlock state per login session. This has not yet been checked on a real headless
+Mac.
+
+Once the key has loaded again after a lock, status sets `canMoveCredentialKeyToFile`, and
+Settings offers **Switch to file storage** (RPC `integrationCredentials.moveKeyToFile`). This reads
+the master key from the Keychain, then replaces the record with an owner-only (`0600`) key-file
+record that holds the same key, not bound to the machine ID. Keychain keys are never machine-bound,
+so every sealed credential still opens and nothing is re-sealed. The Keychain item stays where it
+is. The switch is refused while the Keychain is locked, because the key can't be read then. After
+the switch, the key file's limitations below apply. In particular, the moved key is not bound to
+the machine ID, so a backup of `~/.orca`, or a copy on a shared (NFS) home, can open the
+credentials on another machine.
+
+On startup the server also deletes key-record staging files (`*.staging`) that a crashed write
+left in the credential directory. It deletes only this machine's record's staging files owned by
+this user, and only when the process that wrote them has exited.
 
 ## Limitations
 

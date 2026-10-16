@@ -15,10 +15,14 @@ const MAX_OUTPUT_BYTES = 4096
 
 export type OrcadKeyringRunner = (spec: ProcessSpec) => Promise<ProcessResult>
 
-/** `missing`: the keyring answered and has no item. `unreachable`: absent, locked, or timed out. */
+/**
+ * `missing`: the keyring answered and has no item. `locked`: the macOS Keychain is locked and this
+ * session may not prompt to unlock it. `unreachable`: absent, otherwise locked, or timed out.
+ */
 export type OrcadKeyringLookup =
   | { kind: 'found'; value: string }
   | { kind: 'missing' }
+  | { kind: 'locked'; reason: string }
   | { kind: 'unreachable'; reason: string }
 
 export type OrcadOsKeyring = {
@@ -64,9 +68,13 @@ function macosKeychain(runner: OrcadKeyringRunner): OrcadOsKeyring {
       if (result.code === 0 && result.stdout.trim()) {
         return { kind: 'found', value: result.stdout.trim() }
       }
-      // errSecItemNotFound.
-      return result.code === 44
-        ? { kind: 'missing' }
+      // Why exit codes: `security` exits with the low byte of the OSStatus, so errSecItemNotFound
+      // (-25300) is 44 and errSecInteractionNotAllowed (-25308, locked with no UI) is 36.
+      if (result.code === 44) {
+        return { kind: 'missing' }
+      }
+      return result.code === 36 && !result.timedOut
+        ? { kind: 'locked', reason: describeFailure(result) }
         : { kind: 'unreachable', reason: describeFailure(result) }
     },
     async store(account, value) {

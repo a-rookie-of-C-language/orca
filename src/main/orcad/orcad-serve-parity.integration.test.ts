@@ -17,10 +17,12 @@ import { ORCAD_LOCK_FILE_NAME } from './orcad-instance-lock'
 import { resolveBundledOrcadRuntime } from './orcad-bundled-runtime'
 import { skipForMissingInputs } from './orcad-node-slot-fixture'
 import { buildDaemonSessionClient } from './orcad-daemon-session-client-fixture'
+import { ServeCleanupDiagnostics } from './orcad-serve-cleanup-diagnostics.test-fixture'
 import {
   killAndAwaitExit,
   killChildAndWait,
   killProfileDaemons,
+  recordProfileDaemons,
   removeTestRoot,
   waitForProcessExit
 } from './orcad-daemon-teardown-fixture'
@@ -31,14 +33,22 @@ const runtime = existsSync(join(slotDir, ORCAD_NODE_RUNTIME_MARKER_FILENAME))
   : null
 const skip = skipForMissingInputs('artifact', runtime ? [] : ['a Node orcad slot in out/orcad'])
 const roots: string[] = []
+const cleanupDiagnostics = new Set<ServeCleanupDiagnostics>()
 
 afterEach(async () => {
   const failures: unknown[] = []
   // Stop every profile before removing any project root it may still use.
   for (const root of roots) {
+    const diagnostics = [...cleanupDiagnostics].find((entry) => entry.owns(root))
+    await diagnostics?.capture('beforeDaemonCleanup', root)
+    const startedAt = Date.now()
     try {
       await killProfileDaemons(root)
+      diagnostics?.note('daemonCleanupResolved', { elapsedMs: Date.now() - startedAt })
+      await diagnostics?.capture('afterDaemonCleanup', root)
     } catch (error) {
+      await diagnostics?.capture('daemonCleanupFailed', root)
+      diagnostics?.report('daemonCleanupFailed', root, error, Date.now() - startedAt)
       failures.push(error)
     }
   }
@@ -46,10 +56,18 @@ afterEach(async () => {
     throw new AggregateError(failures, 'Profile daemon shutdown incomplete')
   }
   for (const root of roots.slice()) {
+    const diagnostics = [...cleanupDiagnostics].find((entry) => entry.owns(root))
+    const startedAt = Date.now()
     try {
       await removeTestRoot(root)
       roots.splice(roots.indexOf(root), 1)
+      if (diagnostics?.rootRemoved(root)) {
+        cleanupDiagnostics.delete(diagnostics)
+      }
     } catch (error) {
+      const elapsedMs = Date.now() - startedAt
+      await diagnostics?.capture('rootRemovalFailed', root)
+      diagnostics?.report('rootRemovalFailed', root, error, elapsedMs)
       failures.push(error)
     }
   }
@@ -89,6 +107,9 @@ describe.skipIf(skip)('orca serve on orcad', () => {
 
   it('prints only the recipe line, exactly as Electron serve does', async () => {
     const projectRoot = profile()
+    const userData = profile()
+    const diagnostics = new ServeCleanupDiagnostics(projectRoot, userData)
+    cleanupDiagnostics.add(diagnostics)
     const child = spawnProcess({
       program: runtime!,
       args: [
@@ -101,12 +122,13 @@ describe.skipIf(skip)('orca serve on orcad', () => {
         '--project-root',
         projectRoot
       ],
-      env: serveEnv(profile()),
+      env: serveEnv(userData),
       timeoutMs: null
     })
     let stdout = ''
     let stderr = ''
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')))
+    diagnostics.observe(child, () => stderr)
     try {
       await new Promise<void>((resolveLine, reject) => {
         const timer = setTimeout(() => reject(new Error(`no recipe line: ${stderr}`)), 120_000)
@@ -125,7 +147,13 @@ describe.skipIf(skip)('orca serve on orcad', () => {
       // Anything after the recipe line would break a reader of this contract.
       await new Promise((settle) => setTimeout(settle, 1_000))
     } finally {
-      await killChildAndWait(child)
+      await diagnostics.capture('beforeServeKill')
+      await recordProfileDaemons(userData)
+      try {
+        await killChildAndWait(child)
+      } finally {
+        await diagnostics.capture('afterServeKill')
+      }
     }
     const lines = stdout.split('\n').filter(Boolean)
     expect(lines, stderr).toHaveLength(1)
@@ -236,6 +264,7 @@ async function stopServe(userData: string): Promise<void> {
   if (!child || child.exitCode !== null) {
     return
   }
+  await recordProfileDaemons(userData)
   const exited = new Promise((settle) => child.once('exit', settle))
   child.kill('SIGTERM')
   await exited

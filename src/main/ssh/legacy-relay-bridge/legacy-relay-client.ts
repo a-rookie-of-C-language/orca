@@ -212,6 +212,23 @@ export class LegacyRelayClient {
     this.mux.notify('pty.resize', { id: relayPtyId, cols, rows })
   }
 
+  /**
+   * The old relay's own stop: it kills the shell and reports `pty.exit` (v1.4.2xx wire shape).
+   * The incarnation fence is omitted, never sent undefined, for relays that predate it.
+   */
+  async shutdown(relayPtyId: string, expectedIncarnationId?: string): Promise<void> {
+    await this.mux.request(
+      'pty.shutdown',
+      {
+        id: relayPtyId,
+        immediate: false,
+        keepHistory: false,
+        ...(expectedIncarnationId ? { expectedIncarnationId } : {})
+      },
+      { timeoutMs: REQUEST_TIMEOUT_MS }
+    )
+  }
+
   onData(listener: DataListener): () => void {
     this.dataListeners.add(listener)
     return () => this.dataListeners.delete(listener)

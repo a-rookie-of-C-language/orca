@@ -13,6 +13,7 @@ import {
 } from '../slices/terminal-tab-retirement'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { startTerminalTabProviderRetirement } from './terminal-tab-close-providers'
+import { stopLegacyRelayBridgedShellsForTab } from './legacy-relay-bridged-tab-close'
 import { commitTerminalSurfaceClose } from './terminal-surface-close-intent'
 import { recordTerminalTabCloseThroughLayoutOwner } from './terminal-tab-close-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -51,6 +52,10 @@ export function createTerminalTabCloseActions(
           state: get(),
           tabId
         })
+        if (opts?.localPtyTeardownOwnedExternally !== true) {
+          // Why regardless of a host-owned close: the managed server never ran a relay-era shell.
+          void stopLegacyRelayBridgedShellsForTab(get(), tabId, retirementPlan)
+        }
       }
       settleAttentionRemovedBy(set, get, () =>
         set((s) => {

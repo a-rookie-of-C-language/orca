@@ -41,6 +41,16 @@ export function describeOrcadHostKeyGap(platform: NodeJS.Platform, hostBound: bo
   )
 }
 
+/** Why its own message: a locked login Keychain clears without a restart, unlike other failures. */
+export function describeOrcadKeychainLocked(): string {
+  return (
+    "Orca's headless server cannot unseal its credentials: the macOS login Keychain that holds " +
+    'its key is locked. This happens after a reboot when you only sign in over SSH. Sign in to ' +
+    'this Mac at its screen once; the server retries on its own. Saved credentials are kept as ' +
+    'they are and new ones are refused until then.'
+  )
+}
+
 export function describeOrcadSealingUnavailable(reason: string, stateFile: string): string {
   return (
     `Orca's headless server cannot unseal its credentials: ${reason}. Saved credentials are kept ` +

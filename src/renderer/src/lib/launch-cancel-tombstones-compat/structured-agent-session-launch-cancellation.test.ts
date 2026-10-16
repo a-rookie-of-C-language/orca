@@ -1,18 +1,18 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { suppressCancelledStructuredSessionTabs } from '@/runtime/structured-agent-session-tab-retirement'
-import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
+import type { StructuredLaunchState } from '../structured-agent-session-launch-registry'
 import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
   markStructuredAgentSessionLaunchCancelled,
   retireAbsentStructuredAgentSessionLaunchCancellationTombstones,
   resetStructuredAgentLaunchRegistryForTests,
   setStructuredLaunchState
-} from './structured-agent-session-launch-registry'
+} from '../structured-agent-session-launch-registry'
 import { beginStructuredAgentSessionAuthoritativeInventory } from './structured-agent-session-launch-cancellation'
-import { resetStructuredAgentLaunchPersistenceForTests } from './structured-agent-session-launch-persistence'
+import { resetStructuredAgentLaunchPersistenceForTests } from '../structured-agent-session-launch-persistence'
 import { refreshLocalStructuredSessionTabs } from '@/runtime/local-structured-session-tabs-sync/inventory-refresh'
 
 const WORKTREE_ID = 'repo-1::worktree-1'

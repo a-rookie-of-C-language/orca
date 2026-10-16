@@ -12674,6 +12674,7 @@
           "tunnelUnsupported": "Cette version d’Orca ne prend pas en charge cet hôte : son serveur SSH n’autorise pas le transfert de port, et Orca n’a pas non plus pu joindre son serveur via la session SSH. Pour continuer à l’utiliser, installez une version antérieure d’Orca.",
           "setupRetry": "Orca n’a pas pu démarrer son serveur sur cet hôte. Réessayez de vous connecter.",
           "moveHeld": "Orca a mis en pause le déplacement des projets de cet hôte vers son serveur géré, car il n’a pas pu confirmer la copie du serveur. Rien n’est perdu : l’hôte conserve ses projets et reste verrouillé jusqu’à la fin du déplacement. Reconnectez-vous pour reprendre. Si le serveur ne peut pas revenir, arrêtez-le ou oubliez-le dans Réglages > Serveurs gérés.",
+          "olderTerminalsBridged": "Pas encore déplacé vers un serveur géré : des terminaux lancés par une version antérieure d’Orca sont toujours en cours d’exécution dans les projets de cet hôte. Ils continuent de fonctionner ici. Fermez-les ou arrêtez-les sur l’hôte, puis reconnectez-vous.",
           "olderTerminalsUncounted": "Des terminaux lancés par une version antérieure d’Orca sont toujours en cours d’exécution sur cet hôte et ne s’arrêtent pas d’eux-mêmes. Fermez-les dans cette version d’Orca ou arrêtez-les sur l’hôte, puis reconnectez-vous.",
           "olderTerminalsUnverifiable": "Orca n’a pas pu confirmer que les terminaux lancés par une version antérieure d’Orca sont terminés. Reconnectez-vous pour réessayer.",
           "olderTerminals_one": "{{count}} terminal lancé par une version antérieure d’Orca est toujours en cours d’exécution sur cet hôte et ne s’arrête pas de lui-même. Fermez-le dans cette version d’Orca ou arrêtez-le sur l’hôte, puis reconnectez-vous.",
@@ -19855,7 +19856,8 @@
       "confirmBody": "Le redémarrage met fin à tous les processus en cours d'exécution dans {{sessions}}. Les agents qui prennent en charge la reprise peuvent être repris ensuite ; les shells et autres tâches ne le peuvent pas et doivent être redémarrés. Faites-le lorsque vos agents sont inactifs.",
       "cancel": "Annuler",
       "confirm": "Redémarrer et arrêter les processus"
-    }
+    },
+    "restartedInputNotSent": "Le terminal a redémarré pendant votre saisie, une partie ne lui est peut-être pas parvenue. Vérifiez le nouveau shell avant de la saisir à nouveau."
   },
   "fileSearch": {
     "failed": "La recherche a échoué. Essayer à nouveau."
