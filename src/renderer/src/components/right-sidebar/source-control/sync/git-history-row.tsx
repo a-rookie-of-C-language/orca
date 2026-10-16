@@ -34,6 +34,7 @@ function GitHistoryRefBadge({ itemRef }: { itemRef: GitHistoryItemRef }): React.
 
 type GitHistoryRowProps = React.HTMLAttributes<HTMLElement> & {
   viewModel: GitHistoryItemViewModel
+  graphLaneCount?: number
   expanded?: boolean
   preserveRefIds?: readonly string[]
   onOpenCommit?: (item: GitHistoryItem) => void
@@ -44,6 +45,7 @@ export const GitHistoryRow = React.forwardRef<HTMLElement, GitHistoryRowProps>(
   function GitHistoryRow(
     {
       viewModel,
+      graphLaneCount,
       expanded = false,
       preserveRefIds,
       onOpenCommit,
@@ -69,7 +71,7 @@ export const GitHistoryRow = React.forwardRef<HTMLElement, GitHistoryRowProps>(
     const hiddenRefs = refs.slice(2)
     const commitMessage = item.message || item.subject
     const rowClassName = cn(
-      'grid min-h-[26px] w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 px-3 py-0.5 text-left text-xs transition-colors',
+      'grid min-h-6 w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-1.5 px-3 text-left text-xs transition-colors',
       isInteractive && 'cursor-pointer hover:bg-accent/40 focus-visible:bg-accent/40',
       !isInteractive && 'cursor-default',
       isBoundaryNode && 'text-muted-foreground',
@@ -77,7 +79,7 @@ export const GitHistoryRow = React.forwardRef<HTMLElement, GitHistoryRowProps>(
     )
     const rowContent = (
       <>
-        <GitHistoryGraphSvg viewModel={viewModel} />
+        <GitHistoryGraphSvg viewModel={viewModel} laneCount={graphLaneCount} />
         <div className="flex min-w-0 items-center gap-1 overflow-hidden">
           {canExpand && (
             <ChevronDown
