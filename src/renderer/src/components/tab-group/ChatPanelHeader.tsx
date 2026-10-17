@@ -13,12 +13,15 @@ export function ChatPanelHeader({
   chats,
   activeTabId,
   onActivate,
-  onClose
+  onClose,
+  allowClose = true
 }: {
   chats: Tab[]
   activeTabId: string
   onActivate: (tabId: string) => void
   onClose: (tabId: string) => void
+  /** False hides the close button so a pinned column keeps its last chat. */
+  allowClose?: boolean
 }): React.JSX.Element {
   const generatedTitles = useAppStore((state) => state.settings?.tabAutoGenerateTitle === true)
   const closeLabel = translate('chatPanel.close', 'Close chat')
@@ -63,19 +66,21 @@ export function ChatPanelHeader({
           {active ? resolveUnifiedTabLabel(active, generatedTitles, chatLabel) : chatLabel}
         </span>
       )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={closeLabel}
-            onClick={() => onClose(activeTabId)}
-          >
-            <X />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{closeLabel}</TooltipContent>
-      </Tooltip>
+      {allowClose ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={closeLabel}
+              onClick={() => onClose(activeTabId)}
+            >
+              <X />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{closeLabel}</TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   )
 }

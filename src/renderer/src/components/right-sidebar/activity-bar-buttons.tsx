@@ -36,7 +36,7 @@ const STATUS_DOT_COLOR: Record<CheckStatus, string> = {
   neutral: 'bg-muted-foreground'
 }
 
-function activityItemAriaLabel(item: ActivityBarItem, status?: CheckStatus | null): string {
+export function activityItemAriaLabel(item: ActivityBarItem, status?: CheckStatus | null): string {
   const base = item.shortcut ? `${item.title} (${item.shortcut})` : item.title
   return status === 'failure'
     ? `${base} — ${translate('auto.components.right.sidebar.activityBar.error', 'Error')}`

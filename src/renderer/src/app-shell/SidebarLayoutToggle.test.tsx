@@ -7,13 +7,19 @@ import { SidebarLayoutToggle } from './SidebarLayoutToggle'
 const mocks = vi.hoisted(
   (): {
     state: {
-      settings: { toolsSidebarPosition?: 'left' | 'right' } | undefined
+      settings: { toolsSidebarPosition?: 'left' | 'right'; workspaceMode?: 'work' | 'code' } | undefined
       updateSettings: ReturnType<typeof vi.fn>
+      setSidebarOpen: ReturnType<typeof vi.fn>
+      setRightSidebarOpen: ReturnType<typeof vi.fn>
+      setRightSidebarTab: ReturnType<typeof vi.fn>
     }
   } => ({
     state: {
       settings: undefined,
-      updateSettings: vi.fn().mockResolvedValue(undefined)
+      updateSettings: vi.fn().mockResolvedValue(undefined),
+      setSidebarOpen: vi.fn(),
+      setRightSidebarOpen: vi.fn(),
+      setRightSidebarTab: vi.fn()
     }
   })
 )
@@ -27,34 +33,46 @@ afterEach(cleanup)
 beforeEach(() => {
   mocks.state.settings = undefined
   mocks.state.updateSettings.mockClear()
+  mocks.state.setSidebarOpen.mockClear()
+  mocks.state.setRightSidebarOpen.mockClear()
+  mocks.state.setRightSidebarTab.mockClear()
 })
 
 describe('SidebarLayoutToggle', () => {
-  it('keeps the original layout when older settings omit the preference', () => {
+  it('treats older settings without a mode as Work and switches to the fixed Code layout', () => {
     render(
       <TooltipProvider>
         <SidebarLayoutToggle />
       </TooltipProvider>
     )
-    const button = screen.getByRole('button', { name: /Move tools sidebar to the left/ })
+    const button = screen.getByRole('button', { name: /Switch to Code mode/ })
     expect(button.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(button)
+    // Why: Code fixes Explorer left and chat right, so the switch restores the whole bundle.
+    expect(mocks.state.setSidebarOpen).toHaveBeenCalledExactlyOnceWith(false)
+    expect(mocks.state.setRightSidebarTab).toHaveBeenCalledExactlyOnceWith('explorer')
+    expect(mocks.state.setRightSidebarOpen).toHaveBeenCalledExactlyOnceWith(true)
     expect(mocks.state.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      workspaceMode: 'code',
       toolsSidebarPosition: 'left'
     })
   })
 
-  it('can return from the left-hand layout without changing other settings', () => {
-    mocks.state.settings = { toolsSidebarPosition: 'left' }
+  it('returns from Code to the fixed Work layout', () => {
+    mocks.state.settings = { workspaceMode: 'code', toolsSidebarPosition: 'left' }
     render(
       <TooltipProvider>
         <SidebarLayoutToggle />
       </TooltipProvider>
     )
-    const button = screen.getByRole('button', { name: 'Move tools sidebar to the right' })
+    const button = screen.getByRole('button', { name: /Switch to Work mode/ })
     expect(button.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(button)
+    expect(mocks.state.setSidebarOpen).toHaveBeenCalledExactlyOnceWith(true)
+    expect(mocks.state.setRightSidebarTab).toHaveBeenCalledExactlyOnceWith('explorer')
+    expect(mocks.state.setRightSidebarOpen).toHaveBeenCalledExactlyOnceWith(false)
     expect(mocks.state.updateSettings).toHaveBeenCalledExactlyOnceWith({
+      workspaceMode: 'work',
       toolsSidebarPosition: 'right'
     })
   })

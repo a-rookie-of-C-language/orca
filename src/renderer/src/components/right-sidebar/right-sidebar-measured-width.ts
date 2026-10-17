@@ -5,7 +5,8 @@ export function useMeasuredWidth(onWidth: (width: number | null) => void) {
   const widthRef = useRef<number | null>(null)
 
   return useCallback(
-    (node: HTMLDivElement | null) => {
+    // Why: measured surfaces include both div strips and the DSH nav element.
+    (node: HTMLElement | null) => {
       observerRef.current?.disconnect()
       observerRef.current = null
 

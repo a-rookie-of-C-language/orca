@@ -317,6 +317,7 @@ export default function TabGroupPanel({
                   activeTabId={activeTab.id}
                   onActivate={commands.activateAgentSession}
                   onClose={commands.closeItem}
+                  allowClose={agentSessionItems.length > 1 || toolsSidebarOnLeft}
                 />
               ) : (
                 tabBar

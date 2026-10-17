@@ -9,6 +9,22 @@ type ChatPanelLayout = Pick<
   'unifiedTabsByWorktree' | 'groupsByWorktree' | 'activeGroupIdByWorktree' | 'layoutByWorktree'
 >
 
+/**
+ * Both layout modes pin the center chat column: its last chat can be neither
+ * closed nor dragged out. Legacy profiles without a mode keep the old rule.
+ */
+export function shouldPinChatPanelColumn(
+  settings:
+    | { toolsSidebarPosition?: 'left' | 'right'; workspaceMode?: 'work' | 'code' }
+    | null
+    | undefined
+): boolean {
+  if (settings?.workspaceMode === 'work' || settings?.workspaceMode === 'code') {
+    return true
+  }
+  return settings?.toolsSidebarPosition !== 'left'
+}
+
 /** Separate chat chrome without changing session identities or the focused content. */
 export function applyDefaultChatPanelLayout(
   state: ChatPanelLayout,

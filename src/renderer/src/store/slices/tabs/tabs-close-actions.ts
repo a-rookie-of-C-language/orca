@@ -1,4 +1,5 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
+import { shouldPinChatPanelColumn } from './chat-panel-layout'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import {
   findGroupForTab,
@@ -43,8 +44,21 @@ export function createTabsCloseActions(
       const groupOrder =
         group?.tabOrder ?? (state.unifiedTabsByWorktree[worktreeId] ?? []).map((item) => item.id)
 
+      const dedupedGroupOrder = dedupeTabOrder(groupOrder)
+      const remainingOrder = dedupeTabOrder(dedupedGroupOrder.filter((id) => id !== tabId))
+      // Why: DSH mode pins the center chat column, so refuse its last chat
+      // before any session teardown runs; callers already handle null.
+      if (
+        group?.isChatPanel === true &&
+        tab.contentType === 'agent-session' &&
+        remainingOrder.length === 0 &&
+        (state.groupsByWorktree[worktreeId] ?? []).length > 1 &&
+        shouldPinChatPanelColumn(state.settings)
+      ) {
+        return null
+      }
+
       if (tab.contentType === 'terminal' && !opts?.terminalRetirementHandled) {
-        const dedupedGroupOrder = dedupeTabOrder(groupOrder)
         const wasLastTab =
           dedupeTabOrder(dedupedGroupOrder.filter((id) => id !== tabId)).length === 0
         // Why: unified-only hydrated tabs still own provider sessions without a legacy row, so retire every terminal close by entity id.
@@ -52,8 +66,6 @@ export function createTabsCloseActions(
         return { closedTabId: tabId, wasLastTab, worktreeId }
       }
 
-      const dedupedGroupOrder = dedupeTabOrder(groupOrder)
-      const remainingOrder = dedupeTabOrder(dedupedGroupOrder.filter((id) => id !== tabId))
       const wasLastTab = remainingOrder.length === 0
       if (tab.contentType === 'agent-session') {
         const provisional =

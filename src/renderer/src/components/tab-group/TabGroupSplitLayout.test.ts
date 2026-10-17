@@ -47,6 +47,7 @@ vi.mock('./useTabDragSplit', () => ({
 }))
 
 import TabGroupSplitLayout from './TabGroupSplitLayout'
+import { TabGroupSplitNodeTree } from './TabGroupSplitNodeTree'
 
 type ReactElementLike = {
   type: string | ((props: Record<string, unknown>) => unknown)
@@ -102,7 +103,12 @@ describe('TabGroupSplitLayout', () => {
       isWorktreeActive
     })
 
-    const tabGroupPanelElement = asElement(getSplitNodeElement(element))
+    const leafWrapper = asElement(getSplitNodeElement(element))
+    // Why: the leaf wraps its panel in a stable fold div so Work mode can hide
+    // it without remounting; drill through to the panel props.
+    const tabGroupPanelElement = asElement(
+      React.Children.only(leafWrapper.props.children as React.ReactNode)
+    )
     return tabGroupPanelElement.props as {
       groupId: string
       worktreeId: string
@@ -171,11 +177,20 @@ describe('TabGroupSplitLayout', () => {
     const rootChildren = rootElement.props.children as unknown[]
     const leftChild = asElement(rootChildren[0]).props.children
     const rightChild = asElement(rootChildren[2]).props.children
-    const leftPanelProps = asElement(invokeComponent(asElement(leftChild))).props as {
+    // Why: each leaf wraps its panel in a stable fold div; drill through it.
+    const leftPanelProps = asElement(
+      React.Children.only(
+        asElement(invokeComponent(asElement(leftChild))).props.children as React.ReactNode
+      )
+    ).props as {
       reserveClosedExplorerToggleSpace: boolean
       reserveCollapsedSidebarHeaderSpace: boolean
     }
-    const rightPanelProps = asElement(invokeComponent(asElement(rightChild))).props as {
+    const rightPanelProps = asElement(
+      React.Children.only(
+        asElement(invokeComponent(asElement(rightChild))).props.children as React.ReactNode
+      )
+    ).props as {
       reserveClosedExplorerToggleSpace: boolean
       reserveCollapsedSidebarHeaderSpace: boolean
     }
@@ -214,5 +229,35 @@ describe('TabGroupSplitLayout', () => {
     ;(resizeHandle.props.onResizeStart as () => void)()
 
     expect(recordFeatureInteractionMock).toHaveBeenCalledWith('terminal-panes')
+  })
+
+  it('gives the visible chat pane the full row when Work mode folds the other side', () => {
+    const element = TabGroupSplitNodeTree({
+      layout: {
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.3,
+        first: { type: 'leaf', groupId: 'editor-group' },
+        second: { type: 'leaf', groupId: 'chat-group' }
+      },
+      worktreeId: 'wt-1',
+      focusedGroupId: 'chat-group',
+      isWorktreeActive: true,
+      isTabDragActive: false,
+      hoveredTabInsertion: null,
+      collapseNonChatGroups: true,
+      chatGroupIds: new Set(['chat-group'])
+    })
+
+    // Why: a folded pane keeps its old ratio in the style prop — without the
+    // full-row override the visible chat would sit at 70% with blank space.
+    const rootElement = asElement(invokeComponent(asElement(element)))
+    const children = rootElement.props.children as unknown[]
+    const foldedWrapper = asElement(children[0])
+    const visibleWrapper = asElement(children[2])
+
+    expect(foldedWrapper.props.className).toBe('hidden')
+    expect(children[1]).toBeNull()
+    expect(visibleWrapper.props.style).toEqual({ flex: '1 1 0%' })
   })
 })

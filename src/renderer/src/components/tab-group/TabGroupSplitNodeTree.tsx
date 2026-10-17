@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TabGroupLayoutNode } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
 import TabGroupPanel, { type TabGroupPanelTabStrip } from './TabGroupPanel'
+import { subtreeHasChatGroup } from './subtree-chat-groups'
 import type { HoveredTabInsertion } from './useTabDragSplit'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { setGroupRatioThroughLayoutOwner } from './tab-group-layout-owner-commands'
 
 const MIN_RATIO = 0.15
 const MAX_RATIO = 0.85
+
+const EMPTY_CHAT_GROUP_IDS: ReadonlySet<string> = new Set()
 
 function ResizeHandle({
   direction,
@@ -156,7 +159,9 @@ function SplitNode({
   suppressRightBorder,
   suppressBottomBorder,
   isTabDragActive,
-  hoveredTabInsertion
+  hoveredTabInsertion,
+  collapseNonChatGroups,
+  chatGroupIds
 }: {
   node: TabGroupLayoutNode
   nodePath: string
@@ -175,49 +180,72 @@ function SplitNode({
   suppressBottomBorder: boolean
   isTabDragActive: boolean
   hoveredTabInsertion: HoveredTabInsertion | null
+  collapseNonChatGroups: boolean
+  chatGroupIds: ReadonlySet<string>
 }): React.JSX.Element {
   const setTabGroupSplitRatio = useAppStore((state) => state.setTabGroupSplitRatio)
   const recordFeatureInteraction = useAppStore((state) => state.recordFeatureInteraction)
+  // Why: a worktree with no chat group at all keeps its full layout instead of a blank screen.
+  const canCollapse = collapseNonChatGroups && chatGroupIds.size > 0
 
   if (node.type === 'leaf') {
+    // Why: Work mode folds non-chat panes behind `hidden` instead of unmounting them, so
+    // terminals keep running and editors keep state. The wrapper div stays mounted in both
+    // modes, so switching modes never remounts a pane.
+    const leafHidden = canCollapse && !subtreeHasChatGroup(node, chatGroupIds)
     return (
-      <TabGroupPanel
-        groupId={node.groupId}
-        worktreeId={worktreeId}
-        isVisible={isWorktreeActive}
-        // Why: hidden worktrees stay mounted so their PTYs and split layouts
-        // survive worktree switches, but only the visible worktree may own the
-        // global terminal shortcuts. If an offscreen group's pane stays
-        // "focused", Cmd/Ctrl+W and split shortcuts can hit the wrong worktree.
-        isFocused={isWorktreeActive && node.groupId === focusedGroupId}
-        hasSplitGroups={hasSplitGroups}
-        tabStrip={tabStrip}
-        markdownAnnotationsEnabled={markdownAnnotationsEnabled}
-        touchesRightEdge={touchesRightEdge}
-        touchesLeftEdge={touchesLeftEdge}
-        touchesBottomEdge={touchesBottomEdge}
-        suppressLeftBorder={suppressLeftBorder}
-        suppressRightBorder={suppressRightBorder}
-        suppressBottomBorder={suppressBottomBorder}
-        reserveClosedExplorerToggleSpace={touchesTopEdge && touchesRightEdge}
-        reserveCollapsedSidebarHeaderSpace={touchesTopEdge && touchesLeftEdge}
-        isTabDragActive={isTabDragActive}
-        hoveredTabInsertion={
-          hoveredTabInsertion?.groupId === node.groupId ? hoveredTabInsertion : null
-        }
-      />
+      <div className={leafHidden ? 'hidden' : 'flex min-w-0 min-h-0 flex-1'}>
+        <TabGroupPanel
+          groupId={node.groupId}
+          worktreeId={worktreeId}
+          isVisible={isWorktreeActive}
+          // Why: hidden worktrees stay mounted so their PTYs and split layouts
+          // survive worktree switches, but only the visible worktree may own the
+          // global terminal shortcuts. If an offscreen group's pane stays
+          // "focused", Cmd/Ctrl+W and split shortcuts can hit the wrong worktree.
+          isFocused={isWorktreeActive && node.groupId === focusedGroupId}
+          hasSplitGroups={hasSplitGroups}
+          tabStrip={tabStrip}
+          markdownAnnotationsEnabled={markdownAnnotationsEnabled}
+          touchesRightEdge={touchesRightEdge}
+          touchesLeftEdge={touchesLeftEdge}
+          touchesBottomEdge={touchesBottomEdge}
+          suppressLeftBorder={suppressLeftBorder}
+          suppressRightBorder={suppressRightBorder}
+          suppressBottomBorder={suppressBottomBorder}
+          reserveClosedExplorerToggleSpace={touchesTopEdge && touchesRightEdge}
+          reserveCollapsedSidebarHeaderSpace={touchesTopEdge && touchesLeftEdge}
+          isTabDragActive={isTabDragActive}
+          hoveredTabInsertion={
+            hoveredTabInsertion?.groupId === node.groupId ? hoveredTabInsertion : null
+          }
+        />
+      </div>
     )
   }
 
   const isHorizontal = node.direction === 'horizontal'
   const ratio = node.ratio ?? 0.5
+  const firstHasChat = subtreeHasChatGroup(node.first, chatGroupIds)
+  const secondHasChat = subtreeHasChatGroup(node.second, chatGroupIds)
+  // Why: hide only the chat-free side, and only while the other side keeps something
+  // visible — the resize handle goes too, since it would float beside a hidden pane.
+  const hideFirst = canCollapse && !firstHasChat && secondHasChat
+  const hideSecond = canCollapse && !secondHasChat && firstHasChat
+
+  // Why: a hidden sibling must not keep its ratio — the visible pane takes the full row/column.
+  const firstFlex = hideSecond ? '1 1 0%' : hideFirst ? undefined : `${ratio} 1 0%`
+  const secondFlex = hideFirst ? '1 1 0%' : hideSecond ? undefined : `${1 - ratio} 1 0%`
 
   return (
     <div
       className="flex flex-1 min-w-0 min-h-0 overflow-hidden"
       style={{ flexDirection: isHorizontal ? 'row' : 'column' }}
     >
-      <div className="flex min-w-0 min-h-0 overflow-hidden" style={{ flex: `${ratio} 1 0%` }}>
+      <div
+        className={hideFirst ? 'hidden' : 'flex min-w-0 min-h-0 flex-1 overflow-hidden'}
+        style={firstFlex ? { flex: firstFlex } : undefined}
+      >
         <SplitNode
           node={node.first}
           nodePath={nodePath.length > 0 ? `${nodePath}.first` : 'first'}
@@ -238,19 +266,26 @@ function SplitNode({
           suppressBottomBorder={isHorizontal ? suppressBottomBorder : true}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
+          collapseNonChatGroups={collapseNonChatGroups}
+          chatGroupIds={chatGroupIds}
         />
       </div>
-      <ResizeHandle
-        direction={node.direction}
-        onResizeStart={() => recordFeatureInteraction('terminal-panes')}
-        onRatioChange={(nextRatio) =>
-          // Switch point: main saves the group sizes once the drag ends.
-          ORCA_LAYOUT_OWNER_IS_MAIN
-            ? setGroupRatioThroughLayoutOwner(worktreeId, nodePath, nextRatio)
-            : setTabGroupSplitRatio(worktreeId, nodePath, nextRatio)
-        }
-      />
-      <div className="flex min-w-0 min-h-0 overflow-hidden" style={{ flex: `${1 - ratio} 1 0%` }}>
+      {hideFirst || hideSecond ? null : (
+        <ResizeHandle
+          direction={node.direction}
+          onResizeStart={() => recordFeatureInteraction('terminal-panes')}
+          onRatioChange={(nextRatio) =>
+            // Switch point: main saves the group sizes once the drag ends.
+            ORCA_LAYOUT_OWNER_IS_MAIN
+              ? setGroupRatioThroughLayoutOwner(worktreeId, nodePath, nextRatio)
+              : setTabGroupSplitRatio(worktreeId, nodePath, nextRatio)
+          }
+        />
+      )}
+      <div
+        className={hideSecond ? 'hidden' : 'flex min-w-0 min-h-0 flex-1 overflow-hidden'}
+        style={secondFlex ? { flex: secondFlex } : undefined}
+      >
         <SplitNode
           node={node.second}
           nodePath={nodePath.length > 0 ? `${nodePath}.second` : 'second'}
@@ -269,6 +304,8 @@ function SplitNode({
           suppressBottomBorder={suppressBottomBorder}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
+          collapseNonChatGroups={collapseNonChatGroups}
+          chatGroupIds={chatGroupIds}
         />
       </div>
     </div>
@@ -292,7 +329,9 @@ export function TabGroupSplitNodeTree({
   hoveredTabInsertion,
   tabStrip = 'attached',
   markdownAnnotationsEnabled = true,
-  rootTouchesBottomEdge = false
+  rootTouchesBottomEdge = false,
+  collapseNonChatGroups = false,
+  chatGroupIds = EMPTY_CHAT_GROUP_IDS
 }: {
   layout: TabGroupLayoutNode
   worktreeId: string
@@ -305,6 +344,10 @@ export function TabGroupSplitNodeTree({
   markdownAnnotationsEnabled?: boolean
   /** True when the host's own chrome bounds the tree's bottom edge (no border-b to paint). */
   rootTouchesBottomEdge?: boolean
+  /** Work mode: fold every non-chat pane behind `hidden` instead of unmounting it. */
+  collapseNonChatGroups?: boolean
+  /** Chat-panel group ids of the worktree; the collapse keeps-alive set. */
+  chatGroupIds?: ReadonlySet<string>
 }): React.JSX.Element {
   return (
     <SplitNode
@@ -325,6 +368,8 @@ export function TabGroupSplitNodeTree({
       suppressBottomBorder={false}
       isTabDragActive={isTabDragActive}
       hoveredTabInsertion={hoveredTabInsertion}
+      collapseNonChatGroups={collapseNonChatGroups}
+      chatGroupIds={chatGroupIds}
     />
   )
 }

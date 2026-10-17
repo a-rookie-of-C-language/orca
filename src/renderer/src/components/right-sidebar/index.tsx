@@ -5,10 +5,9 @@ import { cn } from '@/lib/utils'
 import { useSidebarResize } from '@/hooks/useSidebarResize'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
-import { getTopActivityBarLayout } from './activity-bar-overflow'
-import { ActivityBarButton } from './activity-bar-buttons'
+import { getDshHeaderTabLayout, getTopActivityBarLayout } from './activity-bar-overflow'
+import { RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME } from './right-sidebar-titlebar-drag-regions'
 import { getActiveChecksStatus } from './active-checks-status'
-import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import {
   RIGHT_SIDEBAR_MIN_WIDTH,
   clampRightSidebarPanelWidth,
@@ -23,12 +22,15 @@ import {
 } from '@/lib/desktop-window-chrome'
 import { getRendererAppPlatform } from '@/lib/renderer-app-platform'
 import { ActivityBarPositionMenu } from './activity-bar-position-menu'
+import {
+  ActivityBarButton,
+  TopActivityOverflowMenu,
+  activityItemAriaLabel
+} from './activity-bar-buttons'
 import { RightSidebarTopActivityBar } from './right-sidebar-top-activity-bar'
 import { useRightSidebarActivityItems } from './use-right-sidebar-activity-items'
 import { useRightSidebarTabRouting } from './use-right-sidebar-tab-routing'
 import { useWindowWidth } from './use-window-width'
-
-const ACTIVITY_BAR_SIDE_WIDTH = 40
 
 function RightSidebarInner({
   side = 'right',
@@ -39,11 +41,11 @@ function RightSidebarInner({
 }): React.JSX.Element {
   const onLeft = side === 'left'
   const ToggleIcon = onLeft ? PanelLeft : PanelRight
+  const sideDshLayout = !onLeft
   const hasDesktopWindowChrome = shouldRenderDesktopWindowChrome({
     platform: getRendererAppPlatform(),
     isWebClient: isPairedWebClientWindow()
   })
-  const rightSidebarShortcut = useShortcutLabel('sidebar.right.toggle')
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const rightSidebarWidth = useAppStore((s) => s.rightSidebarWidth)
   const setRightSidebarWidth = useAppStore((s) => s.setRightSidebarWidth)
@@ -66,8 +68,10 @@ function RightSidebarInner({
     pluginFetchStatus,
     installedPluginTabKeys
   })
+  const panelVisible = rightSidebarOpen
 
-  const activityBarSideWidth = activityBarPosition === 'side' ? ACTIVITY_BAR_SIDE_WIDTH : 0
+  // Why: the right-side DSH layout folds tabs into a header strip instead of a 40px icon rail.
+  const activityBarSideWidth = sideDshLayout ? 0 : activityBarPosition === 'side' ? 40 : 0
   const windowWidth = useWindowWidth()
   const maxWidth = computeMaxRightSidebarPanelWidth(windowWidth, activityBarSideWidth)
   const renderedRightSidebarWidth = clampRightSidebarPanelWidth(
@@ -76,7 +80,7 @@ function RightSidebarInner({
     activityBarSideWidth
   )
   const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
-    isOpen: rightSidebarOpen,
+    isOpen: panelVisible,
     width: renderedRightSidebarWidth,
     minWidth: RIGHT_SIDEBAR_MIN_WIDTH,
     maxWidth,
@@ -108,17 +112,15 @@ function RightSidebarInner({
     [visibleItems, topActivityStripWidth, effectiveTab]
   )
 
-  const sideActivityBarIcons = visibleItems.map((item) => (
-    <ActivityBarButton
-      key={item.id}
-      item={item}
-      active={effectiveTab === item.id}
-      onClick={() => selectActivityTab(item.id)}
-      layout="side"
-      sidebarSide={side}
-      statusIndicator={item.id === 'checks' ? checksStatus : null}
-    />
-  ))
+  // Why: DSH text tabs share the top strip's measured width so squeezed
+  // panels fold trailing tabs behind More instead of truncating labels.
+  const dshHeaderLayout = useMemo(
+    () =>
+      sideDshLayout
+        ? getDshHeaderTabLayout(visibleItems, topActivityStripWidth, effectiveTab)
+        : { visibleItems, overflowItems: [] as typeof visibleItems },
+    [sideDshLayout, visibleItems, topActivityStripWidth, effectiveTab]
+  )
 
   const closeButton = rightSidebarOpen ? (
     <Tooltip>
@@ -138,11 +140,86 @@ function RightSidebarInner({
       <TooltipContent side="bottom" sideOffset={6}>
         {translate(
           'auto.components.right.sidebar.index.9fffaf17c1',
-          'Toggle tools sidebar ({{value0}})',
-          { value0: rightSidebarShortcut }
+          'Toggle tools sidebar'
         )}
       </TooltipContent>
     </Tooltip>
+  ) : null
+
+  const sideActivityBarIcons = visibleItems.map((item) => (
+    <ActivityBarButton
+      key={item.id}
+      item={item}
+      active={effectiveTab === item.id}
+      onClick={() => selectActivityTab(item.id)}
+      layout="side"
+      sidebarSide={side}
+      statusIndicator={item.id === 'checks' ? checksStatus : null}
+    />
+  ))
+
+  // Why: DSH-style text tabs only replace the icon rail on the right side; the left keeps VS Code chrome.
+  const dshHeaderTabs = sideDshLayout ? (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(
+            // Why: the DSH header stretches to the window edge (no 40px icon
+            // rail), so it needs the full window-controls inset. The side
+            // inset subtracts 40px for a rail that doesn't exist here and
+            // slides the fold/close buttons under the overlay.
+            'flex h-9 min-h-9 items-center gap-1 border-b border-border px-2 right-sidebar-header-drag right-sidebar-header-inset'
+          )}
+        >
+          <TooltipProvider delayDuration={400}>
+            <nav
+              ref={topActivityStripRef}
+              className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
+              aria-label={translate('auto.components.right.sidebar.index.8bc2bbc3a0', 'Explorer')}
+            >
+              {dshHeaderLayout.visibleItems.map((item) => {
+                const active = effectiveTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-tools-sidebar-tab={item.id}
+                    title={item.title}
+                    aria-label={activityItemAriaLabel(item)}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME,
+                      'min-w-0 max-w-40 truncate rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      active
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    )}
+                    onClick={() => selectActivityTab(item.id)}
+                  >
+                    {item.title}
+                  </button>
+                )
+              })}
+              {dshHeaderLayout.overflowItems.length > 0 ? (
+                <TopActivityOverflowMenu
+                  items={dshHeaderLayout.overflowItems}
+                  activeTab={effectiveTab}
+                  onSelect={selectActivityTab}
+                  checksStatus={checksStatus}
+                />
+              ) : null}
+            </nav>
+            <div className="flex shrink-0 items-center">
+              {closeButton}
+            </div>
+          </TooltipProvider>
+        </div>
+      </ContextMenuTrigger>
+      <ActivityBarPositionMenu
+        currentPosition={activityBarPosition}
+        onChangePosition={setActivityBarPosition}
+      />
+    </ContextMenu>
   ) : null
 
   return (
@@ -157,7 +234,7 @@ function RightSidebarInner({
         // switch to overflow-hidden so the activity bar icons and panel
         // content don't leak past the 0-width boundary (the component
         // stays mounted for performance — see App.tsx).
-        rightSidebarOpen ? 'overflow-visible' : 'overflow-hidden'
+        panelVisible ? 'overflow-visible' : 'overflow-hidden'
       )}
     >
       {/* Panel content area */}
@@ -168,7 +245,9 @@ function RightSidebarInner({
           borderRight: onLeft && rightSidebarOpen ? '1px solid var(--sidebar-border)' : 'none'
         }}
       >
-        {activityBarPosition === 'top' ? (
+        {sideDshLayout ? (
+          dshHeaderTabs
+        ) : activityBarPosition === 'top' ? (
           <RightSidebarTopActivityBar
             hasDesktopWindowChrome={hasDesktopWindowChrome && !onLeft}
             atWindowEdge={!onLeft}
@@ -182,7 +261,7 @@ function RightSidebarInner({
             onChangeActivityBarPosition={setActivityBarPosition}
           />
         ) : onLeft && reserveTitlebarSpace ? null : (
-          /* ── Side layout: static title header ── */
+          /* ── Side layout: static title header (VS Code parity) ── */
           <div
             className={cn(
               'flex items-center justify-between h-[36px] min-h-[36px] px-3 border-b border-border right-sidebar-header-drag',
@@ -212,7 +291,7 @@ function RightSidebarInner({
       </div>
 
       {/* Keep the activity strip on the outside edge in either layout. */}
-      {activityBarPosition === 'side' && (
+      {!sideDshLayout && activityBarPosition === 'side' && (
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
@@ -239,7 +318,7 @@ function RightSidebarInner({
           />
         </ContextMenu>
       )}
-    </div>
+      </div>
   )
 }
 

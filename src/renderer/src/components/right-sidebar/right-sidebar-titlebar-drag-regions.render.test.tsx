@@ -81,6 +81,7 @@ vi.mock('@/store', async () => {
       getKnownWorktreeById: getMockKnownWorktree,
       activityBarPosition: mockAppState.activityBarPosition,
       setActivityBarPosition: vi.fn(),
+      settings: { toolsSidebarPosition: 'left' },
       checksByWorktreeId: {},
       keybindings: {}
     })
@@ -238,7 +239,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
   })
 
   it('keeps the rendered top activity strip draggable, context-menuable, and only controls no-drag', () => {
-    const markup = renderToStaticMarkup(<RightSidebar />)
+    const markup = renderToStaticMarkup(<RightSidebar side="left" />)
     const header = openingTag(markup, 'right-sidebar-header-drag')
     const activityStrip = openingTag(markup, 'right-sidebar-activity-strip')
 
@@ -254,22 +255,20 @@ describe('rendered right sidebar titlebar drag regions', () => {
     expect(markup).toContain(RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME)
   })
 
-  it('uses the custom desktop chrome top strip on Linux desktop', () => {
+  it('uses the DSH header instead of the custom chrome top strip on Linux desktop', () => {
     setRendererPlatform('linux')
 
     const markup = renderToStaticMarkup(<RightSidebar />)
-    const activityStrip = openingTag(markup, 'right-sidebar-activity-strip')
 
-    expect(activityStrip).toContain('h-10')
-    expect(activityStrip).toContain('border-b')
-    expect(markup).toContain(RIGHT_SIDEBAR_WINDOWS_TOP_ACTIVITY_STRIP_CLASS_NAME)
+    expect(markup).toContain('data-tools-sidebar-tab="explorer"')
+    expect(markup).not.toContain(RIGHT_SIDEBAR_WINDOWS_TOP_ACTIVITY_STRIP_CLASS_NAME)
   })
 
   it('keeps paired Linux web clients on the browser-style top strip', () => {
     setRendererPlatform('linux')
     ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
 
-    const markup = renderToStaticMarkup(<RightSidebar />)
+    const markup = renderToStaticMarkup(<RightSidebar side="left" />)
     const activityStrip = openingTag(markup, 'right-sidebar-activity-strip')
 
     expect(activityStrip).toContain('pl-2')
@@ -297,20 +296,21 @@ describe('rendered right sidebar titlebar drag regions', () => {
     expect(overflowButton).toContain('aria-label="More sidebar tabs"')
   })
 
-  it('keeps side activity-bar controls no-drag without cancelling the side header drag region', () => {
+  it('renders right-side text tabs in the header without the icon rail', () => {
     mockAppState.activityBarPosition = 'side'
 
     const markup = renderToStaticMarkup(<RightSidebar />)
     const sideHeader = openingTag(markup, 'right-sidebar-header-drag')
-    const sideStrip = openingTag(markup, 'side-activity-bar-windows-inset')
 
     expect(sideHeader).not.toContain(RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME)
-    expect(sideHeader).toContain('right-sidebar-header-side-inset')
-    expect(sideStrip).toContain('data-context-menu-trigger="true"')
-
-    expectNoDrag(buttonOpeningTag(markup, 'Explorer'))
-    expectNoDrag(buttonOpeningTag(markup, 'Source Control'))
-    expectNoDrag(buttonOpeningTag(markup, 'Checks'))
+    // Why: the DSH header reaches the window edge (no 40px rail), so it
+    // reserves the full window-controls width instead of the rail-adjusted one.
+    expect(sideHeader).toContain('right-sidebar-header-inset')
+    expect(sideHeader).not.toContain('right-sidebar-header-side-inset')
+    expect(markup).toContain('data-tools-sidebar-tab="explorer"')
+    expect(markup).toContain('data-tools-sidebar-tab="source-control"')
+    expect(markup).toContain('data-tools-sidebar-tab="checks"')
+    expect(markup).not.toContain('side-activity-bar-windows-inset')
     expect(buttonOpeningTag(markup, 'Toggle tools sidebar')).toContain('sidebar-toggle')
   })
 
@@ -440,7 +440,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
     const root: Root = createRoot(container)
 
     await act(async () => {
-      root.render(<RightSidebar />)
+      root.render(<RightSidebar side="left" />)
     })
 
     await act(async () => {
@@ -489,5 +489,12 @@ describe('rendered right sidebar titlebar drag regions', () => {
     expect(markup).not.toContain('data-source-control')
     expect(markup).not.toContain('data-checks-panel')
     expect(markup).not.toContain('data-ports-panel')
+  })
+
+  it('keeps DSH header tabs clickable under the window drag region', () => {
+    const markup = renderToStaticMarkup(<RightSidebar />)
+
+    expectNoDrag(buttonOpeningTag(markup, 'Explorer'))
+    expect(buttonOpeningTag(markup, 'Toggle tools sidebar')).toContain('sidebar-toggle')
   })
 })

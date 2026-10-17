@@ -259,6 +259,8 @@ export type GlobalSettings = GlobalSettingsBase & {
   showTitlebarAppName: boolean
   /** Missing values retain the original right-hand tools layout. */
   toolsSidebarPosition?: 'left' | 'right'
+  /** Layout mode: Work sessions left + chat center, Code Explorer left + chat right. Missing = Work. */
+  workspaceMode?: 'work' | 'code'
   /** Hides the Tasks sidebar button (also removes it from keyboard navigation). */
   showTasksButton: boolean
   /** Only toggles the sidebar shortcut; Automations stay reachable from Settings/View menu. */
