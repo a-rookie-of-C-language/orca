@@ -72,7 +72,8 @@ function isMergedAiVaultHostScope(scope: ExecutionHostScope): boolean {
 export function useAiVaultSessionRefresh(
   scopePaths: readonly string[],
   executionHostScope: ExecutionHostScope,
-  sessionLimit: AiVaultSessionLimit
+  sessionLimit: AiVaultSessionLimit,
+  options: { enabled?: boolean } = {}
 ): {
   error: string | null
   loading: boolean
@@ -82,9 +83,12 @@ export function useAiVaultSessionRefresh(
   /** The depth the sessions on screen came from, which trails the selected one during a rescan. */
   loadedSessionLimit: AiVaultSessionLimit | null
 } {
+  const enabled = options.enabled !== false
   const { scan, applyScan } = useAppliedAiVaultScan()
-  const scanResult = scan?.result ?? null
-  const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
+  const scanResult = enabled ? (scan?.result ?? null) : null
+  const sessions = enabled
+    ? (scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS)
+    : EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestTokenRef = useRef<string>(undefined!)
@@ -121,6 +125,9 @@ export function useAiVaultSessionRefresh(
   )
   const refresh = useCallback(
     async (args: AiVaultRefreshArgs = {}): Promise<void> => {
+      if (!enabled) {
+        return
+      }
       const hostScope = executionHostScopeRef.current
       const selectedLimit = sessionLimitRef.current
       const baseKey = aiVaultSessionResultCacheKey(hostScope, scopePathsRef.current)
@@ -254,7 +261,7 @@ export function useAiVaultSessionRefresh(
       // Deps intentionally avoid changing scope values: refresh reads them
       // through refs and recurses on itself, so its identity must stay stable.
     },
-    [applyScan, currentScanScopeKey]
+    [applyScan, currentScanScopeKey, enabled]
   )
 
   // Forced rescans triggered by new agent sessions run
@@ -299,13 +306,18 @@ export function useAiVaultSessionRefresh(
   // Panel entry reuses the renderer result first, then the host scan cache.
   useEffect(() => {
     publicationGateRef.current.cancel()
+    if (!enabled) {
+      setLoading(false)
+      setError(null)
+      return
+    }
     if (refreshInFlightRef.current) {
       void window.api.aiVault.cancelListSessions({
         requestToken: requestTokenRef.current
       })
     }
     void refresh({ force: false, reuseLoadedDepth: true })
-  }, [executionHostScope, refresh, scanScopeKey])
+  }, [enabled, executionHostScope, refresh, scanScopeKey])
 
   // Why: this panel can query the relay before it is ready — at startup, and again for the window
   // in which a reconnect leaves the session not-ready — and the query throws 'SSH relay is not
@@ -319,6 +331,9 @@ export function useAiVaultSessionRefresh(
   const sshConnectedGeneration = useAppStore((s) => s.sshConnectedGeneration)
   const sshGenerationRef = useRef(sshConnectedGeneration)
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     if (sshConnectedGeneration <= sshGenerationRef.current) {
       return
     }
@@ -326,10 +341,13 @@ export function useAiVaultSessionRefresh(
     if (error !== null) {
       void refresh({ background: true, force: false })
     }
-  }, [sshConnectedGeneration, error, refresh])
+  }, [enabled, sshConnectedGeneration, error, refresh])
 
   // Refocus checks the shared host cache without forcing another transcript scan.
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     const onRefocus = (): void => {
       if (document.visibilityState !== 'visible') {
         return
@@ -342,7 +360,7 @@ export function useAiVaultSessionRefresh(
       unsubscribeWindowFocus?.()
       document.removeEventListener('visibilitychange', onRefocus)
     }
-  }, [refresh])
+  }, [enabled, refresh])
 
   // Sessions started inside Orca never blur the window, so refocus alone
   // can't surface them. Agent hooks already report provider sessions; re-scan
@@ -351,6 +369,9 @@ export function useAiVaultSessionRefresh(
   const agentSessionIdsKey = useAppStore((s) => getAgentSessionIdsKey(s.agentStatusByPaneKey))
   const seenAgentSessionIdsRef = useRef<Set<string> | null>(null)
   useEffect(() => {
+    if (!enabled) {
+      return
+    }
     const ids = agentSessionIdsKey === '' ? [] : agentSessionIdsKey.split('\n')
     // The mount refresh already covers sessions live at mount time.
     if (seenAgentSessionIdsRef.current === null) {
@@ -366,7 +387,7 @@ export function useAiVaultSessionRefresh(
       seen.add(id)
     }
     requestForcedRescan()
-  }, [agentSessionIdsKey, requestForcedRescan])
+  }, [agentSessionIdsKey, enabled, requestForcedRescan])
 
   return { error, loading, refresh, scanResult, sessions, loadedSessionLimit: scan?.limit ?? null }
 }

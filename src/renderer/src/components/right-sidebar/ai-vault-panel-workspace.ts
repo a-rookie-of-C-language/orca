@@ -13,9 +13,21 @@ export type AiVaultPanelWorkspaceRows = {
   repo: ReturnType<typeof selectRepoByIdForActiveWorkspace>
 }
 
+type AiVaultPanelWorkspaceState = Pick<
+  AppState,
+  | 'activeRepoId'
+  | 'activeWorktreeId'
+  | 'activeWorkspaceExecutionHostId'
+  | 'detectedWorktreesByRepo'
+  | 'floatingWorkspacePath'
+  | 'folderWorkspaces'
+  | 'repos'
+  | 'worktreesByRepo'
+>
+
 /** The workspace's catalog row and its project, read the way the active workspace's are. */
 export function selectAiVaultPanelWorkspace(
-  state: AppState,
+  state: AiVaultPanelWorkspaceState,
   workspace: AiVaultPanelWorkspace
 ): AiVaultPanelWorkspaceRows {
   const worktree = selectKnownWorktreeById(state, workspace.worktreeId, workspace.executionHostId)
