@@ -256,7 +256,9 @@ describe('TabGroupSplitLayout', () => {
     const foldedWrapper = asElement(children[0])
     const visibleWrapper = asElement(children[2])
 
-    expect(foldedWrapper.props.className).toBe('hidden')
+    expect(foldedWrapper.props.style).toEqual({ flex: '0 1 0%' })
+    expect(String(foldedWrapper.props.className)).toContain('invisible')
+    expect(String(foldedWrapper.props.className)).toContain('opacity-0')
     expect(children[1]).toBeNull()
     expect(visibleWrapper.props.style).toEqual({ flex: '1 1 0%' })
   })

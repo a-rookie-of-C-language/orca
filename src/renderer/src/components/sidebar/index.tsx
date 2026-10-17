@@ -163,7 +163,13 @@ function Sidebar({
     <TooltipProvider delayDuration={400}>
       <div
         ref={sidebarRef}
-        className="orca-workspace-sidebar relative min-h-0 flex-shrink-0 bg-worktree-sidebar flex flex-col overflow-hidden scrollbar-sleek-parent"
+        className={`orca-workspace-sidebar relative min-h-0 flex-shrink-0 bg-worktree-sidebar flex flex-col overflow-hidden scrollbar-sleek-parent${
+          // Why: Work/Code switches glide the sidebar open and shut; manual
+          // drags keep the transition off or the handle feels detached.
+          isResizing
+            ? ''
+            : ' transition-[width] duration-200 ease-out motion-reduce:transition-none'
+        }`}
         style={leftSidebarStyle}
         {...dropHandlers}
       >

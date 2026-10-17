@@ -79,7 +79,7 @@ function RightSidebarInner({
     windowWidth,
     activityBarSideWidth
   )
-  const { containerRef, onResizeStart } = useSidebarResize<HTMLDivElement>({
+  const { containerRef, onResizeStart, isResizing } = useSidebarResize<HTMLDivElement>({
     isOpen: panelVisible,
     width: renderedRightSidebarWidth,
     minWidth: RIGHT_SIDEBAR_MIN_WIDTH,
@@ -229,6 +229,10 @@ function RightSidebarInner({
       className={cn(
         'relative flex-shrink-0 flex flex-row',
         reserveTitlebarSpace && 'pt-9 bg-sidebar',
+        // Why: Work/Code switches glide the tools sidebar open and shut;
+        // manual drags keep the transition off or the handle feels detached.
+        !isResizing &&
+          'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         // Why: overflow-visible is needed when open so the resize handle
         // on the outer edge remains interactive.  When closed (width 0),
         // switch to overflow-hidden so the activity bar icons and panel

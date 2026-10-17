@@ -12,6 +12,12 @@ const MAX_RATIO = 0.85
 
 const EMPTY_CHAT_GROUP_IDS: ReadonlySet<string> = new Set()
 
+// Why: Work/Code switches glide instead of snapping — the folded pane eases
+// to zero flex with a fade while its sibling takes the row. Manual resize
+// drags bypass the transition (see ResizeHandle) or the handle feels detached.
+const SPLIT_PANE_CLASS =
+  'flex min-w-0 min-h-0 flex-1 overflow-hidden transition-[flex-grow,opacity,visibility] duration-200 ease-out motion-reduce:transition-none'
+
 function ResizeHandle({
   direction,
   onResizeStart,
@@ -52,6 +58,10 @@ function ResizeHandle({
       onResizeStart()
       setDragging(true)
       handle.setPointerCapture(event.pointerId)
+      // Why: the panes ease width on mode switches — kill the transition
+      // during a manual drag or the handle feels detached from the pointer.
+      firstPane.style.transitionProperty = 'none'
+      secondPane.style.transitionProperty = 'none'
       // Why: measure outside pointermove so pane writes never force a readback.
       let rect = container.getBoundingClientRect()
       const resizeObserver = new ResizeObserver(() => {
@@ -83,6 +93,8 @@ function ResizeHandle({
         }
         cleaned = true
         resizeObserver.disconnect()
+        firstPane.style.transitionProperty = ''
+        secondPane.style.transitionProperty = ''
         if (draggedRatio !== null) {
           onRatioChange(draggedRatio)
         }
@@ -189,12 +201,11 @@ function SplitNode({
   const canCollapse = collapseNonChatGroups && chatGroupIds.size > 0
 
   if (node.type === 'leaf') {
-    // Why: Work mode folds non-chat panes behind `hidden` instead of unmounting them, so
-    // terminals keep running and editors keep state. The wrapper div stays mounted in both
-    // modes, so switching modes never remounts a pane.
-    const leafHidden = canCollapse && !subtreeHasChatGroup(node, chatGroupIds)
+    // Why: folding is owned by the branch wrappers above (they ease to zero
+    // flex with a fade), so leaves stay mounted and never snap themselves —
+    // terminals keep running and editors keep state across mode switches.
     return (
-      <div className={leafHidden ? 'hidden' : 'flex min-w-0 min-h-0 flex-1'}>
+      <div className="flex min-w-0 min-h-0 flex-1">
         <TabGroupPanel
           groupId={node.groupId}
           worktreeId={worktreeId}
@@ -233,9 +244,10 @@ function SplitNode({
   const hideFirst = canCollapse && !firstHasChat && secondHasChat
   const hideSecond = canCollapse && !secondHasChat && firstHasChat
 
-  // Why: a hidden sibling must not keep its ratio — the visible pane takes the full row/column.
-  const firstFlex = hideSecond ? '1 1 0%' : hideFirst ? undefined : `${ratio} 1 0%`
-  const secondFlex = hideFirst ? '1 1 0%' : hideSecond ? undefined : `${1 - ratio} 1 0%`
+  // Why: a folded sibling eases to zero flex (never `hidden`, which can't
+  // transition) while the visible pane takes the full row/column.
+  const firstFlex = hideFirst ? '0 1 0%' : hideSecond ? '1 1 0%' : `${ratio} 1 0%`
+  const secondFlex = hideSecond ? '0 1 0%' : hideFirst ? '1 1 0%' : `${1 - ratio} 1 0%`
 
   return (
     <div
@@ -243,8 +255,8 @@ function SplitNode({
       style={{ flexDirection: isHorizontal ? 'row' : 'column' }}
     >
       <div
-        className={hideFirst ? 'hidden' : 'flex min-w-0 min-h-0 flex-1 overflow-hidden'}
-        style={firstFlex ? { flex: firstFlex } : undefined}
+        className={hideFirst ? `${SPLIT_PANE_CLASS} invisible opacity-0` : SPLIT_PANE_CLASS}
+        style={{ flex: firstFlex }}
       >
         <SplitNode
           node={node.first}
@@ -283,8 +295,8 @@ function SplitNode({
         />
       )}
       <div
-        className={hideSecond ? 'hidden' : 'flex min-w-0 min-h-0 flex-1 overflow-hidden'}
-        style={secondFlex ? { flex: secondFlex } : undefined}
+        className={hideSecond ? `${SPLIT_PANE_CLASS} invisible opacity-0` : SPLIT_PANE_CLASS}
+        style={{ flex: secondFlex }}
       >
         <SplitNode
           node={node.second}
