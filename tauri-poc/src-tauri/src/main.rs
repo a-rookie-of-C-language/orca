@@ -131,13 +131,23 @@ fn current_platform() -> &'static str {
 
 #[tauri::command]
 fn poc_app_identity() -> NativeAppIdentity {
+    let repo_root = std::env::var("ORCA_DEV_REPO_ROOT").ok().or_else(|| {
+        std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned())
+    });
+    let branch = std::env::var("ORCA_DEV_BRANCH").ok();
+    let worktree_name = std::env::var("ORCA_DEV_WORKTREE_NAME").ok();
     NativeAppIdentity {
-        name: "Orca".to_string(),
-        is_dev: cfg!(debug_assertions),
-        dev_label: None,
-        dev_branch: None,
-        dev_worktree_name: None,
-        dev_repo_root: None,
+        name: branch
+            .as_ref()
+            .map(|branch| format!("Orca: {branch}"))
+            .unwrap_or_else(|| "Orca Dev".to_string()),
+        is_dev: true,
+        dev_label: branch.clone().or_else(|| worktree_name.clone()),
+        dev_branch: branch,
+        dev_worktree_name: worktree_name,
+        dev_repo_root: repo_root,
         dock_badge_label: None,
     }
 }
