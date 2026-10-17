@@ -122,7 +122,6 @@ export async function prepareRuntimePtySpawn(
     callerNamedSession: ctx.callerRequestedSessionId !== undefined,
     mintedSessionId: ctx.requestedSessionId === undefined,
     resumeOnSelectedAccount: false,
-    awaitsWslPiOmpGuestReadiness: true,
     emptySessionIdSkipsHostEnv: true,
     requestedAgentTeamsPath: ctx.requestedAgentTeamsPath,
     provider: ctx.provider,

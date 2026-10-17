@@ -21,6 +21,7 @@ import { structuredQuestionTranscript } from '../../../src/shared/structured-age
 import type { NativeChatResolvedPrompt } from '../../../src/shared/native-chat-resolution-receipt'
 import { colors, typography } from '../theme/mobile-theme'
 import { ANSWERED_PROMPT_ITEMS } from './mobile-native-chat-answered-prompts.test-fixture'
+import { MobileNativeChatRowOverlaysContext } from './mobile-native-chat-row-overlays'
 import { styles } from './mobile-native-chat-message-styles'
 
 vi.mock('react-native', async () => {
@@ -103,6 +104,8 @@ describe('MobileNativeChatMessage', () => {
       reasoningIsLive?: boolean
       unsentNotice?: string
       receipt?: NativeChatResolvedPrompt
+      userMessageOpen?: boolean
+      onToggleUserMessage?: (messageId: string) => void
       awaiting?: boolean
     } = {}
   ): ReactTestRenderer {
@@ -112,6 +115,10 @@ describe('MobileNativeChatMessage', () => {
     return renderer!
   }
 
+  const markdownIn = (node: ReactTestInstance): string[] =>
+    node
+      .findAll((child) => String(child.type) === 'MobileMarkdown')
+      .map((markdown) => markdown.props.content)
   const textIn = (node: ReactTestInstance): string[] =>
     node.findAllByType('Text' as never).map((text) => String(text.children.join('')))
 
@@ -148,11 +155,14 @@ describe('MobileNativeChatMessage', () => {
       const receipt = receipts.get(message.id)
       return receipt ? [words(render(message, { receipt }).root).join('')] : []
     })
+    // Each ends with when it was answered, in the device's own clock.
     expect(drawn).toEqual([
       expect.stringMatching(
-        /^Bash\{[\s\S]*echo receipt-check[\s\S]*\}AllowResolved · Answered on desktop-renderer$/
+        /^Bash\{[\s\S]*echo receipt-check[\s\S]*\}AllowResolved · Answered on desktop-renderer\d{1,2}:\d{2}(\s[AP]M)?$/
       ),
-      'Asked: Do you prefer tea or coffee?CoffeeResolved · Answered on desktop-renderer'
+      expect.stringMatching(
+        /^Asked: Do you prefer tea or coffee\?CoffeeResolved · Answered on desktop-renderer\d{1,2}:\d{2}(\s[AP]M)?$/
+      )
     ])
   })
 
@@ -173,6 +183,10 @@ describe('MobileNativeChatMessage', () => {
     expect(tree.root.find((node) => String(node.type) === 'MessageSquareMore').props.size).toBe(
       15 * 1.5
     )
+    const time = tree.root.find(
+      (node) => String(node.type) === 'Text' && node.props.accessibilityLabel
+    )
+    expect(Object.assign({}, ...[time.props.style].flat()).fontSize).toBe(typography.metaSize * 1.5)
   })
 
   it("lists a group's questions once nobody can answer them here, as desktop does", () => {
@@ -233,6 +247,25 @@ describe('MobileNativeChatMessage', () => {
     expect(words(render(row, { receipt, awaiting: false }).root).join('')).toBe(
       'Asked: Do you prefer tea or coffee?'
     )
+  })
+
+  it('shows when your message and the reply were written, beside copy, zoomed with the chat, as desktop does', () => {
+    const at = new Date(2026, 9, 15, 15, 42).getTime()
+    const timeIn = (message: NativeChatMessage) =>
+      render(message, { fontScale: 1.5 })
+        .root.findAll((node) => String(node.type) === 'Text' && node.props.accessibilityLabel)
+        .map((node) => [
+          node.children.join(''),
+          Object.assign({}, ...[node.props.style].flat()).fontSize
+        ])
+    const shown = [[expect.stringMatching(/^(3:42\sPM|15:42)$/), typography.metaSize * 1.5]]
+    expect(timeIn({ ...userMessage([{ type: 'text', text: 'ship it' }]), timestamp: at })).toEqual(
+      shown
+    )
+    expect(timeIn({ ...toolMessage([{ type: 'text', text: 'Shipped.' }]), timestamp: at })).toEqual(
+      shown
+    )
+    expect(timeIn(userMessage([{ type: 'text', text: 'ship it' }]))).toEqual([])
   })
 
   it('draws a question call as the question awaited, then as asked, never as a raw tool line', () => {
@@ -374,9 +407,11 @@ describe('MobileNativeChatMessage', () => {
       )
       expect(text.props.children).toBe(AGENT_SESSION_HOST_STATUS_COPY['history-item-too-large'])
       expect(text.props.selectable).toBe(true)
+      // Zoomed 1.5× with its leading zoomed too, so wrapped lines never overlap.
       expect(Object.assign({}, ...text.props.style)).toMatchObject({
         color: colors.textMuted,
-        fontSize: 25.5
+        fontSize: 25.5,
+        lineHeight: 34.5
       })
     }
   )
@@ -413,10 +448,9 @@ describe('MobileNativeChatMessage', () => {
       )
 
     it('says why under the bubble, and draws no line without a reason, as the desktop', () => {
-      expect(textIn(render(notSent, { unsentNotice: 'Claude is not signed in.' }).root)).toEqual([
-        'fix it',
-        'Claude is not signed in.'
-      ])
+      const tree = render(notSent, { unsentNotice: 'Claude is not signed in.' })
+      expect(markdownIn(tree.root)).toEqual(['fix it'])
+      expect(textIn(tree.root)).toEqual(['Claude is not signed in.'])
       expect(lineIn(render(notSent))).toHaveLength(0)
     })
 
@@ -451,7 +485,68 @@ describe('MobileNativeChatMessage', () => {
     const tree = render(userMessage([{ type: 'image-ref', url: 'file:///a.jpg', alt: 'a photo' }]))
     const image = tree.root.findByType('Image' as never)
     expect(image.props.source).toEqual({ uri: 'file:///a.jpg' })
-    expect(image.props.accessibilityLabel).toBe('a photo')
+    expect(image.parent?.props).toMatchObject({
+      accessibilityRole: 'imagebutton',
+      accessibilityLabel: 'a photo'
+    })
+  })
+
+  it('opens an attachment full size when tapped', () => {
+    const openImage = vi.fn()
+    act(() => {
+      renderer = create(
+        createElement(
+          MobileNativeChatRowOverlaysContext.Provider,
+          { value: { openImage, openActions: vi.fn() } },
+          createElement(MobileNativeChatMessage, {
+            message: userMessage([{ type: 'image-ref', url: 'file:///a.jpg', alt: 'a photo' }])
+          })
+        )
+      )
+    })
+    act(() => renderer!.root.findByProps({ accessibilityRole: 'imagebutton' }).props.onPress())
+    expect(openImage).toHaveBeenCalledWith({ uri: 'file:///a.jpg', label: 'a photo' })
+  })
+
+  it('draws a picture-only message with nothing else in its bubble, so no gap sits under it', () => {
+    render(userMessage([{ type: 'image-ref', url: 'file:///a.jpg', alt: 'a photo' }]))
+    const bubble = renderer!.root.find(
+      (node) =>
+        String(node.type) === 'View' && [node.props.style].flat().includes(styles.userBubble)
+    )
+    expect(bubble.findAll((node) => node !== bubble && String(node.type) === 'View')).toHaveLength(
+      0
+    )
+  })
+
+  it('folds a long message of yours until opened, and the transcript keeps it open', () => {
+    const long = Array.from({ length: 12 }, (_, line) => `line ${line + 1}`).join('\n')
+    const message = userMessage([{ type: 'text', text: long }])
+    const onToggleUserMessage = vi.fn()
+    const clips = (tree: ReactTestRenderer) =>
+      tree.root.findAll(
+        (node) => String(node.type) === 'View' && node.props.style?.overflow === 'hidden'
+      )
+    const folded = render(message, { onToggleUserMessage })
+    expect(clips(folded)).toHaveLength(1)
+    // Native layout fits the cut text to the clip, so it measures at the fold: it stays folded and
+    // offers the rest, rather than unfolding to measure taller and folding again.
+    act(() =>
+      clips(folded)[0]!
+        .find((node) => node.props.onLayout !== undefined)
+        .props.onLayout({ nativeEvent: { layout: { height: 190 } } })
+    )
+    expect(clips(folded)).toHaveLength(1)
+    act(() =>
+      folded.root
+        .find(
+          (node) => String(node.type) === 'Pressable' && textIn(node).includes('Show full message')
+        )
+        .props.onPress()
+    )
+    expect(onToggleUserMessage).toHaveBeenCalledWith('u1')
+    // The list recycles rows; the transcript's state draws it open again.
+    expect(clips(render(message, { userMessageOpen: true, onToggleUserMessage }))).toHaveLength(0)
   })
 
   it('prefers the url over the path when both are present', () => {
@@ -473,12 +568,15 @@ describe('MobileNativeChatMessage', () => {
     expect(texts.some((text) => text.includes('/tmp/host.png'))).toBe(true)
   })
 
-  it('makes user message text selectable', () => {
-    const tree = render(userMessage([{ type: 'text', text: 'Prompt I typed' }]))
-    const text = tree.root
-      .findAllByType('Text' as never)
-      .find((node) => String(node.children.join('')) === 'Prompt I typed')
-    expect(text?.props.selectable).toBe(true)
+  it('draws your message as selectable Markdown in the bubble’s dark-on-light colours', () => {
+    const tree = render(userMessage([{ type: 'text', text: '**Fix** `src/a.ts`' }]))
+    const markdown = tree.root.findByType('MobileMarkdown' as never)
+    expect(markdown.props).toMatchObject({
+      content: '**Fix** `src/a.ts`',
+      tone: 'onBright',
+      rangeSelectable: true
+    })
+    expect(markdown.props.renderVisual).toBeUndefined()
   })
 
   it('routes assistant prose through selectable Markdown', () => {
@@ -697,7 +795,8 @@ describe('MobileNativeChatMessage', () => {
       const tree = render(userMessage([{ type: 'text', text: 'go' }]), {
         structuredActivityUi: true
       })
-      expect(textIn(tree.root)).toEqual(['go'])
+      expect(markdownIn(tree.root)).toEqual(['go'])
+      expect(textIn(tree.root)).toEqual([])
     })
   })
 

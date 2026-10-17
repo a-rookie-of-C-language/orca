@@ -84,8 +84,6 @@ type PtySpawnHostEnvArgs = {
   mintedSessionId: boolean
   /** An account-switch restart resumes onto the selected account; only the window has one. */
   resumeOnSelectedAccount: boolean
-  /** TEMPORARY (its own stacked PR removes it): only host starts wait for a WSL Pi/OMP relay. */
-  awaitsWslPiOmpGuestReadiness: boolean
   /** TEMPORARY (row 7 removes it): the host builds no host env for an empty id; the window refuses it. */
   emptySessionIdSkipsHostEnv: boolean
   requestedAgentTeamsPath: string | undefined
@@ -206,15 +204,13 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchAgent: args.launchAgent,
       launchCommand
     })
-    if (args.awaitsWslPiOmpGuestReadiness) {
-      await awaitExplicitPiOmpGuestReadiness({
-        isWsl,
-        distro: wslDistro,
-        codexHomePath: selectedCodexHomePath,
-        launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
-        launchCommand
-      })
-    }
+    await awaitExplicitPiOmpGuestReadiness({
+      isWsl,
+      distro: wslDistro,
+      codexHomePath: selectedCodexHomePath,
+      launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
+      launchCommand
+    })
     buildPtyHostEnv(sessionId, env, {
       isPackaged: getAppEnvironment().isPackaged(),
       resourcesPath: process.resourcesPath,

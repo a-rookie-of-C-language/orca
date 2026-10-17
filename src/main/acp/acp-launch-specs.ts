@@ -14,6 +14,7 @@ import type { AcpStoredUserMessagesReader } from './acp-recovery-history'
 import { isStableCliVersionFrom, isStableCliVersionOnLine } from '../agent-cli-version-probe'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
+import type { AgentChatPermissionMode } from '../../shared/agent-chat-permission-mode'
 import type { InitializeResponse } from './generated/acp-protocol.generated'
 import type { ManagedRuntime } from '../node-runtime/managed-runtime-release'
 import { readGrokModelCatalog } from './acp-dialects/grok-model-catalog'
@@ -65,7 +66,7 @@ export type AcpLaunchSpec = {
   /** The Orca agent id, which names the agent's records, its catalog label and its settings. */
   agent: TuiAgent
   command: string
-  /** Built per launch: `fullAccess` is the Agent Permissions setting's bypass posture;
+  /** Built per launch: `fullAccess` is the chat's own Full access permission mode;
    *  `pluginDir` is a plugin folder `visualsSkill` asked the agent to load. */
   args(input: { fullAccess: boolean; pluginDir: string | null }): string[]
   /** Laid over the child's environment last, after the account and the user's own variables. */
@@ -82,6 +83,8 @@ export type AcpLaunchSpec = {
     advertised: readonly string[]
     env: Readonly<Record<string, string>>
   }): string | undefined
+  /** Matches the stderr line where the agent waits for browser sign-in: the chat is signed out. */
+  signInPrompt?(line: string): boolean
   /** The account each chat pins, and how a launch points the agent at it. */
   account: AcpAccountBinding
   /** The `--version` releases a structured chat runs on, asked before a create and again at every
@@ -92,6 +95,11 @@ export type AcpLaunchSpec = {
   /** A pinned copy Orca installs under its data folder when the person asks, searched last; a
    *  start never installs it. A spec with one names no `supportsVersion`. */
   managedRuntime?: ManagedRuntime
+  /** The agent's `mode` config option value per chat permission mode, through which it enforces
+   *  the mode itself; Orca then answers none of its permission requests for the person. */
+  permissionModeConfig?: {
+    values: { ask: string } & Partial<Record<AgentChatPermissionMode, string>>
+  }
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
@@ -112,7 +120,7 @@ export type AcpLaunchSpec = {
 const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
   agent: 'grok',
   command: 'grok',
-  // `--always-approve` only for full access, as the user's setting chooses.
+  // `--always-approve` only for full access, as the chat's permission mode chooses.
   args: ({ fullAccess, pluginDir }) => [
     'agent',
     ...(fullAccess ? ['--always-approve'] : []),

@@ -1,3 +1,5 @@
+import type { CurrentRequestsSubscriber } from './agent-session-current-requests'
+import type { AgentSessionPublishedWork } from './agent-session-published-work'
 // Per-subscriber cursors over one session's journal.
 //
 // Each subscriber advances independently: a client that connected two epochs
@@ -13,9 +15,10 @@ import type {
 } from '../../../shared/agent-session-wire'
 import {
   backgroundTaskFingerprint,
-  buildSubscriberFrame,
+  emitSubscriberFrame,
   subscriberCommandsChanged,
-  type SubscriberFieldHooks
+  type SubscriberFieldHooks,
+  type SubscriberFieldState
 } from './agent-session-subscriber-frame-fields'
 import type { QueuePublication } from './structured-agent-session-queued-publication'
 import { deliverToSubscriber } from './agent-session-subscriber-catch-up'
@@ -36,17 +39,23 @@ export type AgentSessionSubscribeInput = {
   cursor?: AgentJournalCursor
   /** Every frame to fit a phone's bridge frame; the RPC sets it for every phone. */
   boundedFrames?: boolean
+  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
+  readsCurrentRequests?: boolean
+  /** False for desktops that need exact replay to keep send echoes and current requests. */
+  snapshotCatchUp?: boolean
 }
 
-export type Subscriber = {
+export type Subscriber = CurrentRequestsSubscriber & {
   id: string
   sessionId: string
   emit: AgentSessionSubscriberEmit
   cursor: AgentJournalCursor
   fence: number
   boundedFrames: boolean
+  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
+  snapshotCatchUp?: boolean
   commands?: AgentSessionSlashCommand[] | null
-  /** The last draft list actually SENT — never advanced on a page that withheld
+  /** Canonical publication last sent — never advanced on a page that withheld
    *  it, or the final replacement would be suppressed by the identity dedup. */
   queuePublication?: QueuePublication
   /** Fingerprint of the background-task roster last SENT. */
@@ -87,15 +96,9 @@ export class AgentSessionSubscribers {
     return this.bySession.get(sessionId)?.size ?? 0
   }
 
-  open(input: {
-    id: string
-    sessionId: string
-    journal: AgentSessionJournal
-    fence: number
-    emit: AgentSessionSubscriberEmit
-    cursor?: AgentJournalCursor
-    boundedFrames?: boolean
-  }): () => void {
+  open(
+    input: AgentSessionSubscribeInput & { journal: AgentSessionJournal; fence: number }
+  ): () => void {
     const liveCursor = input.journal.cursor()
     const subscriber: Subscriber = {
       id: input.id,
@@ -103,7 +106,10 @@ export class AgentSessionSubscribers {
       emit: input.emit,
       cursor: input.cursor ?? { epoch: liveCursor.epoch, sequence: 0 },
       fence: input.fence,
-      boundedFrames: input.boundedFrames === true
+      boundedFrames: input.boundedFrames === true,
+      projectQueuePublication: input.projectQueuePublication,
+      readsCurrentRequests: input.readsCurrentRequests === true,
+      snapshotCatchUp: input.snapshotCatchUp !== false
     }
     const session = this.bySession.get(input.sessionId) ?? new Map<string, Subscriber>()
     session.set(input.id, subscriber)
@@ -114,7 +120,7 @@ export class AgentSessionSubscribers {
       this.deliver(subscriber, input.journal, hostNow, true)
       refreshDerivedStopNotes(
         {
-          emit: (target, event) => this.emit(target, event),
+          emit: (target, event, options) => this.emit(target, event, options),
           isActive: (target) => this.isActive(target)
         },
         subscriber,
@@ -133,14 +139,18 @@ export class AgentSessionSubscribers {
         work
       )
       subscriber.workView = work?.viewKey()
-      this.emit(subscriber, {
-        type: 'snapshot',
-        sessionId: input.sessionId,
-        page,
-        fence: input.fence,
-        hostNow,
-        ...this.activityField(input.sessionId)
-      })
+      this.emit(
+        subscriber,
+        {
+          type: 'snapshot',
+          sessionId: input.sessionId,
+          page,
+          fence: input.fence,
+          hostNow,
+          ...this.activityField(input.sessionId)
+        },
+        { currentWork: work }
+      )
       subscriber.cursor = page.liveCursor ?? page.window.nextCursor
     }
     const { sessionId, id } = subscriber
@@ -215,14 +225,18 @@ export class AgentSessionSubscribers {
     for (const subscriber of this.subscribers(sessionId)) {
       const page = pageFor(subscriber)
       subscriber.workView = work?.viewKey()
-      this.emit(subscriber, {
-        type: 'snapshot',
-        sessionId,
-        page,
-        fence,
-        hostNow,
-        ...this.activityField(sessionId)
-      })
+      this.emit(
+        subscriber,
+        {
+          type: 'snapshot',
+          sessionId,
+          page,
+          fence,
+          hostNow,
+          ...this.activityField(sessionId)
+        },
+        { currentWork: work }
+      )
       subscriber.cursor = page.liveCursor ?? page.window.nextCursor
       subscriber.fence = fence
     }
@@ -304,25 +318,13 @@ export class AgentSessionSubscribers {
   private emit(
     subscriber: Subscriber,
     event: AgentSessionSubscribeEvent,
-    options?: { withholdQueued?: boolean }
+    options?: {
+      withholdQueued?: boolean
+      currentWork?: AgentSessionPublishedWork
+    }
   ): void {
     try {
-      const built = buildSubscriberFrame(
-        this.hooks,
-        subscriber,
-        event,
-        options?.withholdQueued === true
-      )
-      for (const frame of built.frames) {
-        subscriber.emit(frame)
-      }
-      subscriber.commands = built.commands
-      if (built.attachedQueued) {
-        subscriber.queuePublication = built.queued
-      }
-      if (built.backgroundTasks !== undefined) {
-        subscriber.backgroundTasks = built.backgroundTasks
-      }
+      emitSubscriberFrame(this.hooks, subscriber, event, options)
     } catch {
       this.drop(subscriber)
     }

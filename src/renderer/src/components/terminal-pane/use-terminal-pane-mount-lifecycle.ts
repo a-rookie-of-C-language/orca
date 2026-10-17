@@ -46,9 +46,8 @@ export function useTerminalPaneMountLifecycle(
       ptyDeps,
       deferredSplitHandoffs,
       // Keep the raw startup object for identity checks against the store's queued command.
-      // `ptyDeps.startup` may be a setup-wait copy and is consumed/mutated during bootstrap.
+      // `ptyDeps.startup` is consumed/mutated during bootstrap.
       startup: deps.startup,
-      startupWithSetupSplitWait: preparation.startupWithSetupSplitWait,
       defaultTabCwd: preparation.defaultTabCwd,
       startupCwd: preparation.startupCwd,
       worktreePath: preparation.worktreePath,
@@ -92,7 +91,6 @@ export function useTerminalPaneMountLifecycle(
         ? recordingBootstrapSplits(manager, deps.worktreeId, deps.tabId)
         : manager,
       ptyDeps,
-      setupSplit: deps.setupSplit,
       issueCommandSplit: deps.issueCommandSplit,
       isActive: deps.isActive
     })

@@ -394,14 +394,13 @@ describe('registerPtyHandlers', () => {
       expect(piBuildPtyEnvMock).not.toHaveBeenCalled()
     })
 
-    // TEMPORARY: only host starts wait for a WSL guest's Pi/OMP relay.
-    it('only the host lane runs the WSL Pi/OMP guest readiness wait', async () => {
+    it('both daemon lanes run the WSL Pi/OMP guest readiness wait once', async () => {
       const lanes = startLanes()
       vi.mocked(awaitExplicitPiOmpGuestReadiness).mockClear()
       await lanes.spawn('window', { env: {}, command: 'pi' })
-      expect(vi.mocked(awaitExplicitPiOmpGuestReadiness)).not.toHaveBeenCalled()
-      await lanes.spawn('host', { env: {}, command: 'pi' })
       expect(vi.mocked(awaitExplicitPiOmpGuestReadiness)).toHaveBeenCalledOnce()
+      await lanes.spawn('host', { env: {}, command: 'pi' })
+      expect(vi.mocked(awaitExplicitPiOmpGuestReadiness)).toHaveBeenCalledTimes(2)
     })
   })
 })

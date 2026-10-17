@@ -73,12 +73,17 @@ function touchedRecordsWrite(
   session: WorkspaceSessionState,
   loaded: LoadedWorkspaceLayout
 ): ((after: WorkspaceSessionState) => WorkspaceSessionState | null) | undefined {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
-    ? (after) => {
-        const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
-        return patched === session ? null : patched
-      }
-    : undefined
+  return ORCA_LAYOUT_OWNER_IS_MAIN ? (after) => touchedRecords(session, loaded, after) : undefined
+}
+
+/** The stored partition with only the records the change touched rewritten; null when none. */
+function touchedRecords(
+  session: WorkspaceSessionState,
+  loaded: LoadedWorkspaceLayout,
+  after: WorkspaceSessionState
+): WorkspaceSessionState | null {
+  const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
+  return patched === session ? null : patched
 }
 
 /**
@@ -101,13 +106,13 @@ export function applyCommandToSession(
     return { value: taken, session: null }
   }
   return applyToSession(loaded, command, (after) => {
-    const patched = patchStoredSession(session, saveWorkspaceLayout(loaded), after)
-    return patched === session
-      ? null
-      : followRemoteSessionAfterPaneDetach(
+    const patched = touchedRecords(session, loaded, after)
+    return patched
+      ? followRemoteSessionAfterPaneDetach(
           command,
           followRemoteSessionAfterPaneClose(command, session, prunedOnRecord(command, patched))
         )
+      : null
   })
 }
 

@@ -25,7 +25,6 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
     callerNamedSession: args.sessionId !== undefined,
     mintedSessionId: ctx.isMintedSessionId,
     resumeOnSelectedAccount: Boolean(args.replacesPtyId),
-    awaitsWslPiOmpGuestReadiness: false,
     emptySessionIdSkipsHostEnv: false,
     requestedAgentTeamsPath: ctx.requestedAgentTeamsPath,
     provider: ctx.provider,

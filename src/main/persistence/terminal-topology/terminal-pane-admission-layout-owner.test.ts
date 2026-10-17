@@ -82,7 +82,7 @@ describe('a runtime pane in a layout-owner build', () => {
     )
   })
 
-  it('comes back when the window records it after main took it back, and only once', async () => {
+  it('comes back when the window records it after it was taken back, and only once', async () => {
     const store = await storeWithLeftovers()
     const { newLeafId: _newLeafId, ...split } = admission
     const record = { ...split, newLeafId: NEW_LEAF }

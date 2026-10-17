@@ -39,7 +39,7 @@ describe('startInAdmittedPane', () => {
     expect(start).toHaveBeenCalledWith('admitted')
   })
 
-  it('takes back the pane it wrote when the start fails and no client shows it', async () => {
+  it('takes back the pane it wrote when the start fails', async () => {
     const { store, runtimeStore } = storeAnswering('admitted')
 
     await expect(
@@ -53,21 +53,7 @@ describe('startInAdmittedPane', () => {
     )
   })
 
-  it('keeps a pane a client already shows, and one it did not write', async () => {
-    const shown = storeAnswering('admitted')
-    await expect(
-      startInAdmittedPane(
-        shown.runtimeStore,
-        SPLIT,
-        undefined,
-        async () => {
-          throw new Error('terminal still starting')
-        },
-        { shown: () => true }
-      )
-    ).rejects.toThrow()
-    expect(shown.store.withdrawTerminalPane).not.toHaveBeenCalled()
-
+  it('keeps a pane it did not write', async () => {
     const existing = storeAnswering('exists')
     await expect(
       startInAdmittedPane(existing.runtimeStore, SPLIT, undefined, async () => {
@@ -87,8 +73,7 @@ describe('startInAdmittedPane', () => {
     })
   })
 
-  it('starts without the pane after a failed write only when asked to', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('starts nothing after a failed write', async () => {
     const failing = storeAnswering(new Error('disk full'))
     const start = vi.fn(async () => 'as-today')
 
@@ -96,11 +81,5 @@ describe('startInAdmittedPane', () => {
       startInAdmittedPane(failing.runtimeStore, SPLIT, undefined, start)
     ).rejects.toThrow('disk full')
     expect(start).not.toHaveBeenCalled()
-
-    await expect(
-      startInAdmittedPane(failing.runtimeStore, SPLIT, undefined, start, {
-        startIfWriteFails: true
-      })
-    ).resolves.toEqual({ outcome: undefined, result: 'as-today' })
   })
 })

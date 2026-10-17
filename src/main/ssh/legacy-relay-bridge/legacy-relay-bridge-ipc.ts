@@ -5,6 +5,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { z } from 'zod'
 import { LEGACY_RELAY_BRIDGE_CHANNELS as CHANNELS } from '../../../shared/legacy-relay-bridge-contract'
+import { isRemoteCliControlAllowed } from '../../../shared/ssh-remote-cli-control'
 import type { Store } from '../../persistence'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { track } from '../../telemetry/client'
@@ -26,6 +27,7 @@ import {
 const PtyIdSchema = z.string().min(1).max(4096)
 const SizeSchema = z.number().int().positive().max(10_000)
 const PaneArgsSchema = z.object({ ptyId: PtyIdSchema })
+const AttachArgsSchema = z.object({ ptyId: PtyIdSchema, replayInStream: z.boolean().optional() })
 const WriteArgsSchema = z.object({ ptyId: PtyIdSchema, data: z.string() })
 const PausedArgsSchema = z.object({ ptyId: PtyIdSchema, paused: z.boolean() })
 const ResizeArgsSchema = z.object({ ptyId: PtyIdSchema, cols: SizeSchema, rows: SizeSchema })
@@ -51,9 +53,8 @@ export function registerLegacyRelayBridgeIpc(args: {
       ? {
           remoteCli: {
             runtime: args.runtime,
-            // Why strict true: the setting is opt-in, and an absent value is off.
             allowed: (targetId: string) =>
-              args.store.getSshTarget(targetId)?.allowRemoteCliControl === true
+              isRemoteCliControlAllowed(args.store.getSshTarget(targetId))
           }
         }
       : {}),
@@ -86,8 +87,10 @@ export function registerLegacyRelayBridgeIpc(args: {
   }
   ipcMain.handle(CHANNELS.listPanes, () => legacyRelayBridgedPanes())
   ipcMain.handle(CHANNELS.attach, async (_event, payload: unknown) => {
-    const args = PaneArgsSchema.safeParse(payload)
-    return args.success ? attachLegacyRelayPane(args.data.ptyId) : { status: 'not-bridged' }
+    const args = AttachArgsSchema.safeParse(payload)
+    return args.success
+      ? attachLegacyRelayPane(args.data.ptyId, args.data.replayInStream === true)
+      : { status: 'not-bridged' }
   })
   ipcMain.handle(CHANNELS.close, async (_event, payload: unknown) => {
     const args = PaneArgsSchema.safeParse(payload)

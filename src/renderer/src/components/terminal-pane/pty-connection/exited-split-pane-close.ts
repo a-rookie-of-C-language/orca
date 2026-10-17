@@ -1,9 +1,11 @@
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
-import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { panesLeftAfterPendingCloses } from '@/runtime/layout-owner-pane-intents'
+import { sendPaneCloseToLayoutOwner } from '../layout-owner-pane-close-command'
 
 /**
  * A split pane whose terminal ended, in a layout-owner build: main closes it first, then the
- * window removes it. False when a paired server owns the workspace; the caller closes as today.
+ * window removes it when main's frame does. False when a paired server owns the workspace; the
+ * caller closes as today.
  */
 export function closeExitedSplitPaneThroughLayoutOwner(args: {
   worktreeId: string
@@ -23,21 +25,21 @@ export function closeExitedSplitPaneThroughLayoutOwner(args: {
     if (manager.getLeafId(paneId) !== leafId) {
       return
     }
-    // A sibling went while main answered: this pane is now the tab's last.
-    if (manager.getPanes().length <= 1) {
+    // A sibling went, or is going, while main answered: this pane is now the tab's last.
+    if (
+      panesLeftAfterPendingCloses(
+        args.tabId,
+        manager.getPanes().map((pane) => pane.leafId)
+      ) <= 1
+    ) {
       args.closeTab()
       return
     }
     manager.closePane(paneId)
   }
-  return sendLayoutCommandToOwner(
-    args.worktreeId,
-    { type: 'closePane', tabId: args.tabId, leafId, automatic: true },
-    {
-      apply: close,
-      asToday: close,
-      // Main holds this pane alone while the window has more: its copy lags, so close as today.
-      refused: (code) => code === 'last_pane' && close()
-    }
+  // Main holds this pane alone while the window has more: its copy lags, so close as today.
+  return sendPaneCloseToLayoutOwner(
+    { worktreeId: args.worktreeId, tabId: args.tabId, leafId, kind: 'exit' },
+    { asToday: close, lastPane: close, closeHere: close }
   )
 }

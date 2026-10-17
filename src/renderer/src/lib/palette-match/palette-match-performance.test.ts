@@ -166,6 +166,37 @@ function timeRepeatedly(work: () => void, rounds: number): number[] {
   return samples
 }
 
+/**
+ * One full-corpus pass over four quarter-corpus passes, timed in the same run:
+ * ~1 for linear work, ~4 for quadratic. A shared CI runner's speed varies
+ * several-fold between runs, so an absolute millisecond ceiling flakes; this
+ * ratio cancels machine speed. Both samples do the same amount of linear work so
+ * preemption is equally likely in each, and rounds alternate them so a burst of
+ * contention lands on both.
+ */
+function quadrupledCorpusCostRatio(
+  work: (size: 'quarter' | 'full') => void,
+  rounds: number
+): number {
+  const quarter: number[] = []
+  const full: number[] = []
+  for (let round = 0; round < rounds; round += 1) {
+    quarter.push(
+      ...timeRepeatedly(() => {
+        for (let pass = 0; pass < 4; pass += 1) {
+          work('quarter')
+        }
+      }, 1)
+    )
+    full.push(...timeRepeatedly(() => work('full'), 1))
+  }
+  return fastestSample(full) / fastestSample(quarter)
+}
+
+function quarterOf<T>(entries: Iterable<T>): T[] {
+  return [...entries].slice(0, candidateCount / 4)
+}
+
 describe('palette matcher performance budget', () => {
   let documents: ReadonlyMap<string, PaletteDocument>
 
@@ -192,12 +223,17 @@ describe('palette matcher performance budget', () => {
     expect(fastestSample(samples)).toBeLessThan(PALETTE_MATCH_BUDGET.coldBuildMs)
   })
 
-  it('matches a 16-token query against warm documents within budget', () => {
+  it('matches a 16-token query against warm documents in linear time', () => {
+    const quarter = new Map(quarterOf(documents))
     // Warm the matcher before timing so JIT compilation is not part of the samples.
     expect(matchEveryDocument(documents).filter(Boolean)).toHaveLength(candidateCount)
+    expect(matchEveryDocument(quarter).filter(Boolean)).toHaveLength(candidateCount / 4)
 
-    const samples = timeRepeatedly(() => matchEveryDocument(documents), 10)
-    expect(fastestSample(samples)).toBeLessThan(PALETTE_MATCH_BUDGET.warmMatchMs)
+    const ratio = quadrupledCorpusCostRatio(
+      (size) => matchEveryDocument(size === 'full' ? documents : quarter),
+      10
+    )
+    expect(ratio).toBeLessThan(PALETTE_MATCH_BUDGET.quadrupledCorpusCostRatio)
   })
 
   it('bounds field-match fan-out per candidate', () => {
@@ -337,11 +373,12 @@ describe('palette matcher performance budget', () => {
     )
   })
 
-  it('searches and sorts the accepted corpus within budget', () => {
+  it('searches and sorts the accepted corpus in linear time', () => {
     const context = createPaletteSearchContext(Date.UTC(2026, 8, 5))
-    const searchAndSort = () =>
+    const quarterWorktrees = quarterOf(worktrees)
+    const searchAndSort = (searched: readonly Worktree[] = worktrees) =>
       searchWorktreeDocuments({
-        worktrees,
+        worktrees: searched,
         query: WORST_QUERY,
         documents,
         repoMap,
@@ -369,8 +406,12 @@ describe('palette matcher performance budget', () => {
       warmResults.every((result) => result.rank !== null && result.displayNameRanges.length > 0)
     ).toBe(true)
     expect(warmResults[0].worktreeId).toBe(`wt-${candidateCount - 1}`)
-    const samples = timeRepeatedly(searchAndSort, 10)
-    expect(fastestSample(samples)).toBeLessThan(PALETTE_MATCH_BUDGET.fullSearchSortMs)
+    expect(searchAndSort(quarterWorktrees)).toHaveLength(candidateCount / 4)
+    const ratio = quadrupledCorpusCostRatio(
+      (size) => searchAndSort(size === 'full' ? worktrees : quarterWorktrees),
+      10
+    )
+    expect(ratio).toBeLessThan(PALETTE_MATCH_BUDGET.quadrupledCorpusCostRatio)
   })
 
   it('keeps the retained document payload within budget', () => {

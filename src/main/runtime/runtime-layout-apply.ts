@@ -15,13 +15,15 @@ import type { RuntimeStore } from './runtime-store-contract'
 export type WindowLayoutCommand = LayoutCommand &
   (
     | { tabId: string }
-    // `automatic`: not the user's close (its terminal ended, or a split the window never showed).
+    // `automatic`: not the user's close; its terminal ended.
     | { type: 'closePane'; tabId: string; automatic?: true }
     | { type: 'setGroupRatios' }
     | { type: 'closeTabs'; tabIds: [string] }
     // A browser tab's record lives in its workspace's partition, so it routes by workspace.
     | { browserTabId: string }
     | { type: 'moveTabToWorkspace' }
+    // Editor tabs live in their workspace's routed partition.
+    | { type: 'renameEditorFiles' }
   )
 
 /**

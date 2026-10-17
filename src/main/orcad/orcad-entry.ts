@@ -231,7 +231,11 @@ async function startOrcadRuntime(
     clientCodexHomes: codexAccountHomes
   })
 
+  const { loadAgentSessionClaimSigner } = await import('../runtime/agent-session-claim-identity')
   const runtime = new OrcaRuntimeService(profileStore, undefined, {
+    // Why persistent: the terminal daemon outlives orcad, so a per-process key would make a
+    // restarted orcad unable to recognise (and adopt) the agent PTYs it already owns.
+    agentSessionClaimSigner: loadAgentSessionClaimSigner(runtimeUserDataPath, runtimeUserDataPath),
     getAdditionalAiVaultCodexHomePaths: () => [
       ...codexAccountHomes.listSessionHomes(),
       ...(accountLaunch?.listCodexSessionHomes() ?? [])
@@ -290,6 +294,11 @@ async function startOrcadRuntime(
     agentHookServer,
     () => runtime
   )
+  if (runtime.sidebarFacts) {
+    registerCleanup(
+      runtime.sidebarFacts.workspaceActivityFacts.attachAgentStatusStore(agentHookServer)
+    )
+  }
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
   // same call `--serve` makes, and it threads the store through. Without the store the

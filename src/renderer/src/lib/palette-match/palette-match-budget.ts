@@ -28,10 +28,14 @@ export const PALETTE_MATCH_BUDGET = {
   selectionCandidateVisitsPerCandidate: 3_600,
   /** Milliseconds to normalize every document once (cold open), fastest sample. */
   coldBuildMs: 900,
-  /** Milliseconds to match the whole corpus against one prepared query, fastest sample. */
-  warmMatchMs: 220,
-  /** Milliseconds for warm worktree search plus entity-rank sorting. Measured 106.5 ms. */
-  fullSearchSortMs: 180,
+  /**
+   * Ceiling on one full-corpus pass over four quarter-corpus passes, for warm
+   * matching and for search plus sort. Measured in one run so runner speed
+   * cancels out: linear work is ~1, quadratic ~4. Measured 0.97–1.01 idle and
+   * 0.80–1.29 with every core oversubscribed 2x; an injected O(n²) search
+   * measured 3.68. Replaces 220/180 ms ceilings that shared CI runners exceeded.
+   */
+  quadrupledCorpusCostRatio: 2,
   /**
    * Megabytes of indexed text and offset tables the normalized documents retain.
    * Measured deterministically rather than from `heapUsed`, which is polluted by

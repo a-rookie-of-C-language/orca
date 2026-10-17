@@ -2,6 +2,7 @@ import { SQLITE_DATABASE_RUNTIME_INCLUDE } from './vitest-sqlite-database-runtim
 
 // Real SQLite fixtures keep Node publication and close semantics.
 export const SQLITE_RUNTIME_INCLUDE = [
+  'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
   ...SQLITE_DATABASE_RUNTIME_INCLUDE,
   'src/main/ipc/repos/project-host-setup-wsl-move-fence.test.ts',
   'src/main/ipc/repos/repo-ipc-wsl-move-fence.test.ts',
@@ -141,6 +142,8 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/native-chat/agent-session-wire/structured-agent-session-provider-restore.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-provider-started-catalog.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-provider-started.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-provider-open.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-ready-operation-order.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-queued-action-receipts.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-queued-gate.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-queued-newer-orca.test.ts',
@@ -185,6 +188,8 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/native-chat/agent-session-wire/structured-agent-session-start-failure-writer.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-startup-attempt-host.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-startup-attempt-registrations.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-startup-picks.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-startup-permission-mode.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-startup-reconcile-failure.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed-child-work.test.ts',
   'src/main/native-chat/agent-session-wire/structured-agent-session-status-feed-child.test.ts',

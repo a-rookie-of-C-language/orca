@@ -14,10 +14,9 @@ import {
   type AntigravityWorkspaceResolver
 } from './session-scanner-antigravity-history'
 import { sessionCandidatesFromDiscoveries } from './session-scanner-candidates'
-import { ensureSessionParseCacheLoaded } from './session-parse-cache-persistence'
 import {
   createSessionParseStats,
-  parseAgentSessionFileCached,
+  parseListedSessionFile,
   type SessionParseStats
 } from './session-scanner-parse-cache'
 import { recordSessionScanIssue } from './session-scan-issues'
@@ -39,6 +38,7 @@ import { throwIfAiVaultScanCancelled } from './ai-vault-scan-cancellation'
 import { noteAiVaultScanFilesRead, noteAiVaultScanReading } from './ai-vault-scan-progress'
 import { DEFAULT_AI_VAULT_SCAN_LIMIT } from '../../shared/ai-vault-session-depth'
 import { withDevinSessionsDbScan } from './session-scanner-devin-db'
+import { isConversationNameRequestSession } from './conversation-name-request-sessions'
 import { withOpenCodeSqliteScanScope } from './session-scanner-opencode-sqlite-scan-scope'
 
 const SESSION_PARSE_CONCURRENCY = 8
@@ -81,10 +81,7 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
         const antigravityWorkspaceResolver = createAntigravityWorkspaceResolver((path) =>
           readLocalAntigravityHistory(path, options.signal)
         )
-        // Why: persisted entries must be seeded before any candidate is parsed, or
-        // the cold scan gains nothing from the cache file (#9210).
         throwIfAiVaultScanCancelled(options.signal)
-        await ensureSessionParseCacheLoaded()
         const discoveries = await discoverAiVaultSessionSources({
           options,
           limitPerAgent,
@@ -260,7 +257,7 @@ async function parseSessionCandidates(args: {
       if (result.issue) {
         recordSessionScanIssue(args.issues, result.issue)
       }
-      if (result.session) {
+      if (result.session && !isConversationNameRequestSession(result.session)) {
         sessions.add(result.session)
       }
     }
@@ -280,13 +277,7 @@ async function parseSessionCandidate(
   signal?: AbortSignal
 ): Promise<SessionParseResult> {
   try {
-    let session = await parseAgentSessionFileCached(
-      candidate,
-      platform,
-      parseStats,
-      undefined,
-      signal
-    )
+    let session = await parseListedSessionFile(candidate, platform, parseStats, signal)
     if (session && candidate.antigravityHistoryPath && antigravityWorkspaceResolver) {
       session = await antigravityWorkspaceResolver.enrich(session, candidate.antigravityHistoryPath)
     }
@@ -313,7 +304,8 @@ function skippedRecordIssue(
   candidate: SessionFileCandidate,
   executionHostId: ExecutionHostId
 ): AiVaultScanIssue | null {
-  const skipped = getSessionParseCacheEntry(candidate.file.path)?.resume?.skippedRecords
+  const entry = getSessionParseCacheEntry(candidate.file.path)
+  const skipped = entry?.resume?.skippedRecords ?? entry?.skippedRecords
   const message = skipped ? describeSkippedTranscriptRecords(skipped) : null
   if (message === null) {
     return null
