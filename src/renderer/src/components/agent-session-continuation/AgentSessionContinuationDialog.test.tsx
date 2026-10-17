@@ -19,7 +19,10 @@ vi.mock('@/lib/launch-agent-session-continuation', () => ({
   launchAgentSessionContinuation: mocks.launchContinuation
 }))
 vi.mock('@/lib/agent-catalog', () => ({
-  getAgentCatalog: () => [{ id: 'codex', label: 'Codex' }],
+  getAgentCatalog: () => [
+    { id: 'codex', label: 'Codex' },
+    { id: 'pi', label: 'Pi' }
+  ],
   getAgentLabel: () => 'Codex'
 }))
 vi.mock('@/components/agent/AgentCombobox', () => ({
@@ -70,9 +73,35 @@ function request(worktreeId: string): AgentSessionContinuationRequest {
   }
 }
 
+function codexFileRequest(worktreeId: string): AgentSessionContinuationRequest {
+  return {
+    source: {
+      capturedText: '',
+      sourceAgent: 'codex',
+      sourceTitle: 'Wire the widget',
+      transcriptPath: '/tmp/codex-session.jsonl',
+      lastPrompt: 'wire the widget'
+    },
+    worktreeId,
+    workspacePath: '/repo',
+    initialCwd: '/repo',
+    launchSource: 'sidebar'
+  }
+}
+
+function startButton(container: HTMLDivElement): HTMLButtonElement {
+  const buttons = [...container.querySelectorAll('button')]
+  const start = buttons.find((button) => button.textContent?.includes('Start New Session'))
+  if (!start) {
+    throw new Error('start button not rendered')
+  }
+  return start
+}
+
 describe('AgentSessionContinuationDialog', () => {
   let container: HTMLDivElement
   let root: Root
+  let originalApi: typeof window.api
 
   beforeEach(() => {
     ;(
@@ -82,11 +111,13 @@ describe('AgentSessionContinuationDialog', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    originalApi = window.api
   })
 
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
+    window.api = originalApi
   })
 
   it('clears a prior detection failure while detecting a new request', async () => {
@@ -116,5 +147,62 @@ describe('AgentSessionContinuationDialog', () => {
     await vi.waitFor(() => expect(container.querySelector('[data-agent="codex"]')).not.toBeNull())
     // Why: continuing a chat needs an agent to resume it into.
     expect(container.querySelector('[data-allow-blank="false"]')).not.toBeNull()
+  })
+
+  it('embeds decoded transcript text when handing off across providers', async () => {
+    const buildHandoffPack = vi.fn().mockResolvedValue({ text: '**user**: wire the widget' })
+    window.api = { aiVault: { buildHandoffPack } } as never
+    mocks.detectAgents.mockResolvedValue(['pi'])
+    mocks.launchContinuation.mockResolvedValue(true)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionContinuationDialog
+          open
+          request={codexFileRequest('wt-1')}
+          onOpenChange={vi.fn()}
+        />
+      )
+    })
+    await vi.waitFor(() => expect(container.querySelector('[data-agent="pi"]')).not.toBeNull())
+
+    await act(async () => {
+      startButton(container).click()
+    })
+    await vi.waitFor(() => expect(mocks.launchContinuation).toHaveBeenCalled())
+    const launched = mocks.launchContinuation.mock.calls[0]?.[0] as { prompt: string }
+    expect(buildHandoffPack).toHaveBeenCalledWith({
+      agent: 'codex',
+      filePath: '/tmp/codex-session.jsonl',
+      mode: 'summary'
+    })
+    expect(launched.prompt).toContain('**user**: wire the widget')
+    expect(launched.prompt).not.toContain('available at this path')
+  })
+
+  it('keeps the raw-path flow when handing off to the same provider', async () => {
+    const buildHandoffPack = vi.fn()
+    window.api = { aiVault: { buildHandoffPack } } as never
+    mocks.detectAgents.mockResolvedValue(['codex'])
+    mocks.launchContinuation.mockResolvedValue(true)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionContinuationDialog
+          open
+          request={codexFileRequest('wt-1')}
+          onOpenChange={vi.fn()}
+        />
+      )
+    })
+    await vi.waitFor(() => expect(container.querySelector('[data-agent="codex"]')).not.toBeNull())
+
+    await act(async () => {
+      startButton(container).click()
+    })
+    await vi.waitFor(() => expect(mocks.launchContinuation).toHaveBeenCalled())
+    const launched = mocks.launchContinuation.mock.calls[0]?.[0] as { prompt: string }
+    expect(buildHandoffPack).not.toHaveBeenCalled()
+    expect(launched.prompt).toContain('available at this path')
   })
 })
