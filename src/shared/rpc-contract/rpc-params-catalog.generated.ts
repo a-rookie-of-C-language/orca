@@ -345,6 +345,8 @@ import { JiraSavedFilterMutationParam } from './jira-saved-filter-params'
 import {
   AgentIssueContext,
   AgentSearchIssues,
+  LinearCommentDelete,
+  LinearCommentEdit,
   LinearCurrentContext,
   LinearIssueAddComment,
   LinearIssueAttachLink,
@@ -604,6 +606,7 @@ import {
   WorkspacePortScanHostParams,
   WorkspacePortScanParams
 } from './workspace-ports-params'
+import { SetCollapsedParams } from './workspace-view-collapse-params'
 import { WorktreeCreate, WorktreePrefetchCreateBase } from './worktree-create-params'
 import {
   WorktreeActivate,
@@ -1056,6 +1059,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'linear.agentTeamList': LinearWorkspaceRead,
   'linear.agentTeamMembers': LinearTeamLookup,
   'linear.agentTeamStates': LinearTeamLookup,
+  'linear.commentDelete': LinearCommentDelete,
+  'linear.commentEdit': LinearCommentEdit,
   'linear.connect': ConnectOfLinearParams,
   'linear.createIssue': CreateIssueOfLinearParams,
   'linear.createProject': CreateProject,
@@ -1249,6 +1254,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'sidebarInputs.desktopFacts': null,
   'sidebarInputs.pairedServerRows': null,
   'sidebarInputs.reviewFacts': null,
+  'sidebarInputs.workspaceCreations': null,
   'skills.beginUpload': SkillUploadBeginRequestSchema,
   'skills.cancelInstall': SkillsCancelInstallParams,
   'skills.cancelUpload': SkillUploadCommitRequestSchema,
@@ -1332,6 +1338,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'ui.mutateJiraSavedFilters': JiraSavedFilterMutationParam,
   'ui.recordFeatureInteraction': FeatureInteractionIdParam,
   'ui.set': UiUpdate,
+  'ui.setCollapsed': SetCollapsedParams,
   'ui.setJiraQuickFilters': JiraQuickFilterStateParam,
   'updater.check': UpdaterCheckParams,
   'updater.download': null,

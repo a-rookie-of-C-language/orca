@@ -37,6 +37,7 @@ import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 import { PairedServerRowsProducer } from './sidebar-inputs/paired-server-rows-producer'
+import { CollapseWriteOrder } from './workspace-view-collapse-writes'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 
@@ -61,6 +62,8 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
         hostLabelOverrides: () => getHostDisplayLabelOverrides(this.getClientSettings())
       })
     : null
+  // Switch point: the per-writer ordering behind ui.setCollapsed.
+  readonly collapseWriteOrder = ORCA_SIDEBAR_INPUTS_IS_MAIN ? new CollapseWriteOrder() : null
 
   private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
     const catalog = listReferenceWorkspaces(
