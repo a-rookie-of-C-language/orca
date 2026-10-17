@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
+import { toast } from 'sonner'
 import AgentCombobox from '@/components/agent/AgentCombobox'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +24,10 @@ import {
   buildAgentSessionContinuationPrompt,
   fetchEmbeddedHandoffText,
   hasFullAgentSessionContext,
+  isCrossProviderHandoff,
+  resolveAgentSessionContinuationTranscriptPath,
   type AgentSessionContinuationContextMode,
+  type AgentSessionContinuationSource,
   type AgentSessionContinuationRequest
 } from '@/lib/agent-session-continuation'
 import {
@@ -43,6 +47,14 @@ type AgentSessionContinuationDialogProps = {
 
 const EMPTY_DISABLED_AGENTS: TuiAgent[] = []
 
+function handoffPrefetchKey(
+  source: AgentSessionContinuationSource,
+  targetAgent: TuiAgent,
+  mode: AgentSessionContinuationContextMode
+): string {
+  return `${targetAgent}|${mode}|${source.sourceAgent ?? ''}|${source.transcriptPath ?? ''}`
+}
+
 export function AgentSessionContinuationDialog({
   open,
   request,
@@ -52,6 +64,7 @@ export function AgentSessionContinuationDialog({
   const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<TuiAgent | null>(null)
   const [contextMode, setContextMode] = useState<AgentSessionContinuationContextMode>('focused')
+  const [prefetched, setPrefetched] = useState<{ key: string; text: string | null } | null>(null)
   const [detecting, setDetecting] = useState(true)
   const [detectionFailed, setDetectionFailed] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -111,6 +124,29 @@ export function AgentSessionContinuationDialog({
     }
   }, [disabledAgents, open, request, settings?.defaultTuiAgent])
 
+  // Why: decoding a transcript (60k chars in full mode) can take a moment, so
+  // warm the cache while the user is still choosing. Start revalidates by key.
+  useEffect(() => {
+    if (!open || !request || !selectedAgent) {
+      return
+    }
+    if (!isCrossProviderHandoff(request.source, selectedAgent)) {
+      return
+    }
+    const key = handoffPrefetchKey(request.source, selectedAgent, contextMode)
+    let cancelled = false
+    void fetchEmbeddedHandoffText(request.source, selectedAgent, contextMode)
+      .then((text) => {
+        if (!cancelled) {
+          setPrefetched({ key, text })
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [contextMode, open, request, selectedAgent])
+
   useEffect(() => {
     if (!starting) {
       setShowStarting(false)
@@ -126,12 +162,48 @@ export function AgentSessionContinuationDialog({
       return
     }
     setStarting(true)
-    // Why: decoding runs on the main process; the spinner already covers the wait.
-    const embedded = await fetchEmbeddedHandoffText(request.source, selectedAgent)
-    const prompt = buildAgentSessionContinuationPrompt(request.source, contextMode, embedded)
+    const key = handoffPrefetchKey(request.source, selectedAgent, contextMode)
+    // Why: decoding runs on the main process; the prefetch usually covers the
+    // wait and the spinner covers the rest.
+    const embedded =
+      prefetched?.key === key
+        ? prefetched.text
+        : await fetchEmbeddedHandoffText(request.source, selectedAgent, contextMode)
+    const prompt = buildAgentSessionContinuationPrompt(
+      request.source,
+      contextMode,
+      embedded,
+      selectedAgent
+    )
     if (!prompt) {
       setStarting(false)
+      // Why: same-agent fallthrough keeps its silent no-op, but a blocked
+      // cross-provider full handoff must say why instead of doing nothing.
+      if (isCrossProviderHandoff(request.source, selectedAgent)) {
+        toast.error(
+          translate(
+            'components.agentSessionContinuation.fullDecodeFailed',
+            'Could not decode the original transcript for {{agent}}. Try Focused handoff or hand off to the same agent instead.',
+            { agent: getAgentLabel(selectedAgent) }
+          )
+        )
+      }
       return
+    }
+    // Why: without decoded text the raw path is unreadable to the target, so
+    // the prompt quietly fell back to terminal capture. Say so out loud.
+    if (
+      isCrossProviderHandoff(request.source, selectedAgent) &&
+      !embedded?.trim() &&
+      resolveAgentSessionContinuationTranscriptPath(request.source)
+    ) {
+      toast.warning(
+        translate(
+          'components.agentSessionContinuation.captureFallback',
+          'Could not decode the original transcript, so only recent terminal context was sent. {{agent}} cannot read the original session file.',
+          { agent: getAgentLabel(selectedAgent) }
+        )
+      )
     }
     const launched = await launchAgentSessionContinuation({
       agent: selectedAgent,

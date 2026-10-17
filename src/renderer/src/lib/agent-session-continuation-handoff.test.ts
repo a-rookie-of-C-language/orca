@@ -5,6 +5,7 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 import {
   buildAgentSessionContinuationPrompt,
   fetchEmbeddedHandoffText,
+  isCrossProviderHandoff,
   type AgentSessionContinuationSource
 } from './agent-session-continuation'
 
@@ -73,11 +74,37 @@ describe('fetchEmbeddedHandoffText', () => {
     })
   })
 
+  it('requests the full pack in full mode', async () => {
+    const buildHandoffPack = vi.fn().mockResolvedValue({ text: '**user**: hi', truncated: false })
+    installBridge(buildHandoffPack)
+    await expect(
+      fetchEmbeddedHandoffText(sourceWith({ sourceAgent: 'codex' }), 'pi' as TuiAgent, 'full')
+    ).resolves.toBe('**user**: hi')
+    expect(buildHandoffPack).toHaveBeenCalledWith({
+      agent: 'codex',
+      filePath: '/tmp/codex-session.jsonl',
+      mode: 'full'
+    })
+  })
+
   it('falls back to null when the bridge is missing or fails', async () => {
     installBridge(undefined)
     await expect(fetchEmbeddedHandoffText(sourceWith({}), 'pi' as TuiAgent)).resolves.toBeNull()
     installBridge(vi.fn().mockRejectedValue(new Error('ipc down')))
     await expect(fetchEmbeddedHandoffText(sourceWith({}), 'pi' as TuiAgent)).resolves.toBeNull()
+  })
+})
+
+describe('isCrossProviderHandoff', () => {
+  it('is true when the target cannot read the source transcript format', () => {
+    expect(isCrossProviderHandoff(sourceWith({ sourceAgent: 'codex' }), 'pi')).toBe(true)
+  })
+
+  it('is false for same-agent handoffs and undecodable sources', () => {
+    expect(isCrossProviderHandoff(sourceWith({ sourceAgent: 'codex' }), 'codex')).toBe(false)
+    expect(isCrossProviderHandoff(sourceWith({ sourceAgent: 'opencode' }), 'pi')).toBe(false)
+    expect(isCrossProviderHandoff(sourceWith({ sourceAgent: null }), 'pi')).toBe(false)
+    expect(isCrossProviderHandoff(sourceWith({}), null)).toBe(false)
   })
 })
 
@@ -97,5 +124,37 @@ describe('buildAgentSessionContinuationPrompt with embedded transcript', () => {
   it('leaves the raw-path flow untouched without embedded text', () => {
     const prompt = buildAgentSessionContinuationPrompt(sourceWith({}), 'focused', null)
     expect(prompt).toContain('available at this path')
+  })
+
+  it('keeps the raw path for same-agent handoffs without decoded text', () => {
+    const prompt = buildAgentSessionContinuationPrompt(
+      sourceWith({ sourceAgent: 'codex' }),
+      'focused',
+      null,
+      'codex'
+    )
+    expect(prompt).toContain('available at this path')
+  })
+
+  it('falls back to terminal capture for cross-provider focused without decoded text', () => {
+    const prompt = buildAgentSessionContinuationPrompt(
+      sourceWith({ capturedText: 'recent terminal output' }),
+      'focused',
+      null,
+      'pi'
+    )
+    expect(prompt).toContain('recent terminal output')
+    expect(prompt).not.toContain('/tmp/codex-session.jsonl')
+  })
+
+  it('refuses cross-provider full without decoded text instead of a dead path', () => {
+    expect(
+      buildAgentSessionContinuationPrompt(
+        sourceWith({ capturedText: 'recent terminal output' }),
+        'full',
+        null,
+        'pi'
+      )
+    ).toBeNull()
   })
 })

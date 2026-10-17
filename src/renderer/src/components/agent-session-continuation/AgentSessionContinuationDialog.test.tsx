@@ -180,6 +180,33 @@ describe('AgentSessionContinuationDialog', () => {
     expect(launched.prompt).not.toContain('available at this path')
   })
 
+  it('starts from the prefetched handoff text instead of decoding twice', async () => {
+    const buildHandoffPack = vi.fn().mockResolvedValue({ text: '**user**: wire the widget' })
+    window.api = { aiVault: { buildHandoffPack } } as never
+    mocks.detectAgents.mockResolvedValue(['pi'])
+    mocks.launchContinuation.mockResolvedValue(true)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionContinuationDialog
+          open
+          request={codexFileRequest('wt-1')}
+          onOpenChange={vi.fn()}
+        />
+      )
+    })
+    await vi.waitFor(() => expect(container.querySelector('[data-agent="pi"]')).not.toBeNull())
+    // Why: the prefetch must finish before Start, or the click falls back to a
+    // second decode and the call count below goes flaky.
+    await vi.waitFor(() => expect(buildHandoffPack).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      startButton(container).click()
+    })
+    await vi.waitFor(() => expect(mocks.launchContinuation).toHaveBeenCalled())
+    expect(buildHandoffPack).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the raw-path flow when handing off to the same provider', async () => {
     const buildHandoffPack = vi.fn()
     window.api = { aiVault: { buildHandoffPack } } as never
