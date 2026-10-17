@@ -56,11 +56,11 @@ import { createWebWorkspacePortsApi } from './preload-api/web-workspace-ports-ap
 import { createWebWorkspaceSessionApi } from './preload-api/web-workspace-session-api'
 import { createWorktreesApi } from './preload-api/web-worktrees-api'
 import {
-  createTauriNativeAppApi,
+  createTauriNativeAppNamespaceApi,
   createTauriNativeFilesystemDropApi,
   createTauriNativeNotificationsApi,
   createTauriNativePreloadApi,
-  createTauriNativePlatformApi,
+  createTauriNativePlatformNamespaceApi,
   createTauriNativeUiApi,
   installTauriWindowDragBridge,
   isTauriNativeHost
@@ -92,8 +92,8 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ...createWebWorkspacePortsApi(),
     ...createWebOrcaProfilesApi(),
     ...createWebE2EApi(),
-    ...createTauriNativePlatformApi(),
-    ...createTauriNativeAppApi(),
+    ...createTauriNativePlatformNamespaceApi(),
+    ...createTauriNativeAppNamespaceApi(),
     ...createWebSettingsApi(),
     keybindings: createWebKeybindingsApi(),
     ui: {

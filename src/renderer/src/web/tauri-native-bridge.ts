@@ -2,8 +2,8 @@ import type { PreloadApi } from '../../../preload/api-types'
 import { invokeNative, isTauriNativeHost } from './tauri-native-host'
 import { createTauriNativeNotificationsApi } from './tauri-native-notifications-api'
 import {
-  createTauriNativeAppApi,
-  createTauriNativePlatformApi
+  createTauriNativeAppNamespaceApi,
+  createTauriNativePlatformNamespaceApi
 } from './tauri-native-platform-app-api'
 import { createTauriNativeShellApi } from './tauri-native-shell-api'
 
@@ -11,7 +11,9 @@ export { createTauriNativeFilesystemDropApi } from './tauri-native-filesystem-dr
 export { isTauriNativeHost } from './tauri-native-host'
 export { createTauriNativeNotificationsApi } from './tauri-native-notifications-api'
 export {
+  createTauriNativeAppNamespaceApi,
   createTauriNativeAppApi,
+  createTauriNativePlatformNamespaceApi,
   createTauriNativePlatformApi
 } from './tauri-native-platform-app-api'
 export { createTauriNativeShellApi } from './tauri-native-shell-api'
@@ -67,8 +69,8 @@ export function createTauriNativePreloadApi(): Partial<PreloadApi> {
   const notifications = createTauriNativeNotificationsApi()
   return {
     ...(shell ? { shell } : {}),
-    ...createTauriNativePlatformApi(),
-    ...createTauriNativeAppApi(),
+    ...createTauriNativePlatformNamespaceApi(),
+    ...createTauriNativeAppNamespaceApi(),
     ...(notifications ? { notifications } : {})
   }
 }
