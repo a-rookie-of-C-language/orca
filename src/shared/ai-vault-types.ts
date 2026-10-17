@@ -174,6 +174,23 @@ export type AiVaultFirstUserPromptResult = {
   prompt: string | null
 }
 
+/** Decoded cross-provider handoff pack for "Hand Off to Another Agent". */
+export type AiVaultHandoffPackArgs = {
+  agent: string
+  filePath: string
+  // Transcripts are local-FS only; non-local hosts resolve to null text.
+  executionHostId?: ExecutionHostId
+  mode?: 'summary' | 'full'
+  maxMessages?: number
+  maxChars?: number
+}
+
+export type AiVaultHandoffPackResult = {
+  text: string | null
+  truncated?: boolean
+  totalMessages?: number
+}
+
 // A session is only offered for normal resume when its transcript actually holds
 // conversation turns; resuming a zero-turn transcript lands in an empty session.
 // Conversation previews count as evidence too: some parsers (e.g. Grok, OpenCode

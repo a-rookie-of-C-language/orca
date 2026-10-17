@@ -10,6 +10,8 @@ import type {
 import type {
   AiVaultFirstUserPromptArgs,
   AiVaultFirstUserPromptResult,
+  AiVaultHandoffPackArgs,
+  AiVaultHandoffPackResult,
   AiVaultListArgs,
   AiVaultListResult,
   AiVaultSubagentListArgs,
@@ -58,6 +60,8 @@ export type AiVaultApi = {
   listSubagentSessions: (args: AiVaultSubagentListArgs) => Promise<AiVaultSubagentListResult>
   /** Full first user prompt for copy/reuse (re-parses one transcript). */
   getFirstUserPrompt: (args: AiVaultFirstUserPromptArgs) => Promise<AiVaultFirstUserPromptResult>
+  /** Provider-neutral transcript text for handing a session to another agent. */
+  buildHandoffPack: (args: AiVaultHandoffPackArgs) => Promise<AiVaultHandoffPackResult>
   /** Moves a deletable session's transcript to the OS trash; local sessions only. */
   deleteSession: (args: AiVaultDeleteSessionArgs) => Promise<AiVaultDeleteSessionResult>
   /** Fires when any app window regains OS focus; returns an unsubscribe. */

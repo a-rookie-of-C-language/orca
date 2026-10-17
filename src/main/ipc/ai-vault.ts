@@ -20,12 +20,15 @@ import {
   AI_VAULT_SCOPE_PATHS_MAX_COUNT,
   isAiVaultScanCancelledError,
   type AiVaultFirstUserPromptArgs,
+  type AiVaultHandoffPackArgs,
+  type AiVaultHandoffPackResult,
   type AiVaultListArgs,
   type AiVaultListResult,
   type AiVaultSubagentListArgs,
   type AiVaultSubagentListResult
 } from '../../shared/ai-vault-types'
 import { handleAiVaultGetFirstUserPrompt } from '../ai-vault/session-first-user-prompt-handler'
+import { handleAiVaultBuildHandoffPack } from '../ai-vault/session-handoff-pack-handler'
 import { registerAiVaultResumeHandler, type AiVaultResumeHandlerOptions } from './ai-vault-resume'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -285,6 +288,11 @@ export function registerAiVaultHandlers(options: AiVaultHandlerOptions = {}): vo
   )
   ipcMain.handle('aiVault:getFirstUserPrompt', (_event, args?: AiVaultFirstUserPromptArgs) =>
     handleAiVaultGetFirstUserPrompt(args)
+  )
+  ipcMain.handle(
+    'aiVault:buildHandoffPack',
+    (_event, args?: AiVaultHandoffPackArgs): Promise<AiVaultHandoffPackResult> =>
+      handleAiVaultBuildHandoffPack(args)
   )
   registerAiVaultDeleteHandler(aiVaultDeleteDeps)
   registerAiVaultScanProgressBroadcast()

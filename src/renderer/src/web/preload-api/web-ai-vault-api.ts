@@ -88,6 +88,8 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
     listSubagentSessions: () => Promise.resolve({ sessions: [], issues: [] }),
     // Why: full first-prompt re-parse is local-FS only; web/runtime falls back to preview text.
     getFirstUserPrompt: () => Promise.resolve({ prompt: null }),
+    // Why: transcript decoding is local-FS only; web/runtime keeps the raw-path handoff.
+    buildHandoffPack: () => Promise.resolve({ text: null }),
     // Why: session deletion is local-only and has no runtime RPC; a web
     // client's sessions are runtime-hosted, so report the same non-local
     // rejection the UI already gates on rather than pretend to delete.

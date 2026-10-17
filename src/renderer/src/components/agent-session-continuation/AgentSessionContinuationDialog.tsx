@@ -21,6 +21,7 @@ import { translate } from '@/i18n/i18n'
 import { getAgentCatalog, getAgentLabel } from '@/lib/agent-catalog'
 import {
   buildAgentSessionContinuationPrompt,
+  fetchEmbeddedHandoffText,
   hasFullAgentSessionContext,
   type AgentSessionContinuationContextMode,
   type AgentSessionContinuationRequest
@@ -124,11 +125,14 @@ export function AgentSessionContinuationDialog({
     if (!request || !selectedAgent || starting) {
       return
     }
-    const prompt = buildAgentSessionContinuationPrompt(request.source, contextMode)
+    setStarting(true)
+    // Why: decoding runs on the main process; the spinner already covers the wait.
+    const embedded = await fetchEmbeddedHandoffText(request.source, selectedAgent)
+    const prompt = buildAgentSessionContinuationPrompt(request.source, contextMode, embedded)
     if (!prompt) {
+      setStarting(false)
       return
     }
-    setStarting(true)
     const launched = await launchAgentSessionContinuation({
       agent: selectedAgent,
       prompt,
