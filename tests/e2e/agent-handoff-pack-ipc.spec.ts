@@ -57,6 +57,17 @@ test('handoff pack IPC decodes a codex transcript for another provider', async (
   expect(result.totalMessages).toBe(2)
   expect(result.truncated).toBe(false)
 
+  // Why: Focused handoffs request summary, Full handoffs request full. Both
+  // modes travel the same bridge, but only this proves full decodes live.
+  const fullResult = await orcaPage.evaluate(
+    (filePath) =>
+      window.api.aiVault.buildHandoffPack({ agent: 'codex', filePath, mode: 'full' }),
+    sessionPath
+  )
+  expect(fullResult.text).toContain('**user**: wire the widget')
+  expect(fullResult.text).toContain('**assistant**: wired it')
+  expect(fullResult.truncated).toBe(false)
+
   const unknownAgent = await orcaPage.evaluate(
     (filePath) => window.api.aiVault.buildHandoffPack({ agent: 'opencode', filePath }),
     sessionPath
