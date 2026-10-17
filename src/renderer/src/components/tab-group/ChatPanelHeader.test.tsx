@@ -3,10 +3,12 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { TooltipProvider } from '../ui/tooltip'
+import { requestTerminalTabRenameWhenMounted } from '../tab-bar/terminal-tab-rename-request'
 import { ChatPanelHeader } from './ChatPanelHeader'
 
 const state = vi.hoisted(() => ({
-  settings: { tabAutoGenerateTitle: false }
+  settings: { tabAutoGenerateTitle: false },
+  setTabCustomTitle: vi.fn()
 }))
 vi.mock('../../store', () => ({
   useAppStore: (selector: (value: typeof state) => unknown) => selector(state)
@@ -72,7 +74,11 @@ describe('fixed chat panel header', () => {
       chat,
       { ...chat, id: 'chat-2', label: 'Review changes', agentSessionAgent: 'codex' as const }
     ]
-    const props = { chats, onActivate: vi.fn(), onClose: vi.fn() }
+    const props = {
+      chats,
+      onActivate: vi.fn(),
+      onClose: vi.fn()
+    }
     const view = render(
       <TooltipProvider>
         <ChatPanelHeader {...props} activeTabId={chat.id} />
@@ -139,5 +145,42 @@ describe('fixed chat panel header', () => {
     })
     fireEvent.click(await screen.findByRole('option', { name: 'Review changes' }))
     expect(activate).toHaveBeenCalledWith('chat-2')
+  })
+
+  it('renames the active conversation from the header', () => {
+    render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[chat]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </TooltipProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename chat' }))
+    const input = screen.getByRole('textbox', { name: 'Rename chat' })
+    fireEvent.change(input, { target: { value: 'Release notes' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(state.setTabCustomTitle).toHaveBeenCalledWith(chat.id, 'Release notes')
+    expect(screen.queryByRole('textbox', { name: 'Rename chat' })).toBeNull()
+  })
+
+  it('opens the rename editor when a launch requested it before the header mounted', async () => {
+    requestTerminalTabRenameWhenMounted(chat.id)
+    render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[chat]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </TooltipProvider>
+    )
+
+    expect(await screen.findByRole('textbox', { name: 'Rename chat' })).toBeTruthy()
   })
 })

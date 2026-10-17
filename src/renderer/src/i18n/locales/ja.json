@@ -1,4 +1,9 @@
 {
+  "chatPanel": {
+    "close": "チャットを閉じる",
+    "rename": "チャット名を変更",
+    "title": "チャット"
+  },
   "app": {
     "saving": {
       "delayedTitle": "プロファイルのストレージ処理に通常より時間がかかっています",
@@ -18215,6 +18220,7 @@
         "noFiles": "一致するファイルがありません",
         "filesLoadFailed": "ファイルを読み込めませんでした",
         "attach": "ファイルを添付する",
+        "startAnotherAgent": "別のエージェントを開始",
         "startDictation": "ディクテーションを開始する",
         "stopDictation": "ディクテーションを停止する",
         "noSkills": "一致するスキルがありません",

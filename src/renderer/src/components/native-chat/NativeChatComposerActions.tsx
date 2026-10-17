@@ -12,6 +12,8 @@ import { NativeChatComposerGoalChip } from './NativeChatComposerGoalChip'
 import { NativeChatContextUsageRing } from './NativeChatContextUsageRing'
 import type { NativeChatContextUsageSummary } from './native-chat-context-usage-summary'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
+import { NativeChatAgentLaunchMenu } from './NativeChatAgentLaunchMenu'
+import type { AgentType } from '../../../../shared/agent-status-types'
 
 export type NativeChatComposerActionsProps = {
   attachDisabled: boolean
@@ -41,7 +43,9 @@ export type NativeChatComposerActionsProps = {
   /** Absent until the session has reported or the transcript can estimate. */
   contextUsage?: NativeChatContextUsageSummary | null
   /** The chat's agent, whose permission modes the picker describes. */
-  agent?: string
+  agent?: AgentType
+  /** Hosting tab, used to resolve the workspace for another agent launch. */
+  terminalTabId?: string
 }
 
 export function NativeChatComposerActions({
@@ -66,7 +70,8 @@ export function NativeChatComposerActions({
   onExitGoalMode,
   contextUsage,
   focusComposer,
-  agent
+  agent,
+  terminalTabId
 }: NativeChatComposerActionsProps): React.JSX.Element {
   const stops = isWorking
   const handleCriticalAction = (event: React.MouseEvent<HTMLButtonElement>): void => {
@@ -127,6 +132,9 @@ export function NativeChatComposerActions({
             {translate('components.native-chat.composer.attach', 'Attach file')}
           </TooltipContent>
         </Tooltip>
+        {terminalTabId ? (
+          <NativeChatAgentLaunchMenu terminalTabId={terminalTabId} {...(agent ? { agent } : {})} />
+        ) : null}
         <NativeChatComposerPermissionPicker
           surface={sessionOptionsSurface}
           snapshot={sessionOptionsSnapshot}

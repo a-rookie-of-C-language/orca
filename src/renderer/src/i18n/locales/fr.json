@@ -1,4 +1,9 @@
 {
+  "chatPanel": {
+    "close": "Fermer la conversation",
+    "rename": "Renommer la conversation",
+    "title": "Conversation"
+  },
   "app": {
     "saving": {
       "delayedTitle": "Le stockage du profil prend plus de temps que d’habitude",
@@ -18284,6 +18289,7 @@
         "noFiles": "Aucun fichier correspondant",
         "filesLoadFailed": "Impossible de charger les fichiers",
         "attach": "Joindre un fichier",
+        "startAnotherAgent": "Démarrer un autre agent",
         "startDictation": "Démarrer la dictée",
         "stopDictation": "Arrêter la dictée",
         "noSkills": "Aucune skill correspondante",

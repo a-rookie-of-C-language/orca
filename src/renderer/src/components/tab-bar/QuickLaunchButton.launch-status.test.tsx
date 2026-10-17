@@ -271,4 +271,25 @@ describe('QuickLaunchAgentMenuItems launches', () => {
     fireEvent.click(document.querySelector('[title="Launch Codex in a new terminal"]')!)
     expect(launchMock).not.toHaveBeenCalled()
   })
+
+  it('reports the new tab as soon as the launch creates it', () => {
+    const onTabOpened = vi.fn()
+    launchMock.mockReset()
+    launchMock.mockImplementation((args: { onTabOpened?: (tabId: string) => void }) => {
+      args.onTabOpened?.('new-tab')
+      return { surface: { kind: 'host-published' } }
+    })
+
+    render(
+      <QuickLaunchAgentMenuItems
+        worktreeId={WORKTREE_ID}
+        groupId="group-1"
+        onFocusTerminal={vi.fn()}
+        onTabOpened={onTabOpened}
+      />
+    )
+    fireEvent.click(document.querySelector('[title="Launch Codex in a new terminal"]')!)
+
+    expect(onTabOpened).toHaveBeenCalledExactlyOnceWith('new-tab')
+  })
 })

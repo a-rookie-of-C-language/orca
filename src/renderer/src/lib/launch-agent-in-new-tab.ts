@@ -64,6 +64,8 @@ export type LaunchAgentInNewTabArgs = LaunchAgentInNewTabRequest & {
   launchPlatform?: NodeJS.Platform
   /** Called after the prompt is actually delivered to the agent input path. */
   onPromptDelivered?: () => void
+  /** Called once the launched tab exists, including provisional structured chats. */
+  onTabOpened?: (tabId: string) => void
   /** The caller keeps the prompt's text if it does not go out (notes), so no composer gets it. */
   promptKeptByCaller?: true
   /**
@@ -197,6 +199,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       ...(groupId ? { groupId } : {}),
       ...(beforeSurfaceOpen ? { beforeSurfaceOpen } : {}),
       ...(args.onStructuredHostDeclined ? { onHostDeclined: args.onStructuredHostDeclined } : {}),
+      ...(args.onTabOpened ? { onTabOpened: args.onTabOpened } : {}),
       // The host's "no" opens this same launch as a terminal, with the caller's arguments.
       openTerminal: (terminalPlan) =>
         launchAgentInNewTabInternal({
@@ -269,6 +272,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       ...(onPromptDelivered ? { onPromptDelivered } : {}),
       ...(onPromptDeliveryUnconfirmed ? { onPromptDeliveryUnconfirmed } : {})
     })
+    args.onTabOpened?.(launched.tabId)
     return {
       surface: { kind: 'local-terminal', tabId: launched.tabId },
       startupPlan,
@@ -300,6 +304,7 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
       }
     }
   })
+  args.onTabOpened?.(tab.id)
   if (initialCwd?.trim()) {
     // Why: queue before mount so local, WSL, and SSH continuations preserve their subdirectory.
     store.queueTabInitialCwd(tab.id, initialCwd)

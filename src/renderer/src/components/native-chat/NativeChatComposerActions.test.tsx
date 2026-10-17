@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/i18n/i18n', () => ({
+  i18n: { language: 'en' },
   translate: (_key: string, fallback: string) => fallback
 }))
 

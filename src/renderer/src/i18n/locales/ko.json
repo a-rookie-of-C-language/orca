@@ -1,4 +1,9 @@
 {
+  "chatPanel": {
+    "close": "채팅 닫기",
+    "rename": "채팅 이름 변경",
+    "title": "채팅"
+  },
   "app": {
     "saving": {
       "delayedTitle": "프로필 저장소 작업에 평소보다 오래 걸리고 있습니다",
@@ -18215,6 +18220,7 @@
         "noFiles": "일치하는 파일이 없습니다",
         "filesLoadFailed": "파일을 불러오지 못했습니다",
         "attach": "파일첨부",
+        "startAnotherAgent": "다른 에이전트 시작",
         "startDictation": "받아쓰기 시작",
         "stopDictation": "받아쓰기 중지",
         "noSkills": "어울리는 스킬 없음",

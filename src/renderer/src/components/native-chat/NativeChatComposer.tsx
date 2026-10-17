@@ -411,6 +411,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         contextUsage={contextUsageSummary}
         sessionOptionsPickerRequest={structuredTransport?.optionPickerRequest ?? null}
         agent={agent}
+        terminalTabId={terminalTabId}
       />
     )
   }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  consumePendingTerminalTabRename,
   RENAME_TERMINAL_TAB_EVENT,
   type RenameTerminalTabDetail
 } from './terminal-tab-rename-request'
@@ -80,6 +81,12 @@ export function useSortableTabRename({
     }
     window.addEventListener(RENAME_TERMINAL_TAB_EVENT, onRenameRequest)
     return () => window.removeEventListener(RENAME_TERMINAL_TAB_EVENT, onRenameRequest)
+  }, [tabId])
+
+  useEffect(() => {
+    if (consumePendingTerminalTabRename(tabId)) {
+      handleRenameOpenRef.current()
+    }
   }, [tabId])
 
   return {

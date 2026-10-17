@@ -22,7 +22,8 @@ import { activeAgentNotesSendFailureMessage } from '@/lib/active-agent-note-send
 
 export type QuickLaunchAgentMenuItemsProps = {
   worktreeId: string
-  groupId: string
+  /** Split group receiving the tab; absent uses the workspace's focused group. */
+  groupId?: string
   /** Called after the tab is created so keyboard focus lands in the new xterm.
    *  Reuses the TabBar's existing double-rAF handoff — this component does
    *  not duplicate the focus logic. */
@@ -39,6 +40,8 @@ export type QuickLaunchAgentMenuItemsProps = {
   launchSource?: LaunchSource
   /** Called after a prompt is queued into the agent, or immediately for argv prompt launches. */
   onPromptDelivered?: () => void
+  /** Called as soon as the new tab exists, before any deferred terminal focus. */
+  onTabOpened?: (tabId: string) => void
   /** Given the launch's own delivery result while the prompt is still on its way. */
   onPromptHandedOff?: (delivered: Promise<unknown>) => void
   /** Nothing to send: e.g. every note is already on its way, so no agent is started. */
@@ -72,6 +75,7 @@ function QuickLaunchAgentMenuItemsInner({
   promptDelivery,
   launchSource,
   onPromptDelivered,
+  onTabOpened,
   onPromptHandedOff,
   disabled = false
 }: QuickLaunchAgentMenuItemsProps): React.JSX.Element | null {
@@ -107,11 +111,12 @@ function QuickLaunchAgentMenuItemsInner({
         focusIntent: captureNativeChatComposerFocusIntent(),
         agent,
         worktreeId,
-        groupId,
+        ...(groupId ? { groupId } : {}),
         ...(prompt !== undefined ? { prompt } : {}),
         ...(promptDelivery !== undefined ? { promptDelivery } : {}),
         ...(launchSource !== undefined ? { launchSource } : {}),
         ...(onPromptDelivered !== undefined ? { onPromptDelivered } : {}),
+        ...(onTabOpened !== undefined ? { onTabOpened } : {}),
         // Notes keep their text until it goes out, so the new chat's composer never gets a copy.
         ...(onPromptHandedOff ? { promptKeptByCaller: true as const } : {})
       })
@@ -158,6 +163,7 @@ function QuickLaunchAgentMenuItemsInner({
       promptDelivery,
       launchSource,
       onPromptDelivered,
+      onTabOpened,
       onPromptHandedOff,
       disabled
     ]

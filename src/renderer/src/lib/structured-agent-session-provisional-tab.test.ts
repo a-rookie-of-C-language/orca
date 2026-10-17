@@ -54,10 +54,12 @@ beforeEach(() => {
 
 describe('a provisional structured chat tab', () => {
   it('opens once this machine admits the chat, in the caller group, on the host it was sent to', async () => {
+    const onTabOpened = vi.fn()
     const launch = beginStructuredAgentSessionProvisionalLaunch({
       plan: planSettlingAs({ kind: 'structured', sessionId: 'claude_1' }),
       hooks: {},
       focusIntent: { request: mocks.requestFocus, cancel: mocks.cancelFocus },
+      onTabOpened,
       targetGroupId: 'group-2'
     })
 
@@ -72,6 +74,7 @@ describe('a provisional structured chat tab', () => {
       expect.objectContaining({ executionHostId: 'local', targetGroupId: 'group-2' })
     )
     expect(mocks.requestFocus).toHaveBeenCalledExactlyOnceWith('structured-agent-session-claude_1')
+    expect(onTabOpened).toHaveBeenCalledExactlyOnceWith('structured-agent-session-claude_1')
     expect(mocks.cancelFocus).not.toHaveBeenCalled()
   })
 })

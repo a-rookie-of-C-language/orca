@@ -27,6 +27,7 @@ export function launchStructuredAgentFromNewTab(args: {
   groupId?: string
   focusIntent?: NativeChatComposerFocusIntent
   beforeSurfaceOpen?: LaunchAgentInNewTabArgs['beforeSurfaceOpen']
+  onTabOpened?: LaunchAgentInNewTabArgs['onTabOpened']
   onHostDeclined?: () => StructuredLaunchTerminal
   openTerminal: (terminalPlan: AgentSessionLaunchPlan) => {
     promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
@@ -42,6 +43,7 @@ export function launchStructuredAgentFromNewTab(args: {
     ...(args.focusIntent ? { focusIntent: args.focusIntent } : {}),
     target: { worktreeId: args.worktreeId },
     ...(args.groupId ? { targetGroupId: args.groupId } : {}),
+    ...(args.onTabOpened ? { onTabOpened: args.onTabOpened } : {}),
     onHostDeclined: () => {
       if (args.onHostDeclined) {
         return args.onHostDeclined()
