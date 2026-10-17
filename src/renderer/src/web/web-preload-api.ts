@@ -55,13 +55,33 @@ import { createUpdaterApi } from './preload-api/web-updater-api'
 import { createWebWorkspacePortsApi } from './preload-api/web-workspace-ports-api'
 import { createWebWorkspaceSessionApi } from './preload-api/web-workspace-session-api'
 import { createWorktreesApi } from './preload-api/web-worktrees-api'
+import {
+  createTauriNativeAppApi,
+  createTauriNativeFilesystemDropApi,
+  createTauriNativeNotificationsApi,
+  createTauriNativePreloadApi,
+  createTauriNativePlatformApi,
+  createTauriNativeUiApi,
+  installTauriWindowDragBridge,
+  isTauriNativeHost
+} from './tauri-native-bridge'
 import { readStoredWebRuntimeEnvironment } from './web-runtime-environment'
 
 export function installWebPreloadApi(): void {
   webRuntimeState.activeEnvironment = readStoredWebRuntimeEnvironment()
   const webWindow = window as unknown as { __ORCA_WEB_CLIENT__?: boolean }
   webWindow.__ORCA_WEB_CLIENT__ = true
-  window.api = withFallback(createWebPreloadApi(), []) as PreloadApi
+  installTauriWindowDragBridge()
+  const api = createWebPreloadApi()
+  if (isTauriNativeHost()) {
+    const nativeApi = createTauriNativePreloadApi()
+    if (nativeApi.shell) {
+      api.shell = nativeApi.shell
+    }
+    Object.assign(api, nativeApi)
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: withFallback preserves the PreloadApi shape while filling omitted optional namespaces at runtime.
+  window.api = withFallback(api, []) as PreloadApi
 }
 
 function createWebPreloadApi(): Partial<PreloadApi> {
@@ -72,9 +92,14 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ...createWebWorkspacePortsApi(),
     ...createWebOrcaProfilesApi(),
     ...createWebE2EApi(),
+    ...createTauriNativePlatformApi(),
+    ...createTauriNativeAppApi(),
     ...createWebSettingsApi(),
     keybindings: createWebKeybindingsApi(),
-    ui: createWebUiApi(),
+    ui: {
+      ...createWebUiApi(),
+      ...createTauriNativeUiApi()
+    },
     ...createWebDiagnosticsApi(),
     ...createWebWorkspaceSessionApi(),
     ...createWebOnboardingApi(),
@@ -84,7 +109,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     runtimeEnvironments: createRuntimeEnvironmentsApi(),
     repos: createReposApi(),
     worktrees: createWorktreesApi(),
-    fs: createFileApi(),
+    fs: {
+      ...createFileApi(),
+      ...createTauriNativeFilesystemDropApi()
+    },
     git: createGitApi(),
     browser: createBrowserApi(),
     emulator: createEmulatorApi(),
@@ -108,7 +136,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     },
     aiVault: createWebAiVaultApi(),
     preflight: createPreflightApi(),
-    notifications: createNotificationsApi(),
+    notifications: {
+      ...createNotificationsApi(),
+      ...createTauriNativeNotificationsApi()
+    },
     rateLimits: createRateLimitsApi(),
     opencodeGoCredentials: createOpenCodeGoCredentialsApi(),
     minimaxCredentials: createMiniMaxCredentialsApi(),

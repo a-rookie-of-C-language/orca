@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-platform-info"
+description = "Enables the poc_platform_info command without any pre-configured scope."
+commands.allow = ["poc_platform_info"]
+
+[[permission]]
+identifier = "deny-poc-platform-info"
+description = "Denies the poc_platform_info command without any pre-configured scope."
+commands.deny = ["poc_platform_info"]

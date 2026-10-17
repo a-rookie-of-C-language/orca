@@ -4,7 +4,12 @@ export type DesktopWindowChromeInput = {
 }
 
 export function isPairedWebClientWindow(): boolean {
-  return (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ === true
+  type NativeGlobal = typeof globalThis & {
+    __ORCA_WEB_CLIENT__?: boolean
+    __TAURI_INTERNALS__?: unknown
+  }
+  const nativeGlobal: NativeGlobal = globalThis
+  return nativeGlobal.__ORCA_WEB_CLIENT__ === true && !nativeGlobal.__TAURI_INTERNALS__
 }
 
 export function isLocalWindowsDesktopClient(): boolean {

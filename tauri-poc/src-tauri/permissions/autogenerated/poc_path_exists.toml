@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-path-exists"
+description = "Enables the poc_path_exists command without any pre-configured scope."
+commands.allow = ["poc_path_exists"]
+
+[[permission]]
+identifier = "deny-poc-path-exists"
+description = "Denies the poc_path_exists command without any pre-configured scope."
+commands.deny = ["poc_path_exists"]

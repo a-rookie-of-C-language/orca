@@ -92,34 +92,47 @@ export function clearPairingInputFromAddressBar(): void {
 
 function decodePairingPayload(base64url: string): WebPairingOffer | null {
   const json = new TextDecoder().decode(base64UrlToBytes(base64url))
-  const parsed = JSON.parse(json) as Partial<WebPairingOffer>
+  const parsed: unknown = JSON.parse(json)
+  if (!isRecord(parsed)) {
+    return null
+  }
+  const payload = parsed
+  const deviceToken =
+    typeof payload.deviceToken === 'string'
+      ? payload.deviceToken
+      : typeof payload.device_token === 'string'
+        ? payload.device_token
+        : null
   if (
-    parsed.v !== PAIRING_OFFER_VERSION ||
-    typeof parsed.endpoint !== 'string' ||
-    parsed.endpoint.length === 0 ||
-    typeof parsed.deviceToken !== 'string' ||
-    parsed.deviceToken.length === 0 ||
-    typeof parsed.publicKeyB64 !== 'string' ||
-    parsed.publicKeyB64.length === 0
+    payload.v !== PAIRING_OFFER_VERSION ||
+    typeof payload.endpoint !== 'string' ||
+    payload.endpoint.length === 0 ||
+    !deviceToken ||
+    typeof payload.publicKeyB64 !== 'string' ||
+    payload.publicKeyB64.length === 0
   ) {
     return null
   }
-  const scope = parseWebPairingScope(parsed.scope)
+  const scope = parseWebPairingScope(payload.scope)
   const pairedDeviceId =
-    typeof parsed.pairedDeviceId === 'string' && parsed.pairedDeviceId.length > 0
-      ? parsed.pairedDeviceId
+    typeof payload.pairedDeviceId === 'string' && payload.pairedDeviceId.length > 0
+      ? payload.pairedDeviceId
       : null
   // Why safeParse: a descriptor this build cannot read is dropped, never a reason to refuse pairing.
-  const hostDescriptor = RuntimeHostDescriptorSchema.safeParse(parsed.hostDescriptor).data
+  const hostDescriptor = RuntimeHostDescriptorSchema.safeParse(payload.hostDescriptor).data
   return {
     v: PAIRING_OFFER_VERSION,
-    endpoint: normalizeWebSocketEndpoint(parsed.endpoint),
-    deviceToken: parsed.deviceToken,
-    publicKeyB64: parsed.publicKeyB64,
+    endpoint: normalizeWebSocketEndpoint(payload.endpoint),
+    deviceToken,
+    publicKeyB64: payload.publicKeyB64,
     ...(pairedDeviceId ? { pairedDeviceId } : {}),
     ...(scope ? { scope } : {}),
     ...(hostDescriptor ? { hostDescriptor } : {})
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function parseWebPairingScope(value: unknown): DeviceScope | null {

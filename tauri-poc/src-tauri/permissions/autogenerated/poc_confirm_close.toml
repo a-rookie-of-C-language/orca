@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-confirm-close"
+description = "Enables the poc_confirm_close command without any pre-configured scope."
+commands.allow = ["poc_confirm_close"]
+
+[[permission]]
+identifier = "deny-poc-confirm-close"
+description = "Denies the poc_confirm_close command without any pre-configured scope."
+commands.deny = ["poc_confirm_close"]

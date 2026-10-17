@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-validate-dropped-paths"
+description = "Enables the poc_validate_dropped_paths command without any pre-configured scope."
+commands.allow = ["poc_validate_dropped_paths"]
+
+[[permission]]
+identifier = "deny-poc-validate-dropped-paths"
+description = "Denies the poc_validate_dropped_paths command without any pre-configured scope."
+commands.deny = ["poc_validate_dropped_paths"]

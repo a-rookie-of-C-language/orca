@@ -1,0 +1,43 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Native capabilities used by the Orca Tauri feasibility shell.",
+  "windows": ["main"],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*",
+      "http://localhost:*",
+      "https://*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "opener:default",
+    "opener:allow-open-path",
+    "dialog:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "allow-poc-host-info",
+    "allow-poc-path-exists",
+    "allow-poc-paths-exist",
+    "allow-poc-copy-file",
+    "allow-poc-read-file-data-url",
+    "allow-poc-platform-info",
+    "allow-poc-app-identity",
+    "allow-poc-is-maximized",
+    "allow-poc-minimize",
+    "allow-poc-toggle-maximize",
+    "allow-poc-is-fullscreen",
+    "allow-poc-set-fullscreen",
+    "allow-poc-set-zoom",
+    "allow-poc-get-zoom",
+    "allow-poc-set-focus",
+    "allow-poc-request-close",
+    "allow-poc-confirm-close",
+    "allow-poc-popup-menu",
+    "allow-poc-emit-zoom",
+    "allow-poc-notification-sound-path",
+    "allow-poc-validate-dropped-paths"
+  ]
+}
