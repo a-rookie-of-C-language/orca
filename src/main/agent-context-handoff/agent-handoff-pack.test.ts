@@ -78,6 +78,30 @@ describe('shapeHandoffMessages', () => {
     expect(shaped.truncated).toBe(true)
   })
 
+  it('does not duplicate the opening ask when it is already in the tail', () => {
+    const messages = [message('user', 'goal'), message('assistant', 'done')]
+    const shaped = shapeHandoffMessages(messages, 'summary', 5, 1000)
+    expect(shaped.messages).toEqual(messages)
+    expect(shaped.truncated).toBe(false)
+  })
+
+  it('keeps the opening ask while shedding the tail under a char budget', () => {
+    const messages = [message('user', 'goal')]
+    for (let i = 0; i < 6; i += 1) {
+      messages.push(message('assistant', `reply ${i} with padding text`))
+    }
+    const shaped = shapeHandoffMessages(messages, 'summary', 20, 40)
+    expect(shaped.messages[0]).toEqual(message('user', 'goal'))
+    expect(shaped.truncated).toBe(true)
+  })
+
+  it('truncates a single oversized message instead of dropping it', () => {
+    const shaped = shapeHandoffMessages([message('user', 'goals'.repeat(100))], 'full', 20, 10)
+    expect(shaped.messages).toHaveLength(1)
+    expect(shaped.messages[0]?.text).toBe(`${'goals'.repeat(100).slice(0, 10)}...`)
+    expect(shaped.truncated).toBe(true)
+  })
+
   it('handles an empty transcript', () => {
     expect(shapeHandoffMessages([], 'summary')).toEqual({ messages: [], truncated: false })
   })
