@@ -3,6 +3,7 @@ import { translate } from '@/i18n/i18n'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '../store'
 import { resolveWorkspaceMode, workspaceModeLayoutBundle } from './workspace-mode'
+import { normalizeWorktreeChatSide } from '../store/slices/tabs/chat-panel-layout'
 
 /**
  * Work/Code mode switch. Work keeps sessions left with chat center; Code keeps
@@ -17,7 +18,10 @@ export function SidebarLayoutToggle(): React.JSX.Element {
   const setRightSidebarTab = useAppStore((s) => s.setRightSidebarTab)
   const isCode = mode === 'code'
   const label = isCode
-    ? translate('app.sidebarLayout.switchToWork', 'Switch to Work mode (sessions left, chat center)')
+    ? translate(
+        'app.sidebarLayout.switchToWork',
+        'Switch to Work mode (sessions left, chat center)'
+      )
     : translate('app.sidebarLayout.switchToCode', 'Switch to Code mode (Explorer left, chat right)')
 
   return (
@@ -29,12 +33,31 @@ export function SidebarLayoutToggle(): React.JSX.Element {
           aria-label={label}
           aria-pressed={isCode}
           onClick={() => {
-            const next = workspaceModeLayoutBundle(isCode ? 'work' : 'code')
+            const nextMode = isCode ? 'work' : 'code'
+            const next = workspaceModeLayoutBundle(nextMode)
             setSidebarOpen(next.sidebarOpen)
             setRightSidebarTab(next.rightSidebarTab)
             setRightSidebarOpen(next.rightSidebarOpen)
+            // Why: a mode switch reorders existing columns so Code keeps
+            // editor center with chat right instead of leaving chat left.
+            useAppStore.setState((state) => {
+              let changed = false
+              const layoutByWorktree = { ...state.layoutByWorktree }
+              for (const worktreeId of Object.keys(layoutByWorktree)) {
+                const normalized = normalizeWorktreeChatSide(
+                  layoutByWorktree[worktreeId],
+                  state.groupsByWorktree[worktreeId],
+                  nextMode
+                )
+                if (normalized && normalized !== layoutByWorktree[worktreeId]) {
+                  layoutByWorktree[worktreeId] = normalized
+                  changed = true
+                }
+              }
+              return changed ? { layoutByWorktree } : state
+            })
             void updateSettings({
-              workspaceMode: isCode ? 'work' : 'code',
+              workspaceMode: nextMode,
               toolsSidebarPosition: next.toolsSidebarPosition
             })
           }}

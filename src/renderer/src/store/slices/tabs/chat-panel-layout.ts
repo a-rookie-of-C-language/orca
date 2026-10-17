@@ -1,4 +1,5 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import type { TabGroup, TabGroupLayoutNode } from '../../../../../shared/tab-types'
 import type { TabsSlice } from './tabs-slice-contract'
 import { insertSplitGroup } from './tabs-group-actions'
 import { sanitizeRecentTabIds } from '../tab-group-state'
@@ -8,6 +9,70 @@ type ChatPanelLayout = Pick<
   TabsSlice,
   'unifiedTabsByWorktree' | 'groupsByWorktree' | 'activeGroupIdByWorktree' | 'layoutByWorktree'
 >
+
+export type ChatPanelWorkspaceMode = 'work' | 'code'
+
+/** Code keeps editor tabs center and chat right; Work keeps chat first. */
+export function chatPanelSideForMode(mode?: ChatPanelWorkspaceMode): 'first' | 'second' {
+  return mode === 'code' ? 'second' : 'first'
+}
+
+function layoutHoldsChat(node: TabGroupLayoutNode, chatGroupIds: Set<string>): boolean {
+  if (node.type === 'leaf') {
+    return chatGroupIds.has(node.groupId)
+  }
+  return layoutHoldsChat(node.first, chatGroupIds) || layoutHoldsChat(node.second, chatGroupIds)
+}
+
+/** Swaps horizontal splits so the chat subtree sits on `side`; vertical splits keep order. */
+export function normalizeLayoutChatSide(
+  root: TabGroupLayoutNode,
+  chatGroupIds: Set<string>,
+  side: 'first' | 'second'
+): TabGroupLayoutNode {
+  if (root.type === 'leaf') {
+    return root
+  }
+  const first = normalizeLayoutChatSide(root.first, chatGroupIds, side)
+  const second = normalizeLayoutChatSide(root.second, chatGroupIds, side)
+  if (root.direction !== 'horizontal') {
+    return first === root.first && second === root.second ? root : { ...root, first, second }
+  }
+  const firstHasChat = layoutHoldsChat(first, chatGroupIds)
+  const secondHasChat = layoutHoldsChat(second, chatGroupIds)
+  if (firstHasChat === secondHasChat) {
+    return first === root.first && second === root.second ? root : { ...root, first, second }
+  }
+  const chatFirst = firstHasChat && !secondHasChat
+  const needsSwap = side === 'second' ? chatFirst : !chatFirst
+  if (!needsSwap) {
+    return first === root.first && second === root.second ? root : { ...root, first, second }
+  }
+  // Why: swapping columns mirrors the divider, so the content column keeps its width.
+  return {
+    ...root,
+    first: second,
+    second: first,
+    ...(typeof root.ratio === 'number' ? { ratio: 1 - root.ratio } : {})
+  }
+}
+
+export function normalizeWorktreeChatSide(
+  layout: TabGroupLayoutNode | undefined,
+  groups: readonly TabGroup[] | undefined,
+  mode?: ChatPanelWorkspaceMode
+): TabGroupLayoutNode | undefined {
+  if (!layout || mode === undefined) {
+    return layout
+  }
+  const chatGroupIds = new Set(
+    (groups ?? []).filter((group) => group.isChatPanel).map((group) => group.id)
+  )
+  if (chatGroupIds.size === 0) {
+    return layout
+  }
+  return normalizeLayoutChatSide(layout, chatGroupIds, chatPanelSideForMode(mode))
+}
 
 /**
  * Both layout modes pin the center chat column: its last chat can be neither
@@ -28,9 +93,11 @@ export function shouldPinChatPanelColumn(
 /** Separate chat chrome without changing session identities or the focused content. */
 export function applyDefaultChatPanelLayout(
   state: ChatPanelLayout,
-  worktreeId: string
+  worktreeId: string,
+  workspaceMode?: ChatPanelWorkspaceMode
 ): ChatPanelLayout {
   let next = state
+  const chatSide = chatPanelSideForMode(workspaceMode)
   for (const group of state.groupsByWorktree[worktreeId] ?? []) {
     const tabs = next.unifiedTabsByWorktree[worktreeId] ?? []
     const chatIds = new Set(
@@ -66,7 +133,7 @@ export function applyDefaultChatPanelLayout(
       worktreeId,
       {
         sourceGroupId: group.id,
-        splitDirection: 'left',
+        splitDirection: chatSide === 'second' ? 'right' : 'left',
         activate: next.activeGroupIdByWorktree[worktreeId] === group.id && activeIsChat
       },
       {
@@ -106,6 +173,19 @@ export function applyDefaultChatPanelLayout(
               }
             : item
         )
+      }
+    }
+  }
+  if (workspaceMode !== undefined) {
+    const normalized = normalizeWorktreeChatSide(
+      next.layoutByWorktree[worktreeId],
+      next.groupsByWorktree[worktreeId],
+      workspaceMode
+    )
+    if (normalized && normalized !== next.layoutByWorktree[worktreeId]) {
+      next = {
+        ...next,
+        layoutByWorktree: { ...next.layoutByWorktree, [worktreeId]: normalized }
       }
     }
   }

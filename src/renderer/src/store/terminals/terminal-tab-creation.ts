@@ -254,7 +254,8 @@ export function createTerminalTabCreationActions(
               [worktreeId]: s.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
             }
           },
-          worktreeId
+          worktreeId,
+          s.settings?.workspaceMode
         )
         return {
           ...orphanCleanupPatch,

@@ -45,9 +45,14 @@ export function createTabsCreateActions(
           contentType === 'agent-session' && !init?.targetGroupId && !init?.split
             ? current.groupsByWorktree[worktreeId]?.find((group) => group.isChatPanel)
             : undefined
+        // Why: Code keeps chat right, so a file opened from the chat column splits left into the center.
+        const isCodeMode = current.settings?.workspaceMode === 'code'
         const implicitSplit =
           needsContentGroup && !contentGroup
-            ? { sourceGroupId: requestedGroup.id, splitDirection: 'right' as const }
+            ? {
+                sourceGroupId: requestedGroup.id,
+                splitDirection: isCodeMode ? ('left' as const) : ('right' as const)
+              }
             : undefined
         const split = init?.split ?? implicitSplit
         const createdSplitGroupId =
@@ -172,7 +177,8 @@ export function createTabsCreateActions(
               }
             }
           },
-          worktreeId
+          worktreeId,
+          current.settings?.workspaceMode
         )
       })
       if (init?.recordInteraction !== false) {
@@ -253,7 +259,8 @@ export function createTabsCreateActions(
               layoutByWorktree: nextLayoutByWorktree,
               activeGroupIdByWorktree: nextActiveGroupIdByWorktree
             },
-            worktreeId
+            worktreeId,
+            state.settings?.workspaceMode
           ),
           ...(shouldActivate && state.activeWorktreeId === worktreeId
             ? buildActiveSurfacePatch(
