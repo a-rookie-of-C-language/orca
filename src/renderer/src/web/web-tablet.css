@@ -1,0 +1,20 @@
+/* Tablet web client: touch-first spacing only, no color or type changes. */
+.web-tablet .titlebar,
+.web-tablet .titlebar-left {
+  height: 44px;
+  min-height: 44px;
+}
+
+/* Wider split hit area for drag on touch; visible line unchanged. */
+.web-tablet .tab-group-split-resize-handle.is-vertical {
+  width: 12px;
+}
+
+.web-tablet .tab-group-split-resize-handle.is-horizontal {
+  height: 12px;
+}
+
+/* Keep touch scrolling native inside panes. */
+.web-tablet .app-layout {
+  touch-action: manipulation;
+}

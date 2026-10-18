@@ -71,6 +71,14 @@ describe('web pairing input', () => {
     expect(parseWebPairingInput(`orca://pair-extra?code=${encodeOffer()}`)).toBeNull()
   })
 
+  // Why: iPad autocapitalizes the first letter of an untyped field. The pairing
+  // input must set autoCapitalize="none" or a pad paste corrupts the payload.
+  it('rejects a payload whose first character was autocapitalized', () => {
+    const code = encodeOffer()
+    const capitalized = `${code[0]?.toUpperCase()}${code.slice(1)}`
+    expect(parseWebPairingInput(`orca://pair?code=${capitalized}`)).toBeNull()
+  })
+
   it('auto-saves scoped runtime offers during web startup', () => {
     const input = `orca://pair?code=${encodeOffer({ scope: 'runtime' })}`
     expect(

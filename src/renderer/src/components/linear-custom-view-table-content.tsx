@@ -143,7 +143,7 @@ export function LinearCustomViewTableContent({
                 ? linearProjectDateLabel(view.updatedAt)
                 : translate('auto.components.linear.project.view.surfaces.20b9d09b7d', 'Unknown')}
             </span>
-            <div className="flex justify-end md:opacity-0 md:transition-opacity md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100">
+            <div className="flex justify-end md:can-hover:opacity-0 md:transition-opacity md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

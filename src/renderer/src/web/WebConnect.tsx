@@ -114,7 +114,8 @@ export default function WebConnect({
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-6 text-foreground">
-      <div className="flex w-full max-w-[520px] flex-col gap-5 rounded-lg border border-border bg-card p-5 shadow-sm">
+      {/* Why: landscape pads pair from a wide canvas where a 520px phone card strands most of the screen. */}
+      <div className="flex w-full max-w-[520px] flex-col gap-5 rounded-lg border border-border bg-card p-5 shadow-sm landscape:max-w-[46rem] landscape:grid-cols-[1.1fr_1fr] landscape:grid-flow-col landscape:items-start landscape:gap-x-8 md:p-6">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted">
             <Server size={18} aria-hidden />
@@ -154,6 +155,9 @@ export default function WebConnect({
             onChange={(event) => setPairingCode(event.target.value)}
             placeholder={translate('auto.web.WebConnect.27393856e4', 'orca://pair?code=...')}
             autoComplete="off"
+            // Why: the payload is case-sensitive base64url; iPadOS autocorrects a leading letter otherwise.
+            autoCapitalize="none"
+            autoCorrect="off"
             spellCheck={false}
           />
         </div>
@@ -177,7 +181,7 @@ export default function WebConnect({
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button type="button" variant="outline" onClick={clear} className="gap-2">
+          <Button type="button" variant="outline" onClick={clear}>
             <Trash2 size={15} aria-hidden />
             {translate('auto.web.WebConnect.2cf9e5a294', 'Clear saved server')}
           </Button>
@@ -185,7 +189,6 @@ export default function WebConnect({
             type="button"
             onClick={() => void connect()}
             disabled={connecting || !parsedOffer}
-            className="gap-2"
           >
             {connecting ? (
               <Loader2 size={15} className="animate-spin" aria-hidden />

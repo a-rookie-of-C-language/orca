@@ -106,4 +106,13 @@ describe('TaskPageJiraBoard', () => {
     expect(markup).toContain('draggable="false"')
     expect(markup).toContain('aria-disabled="true"')
   })
+
+  // Why: hover-only reveal hid the row actions on touch devices, where hover never fires.
+  it('reveals card actions on hover-capable pointers only', () => {
+    const markup = renderBoard([issue('STA-1', todo)])
+    expect(markup).toContain('md:can-hover:opacity-0')
+    expect(markup).toContain('md:group-hover/card:opacity-100')
+    expect(markup).toContain('md:group-focus-within/card:opacity-100')
+    expect(markup).not.toContain('md:opacity-0')
+  })
 })

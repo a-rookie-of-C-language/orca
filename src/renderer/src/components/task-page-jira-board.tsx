@@ -211,7 +211,7 @@ export function TaskPageJiraBoard({
                           {issue.title}
                         </h3>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1 md:opacity-0 md:transition-opacity md:group-hover/card:opacity-100 md:group-focus-within/card:opacity-100">
+                      <div className="flex shrink-0 items-center gap-1 md:can-hover:opacity-0 md:transition-opacity md:group-hover/card:opacity-100 md:group-focus-within/card:opacity-100">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button

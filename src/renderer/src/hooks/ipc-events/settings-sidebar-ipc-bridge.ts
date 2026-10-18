@@ -1,20 +1,11 @@
 import { canShowRightSidebarForView } from '@/lib/right-sidebar-visibility'
+import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { showTerminalShortcutCaptureNotification } from '@/lib/terminal-shortcut-capture-notification'
 import { TOGGLE_FLOATING_TERMINAL_EVENT } from '@/lib/floating-terminal'
 import { subscribeToUnpairedDeviceAuthNotification } from '../unpaired-device-auth-notification'
 import { translate } from '@/i18n/i18n'
 import { toast } from 'sonner'
 import { useAppStore } from '../../store'
-
-function getShortcutPlatform(): NodeJS.Platform {
-  if (navigator.userAgent.includes('Mac')) {
-    return 'darwin'
-  }
-  if (navigator.userAgent.includes('Windows')) {
-    return 'win32'
-  }
-  return 'linux'
-}
 
 export function registerSettingsAndSidebarIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(

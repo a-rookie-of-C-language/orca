@@ -14,6 +14,7 @@ import { runWorkspacePortScanForTarget } from './workspace-port-scan-client'
 import { browserUrlForPort } from './workspace-port-urls'
 import { createBrowserUuid } from './browser-uuid'
 import { BROWSER_SCREENCAST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import { getShortcutPlatform } from './shortcut-platform'
 import { RUNTIME_BROWSER_UNAVAILABLE_MESSAGE } from './client-creation-action-policy'
 
 export { addressForPort } from './workspace-port-urls'
@@ -58,7 +59,7 @@ export function shouldOpenWorkspacePortInOrcaBrowser(
 }
 
 function isMacShortcutPlatform(): boolean {
-  return typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
+  return getShortcutPlatform() === 'darwin'
 }
 
 export function getPortSystemBrowserHint(isMac: boolean = isMacShortcutPlatform()): string {

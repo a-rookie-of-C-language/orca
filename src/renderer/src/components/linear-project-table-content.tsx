@@ -195,7 +195,7 @@ export function LinearProjectTableContent({
                     ? `${progress}%`
                     : '-'}
             </span>
-            <div className="flex items-center justify-end gap-1 md:opacity-0 md:transition-opacity md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100">
+            <div className="flex items-center justify-end gap-1 md:can-hover:opacity-0 md:transition-opacity md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100">
               {onUseProjectIssues ? (
                 <Tooltip>
                   <TooltipTrigger asChild>

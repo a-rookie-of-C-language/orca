@@ -1,10 +1,13 @@
 import '../assets/main.css'
 
+import './web-tablet.css'
+
 import { Suspense, useMemo, useState } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 import ReactDOM from 'react-dom/client'
 import { useTranslation } from 'react-i18next'
 import WebConnect from './WebConnect'
+import { WebTabletShell } from './web-tablet-shell'
 import { RecoverableRenderErrorBoundary } from '../components/error-boundaries/RecoverableRenderErrorBoundary'
 import {
   clearPairingInputFromAddressBar,
@@ -59,24 +62,27 @@ function WebRoot(): React.JSX.Element {
   })
 
   if (!hasEnvironment) {
+    // Why: the shell owns the html-level tablet class, so pairing is touch-styled too.
     return (
-      <WebConnect
-        initialPairingInput={
-          startupDecision.kind === 'show-connect' ? startupDecision.initialPairingInput : null
-        }
-        onConnected={() => setHasEnvironment(true)}
-      />
+      <WebTabletShell>
+        <WebConnect
+          initialPairingInput={
+            startupDecision.kind === 'show-connect' ? startupDecision.initialPairingInput : null
+          }
+          onConnected={() => setHasEnvironment(true)}
+        />
+      </WebTabletShell>
     )
   }
 
   installWebPreloadApi()
   return (
-    <>
+    <WebTabletShell>
       <Suspense fallback={<div className="min-h-dvh bg-background" />}>
         <App />
       </Suspense>
       <WebPairingSecurityNotice />
-    </>
+    </WebTabletShell>
   )
 }
 
