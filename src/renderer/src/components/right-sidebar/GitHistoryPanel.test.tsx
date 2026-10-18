@@ -101,4 +101,49 @@ describe('GitHistoryPanel', () => {
     expect(markup).not.toContain('title="v1.0.0"')
     expect(markup).not.toMatch(/\stitle=/)
   })
+
+  it('offers a full load when branch refs exceed the safe limit', () => {
+    const result = { ...makeHistoryResult(), scope: 'all' as const, refLimitExceeded: true }
+
+    const markup = renderToStaticMarkup(
+      <GitHistoryPanel
+        state={{ status: 'ready', result }}
+        collapsed={false}
+        onToggle={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenCommit={vi.fn()}
+        scope="all"
+        onLoadAllRefs={vi.fn()}
+        onShowRecentRefs={vi.fn()}
+      />
+    )
+
+    expect(markup).toContain('200')
+    expect(markup).toContain('<button')
+  })
+
+  it('offers to collapse back after a forced full load', () => {
+    const result = {
+      ...makeHistoryResult(),
+      scope: 'all' as const,
+      exhaustiveRefs: true,
+      totalRefs: 12007
+    }
+
+    const markup = renderToStaticMarkup(
+      <GitHistoryPanel
+        state={{ status: 'ready', result }}
+        collapsed={false}
+        onToggle={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenCommit={vi.fn()}
+        scope="all"
+        onLoadAllRefs={vi.fn()}
+        onShowRecentRefs={vi.fn()}
+      />
+    )
+
+    expect(markup).toContain('12007')
+    expect(markup).toContain('<button')
+  })
 })

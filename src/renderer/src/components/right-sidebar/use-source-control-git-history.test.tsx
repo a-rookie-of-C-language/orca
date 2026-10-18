@@ -389,4 +389,20 @@ describe('useSourceControlGitHistory stale completion', () => {
     })
     expect(mocks.getRuntimeGitHistory).not.toHaveBeenCalled()
   })
+
+  it('requests every ref after the user opts into a full load', async () => {
+    await mount()
+    await flush()
+    expect(mocks.getRuntimeGitHistory.mock.calls[0]?.[1]).toMatchObject({ scope: 'all' })
+    expect(mocks.getRuntimeGitHistory.mock.calls[0]?.[1]).not.toHaveProperty('forceAllRefs')
+    await act(async () => {
+      latest?.setGitHistoryExhaustive(true)
+    })
+    await flush()
+    expect(mocks.getRuntimeGitHistory).toHaveBeenCalledTimes(2)
+    expect(mocks.getRuntimeGitHistory.mock.calls[1]?.[1]).toMatchObject({
+      scope: 'all',
+      forceAllRefs: true
+    })
+  })
 })

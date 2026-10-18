@@ -173,6 +173,7 @@ export function registerFilesystemGitStatusHandlers(context: FilesystemHandlerCo
         baseRef: args.baseRef,
         includeRelatedRefs: args.includeRelatedRefs,
         scope: args.scope,
+        forceAllRefs: args.forceAllRefs,
         cursor: args.cursor
       }
       requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))

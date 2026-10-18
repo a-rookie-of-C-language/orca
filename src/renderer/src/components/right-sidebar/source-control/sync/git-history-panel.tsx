@@ -45,7 +45,9 @@ export function GitHistoryPanel({
   onCommitAction,
   onLoadMore,
   scope = 'all',
-  onScopeChange
+  onScopeChange,
+  onLoadAllRefs,
+  onShowRecentRefs
 }: GitHistoryListActions & {
   state: GitHistoryPanelState
   collapsed: boolean
@@ -53,6 +55,8 @@ export function GitHistoryPanel({
   onRefresh: () => void
   scope?: GitHistoryScope
   onScopeChange?: (scope: GitHistoryScope) => void
+  onLoadAllRefs?: () => void
+  onShowRecentRefs?: () => void
 }): React.JSX.Element | null {
   const result = state.result
   const viewModels = useMemo(() => {
@@ -277,14 +281,56 @@ export function GitHistoryPanel({
       )}
       {!collapsed && result && viewModels.length > 0 && (
         <>
-          {scope === 'all' && result.scope !== 'all' && onScopeChange && !loading && (
+          {scope === 'all' && (result.refLimitExceeded || result.exhaustiveRefs) && !loading && (
             <p role="status" className="px-3 py-1 text-xs text-muted-foreground">
-              {translate(
-                'source-control.history.unsupported-scope',
-                'Restart Orca or update the execution host to display all branches.'
+              {result.exhaustiveRefs ? (
+                <>
+                  {translate(
+                    'source-control.history.all-branches-loaded',
+                    'Showing all {{count}} branches — loading may be slow.',
+                    { count: result.totalRefs ?? 0 }
+                  )}{' '}
+                  {onShowRecentRefs && (
+                    <button
+                      type="button"
+                      className="underline underline-offset-2 hover:text-foreground"
+                      onClick={onShowRecentRefs}
+                    >
+                      {translate('source-control.history.show-recent-branches', 'Show recent only')}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {translate(
+                    'source-control.history.too-many-branches',
+                    'Too many branches — showing the 200 most recently active.'
+                  )}{' '}
+                  {onLoadAllRefs && (
+                    <button
+                      type="button"
+                      className="underline underline-offset-2 hover:text-foreground"
+                      onClick={onLoadAllRefs}
+                    >
+                      {translate('source-control.history.load-all-branches', 'Load all anyway')}
+                    </button>
+                  )}
+                </>
               )}
             </p>
           )}
+          {scope === 'all' &&
+            !result.refLimitExceeded &&
+            result.scope !== 'all' &&
+            onScopeChange &&
+            !loading && (
+              <p role="status" className="px-3 py-1 text-xs text-muted-foreground">
+                {translate(
+                  'source-control.history.unsupported-scope',
+                  'Restart Orca or update the execution host to display all branches.'
+                )}
+              </p>
+            )}
           {state.status === 'error' && (
             <p role="alert" className="px-3 py-1 text-xs text-destructive">
               {state.error}

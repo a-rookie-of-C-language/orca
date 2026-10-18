@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { GIT_HISTORY_MAX_REVISIONS } from '../git-history-types'
+import { GIT_HISTORY_HARD_REF_LIMIT } from '../git-history-types'
 import { OptionalGitAdmissionTier } from './git-admission-tier-params'
 import { OptionalTuiAgent } from './worktree-params'
 
@@ -81,9 +81,10 @@ export const GitHistory = WorktreeSelector.extend({
   baseRef: z.string().nullable().optional(),
   includeRelatedRefs: z.boolean().optional(),
   scope: z.enum(['all', 'current']).optional(),
+  forceAllRefs: z.boolean().optional(),
   cursor: z
     .object({
-      revisions: z.array(FullGitObjectId).min(1).max(GIT_HISTORY_MAX_REVISIONS),
+      revisions: z.array(FullGitObjectId).min(1).max(GIT_HISTORY_HARD_REF_LIMIT),
       offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
       order: z.literal('date').optional()
     })

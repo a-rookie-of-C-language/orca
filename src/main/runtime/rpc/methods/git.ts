@@ -85,6 +85,7 @@ export const GIT_METHODS = [
         ...(params.includeRelatedRefs === undefined
           ? {}
           : { includeRelatedRefs: params.includeRelatedRefs }),
+        ...(params.forceAllRefs === undefined ? {} : { forceAllRefs: params.forceAllRefs }),
         ...(params.cursor === undefined ? {} : { cursor: params.cursor })
       })
   }),

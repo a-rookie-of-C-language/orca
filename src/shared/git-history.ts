@@ -6,13 +6,14 @@ import {
 } from './git-history-log-parser'
 import {
   GIT_HISTORY_DEFAULT_LIMIT,
+  GIT_HISTORY_HARD_REF_LIMIT,
   GIT_HISTORY_MAX_LIMIT,
-  GIT_HISTORY_MAX_REVISIONS,
   type GitHistoryExecutor,
   type GitHistoryItemRef,
   type GitHistoryOptions,
   type GitHistoryResult
 } from './git-history-types'
+import { resolveHistoryRevisions } from './git-history-refs'
 
 export type {
   GitHistoryExecutor,
@@ -178,7 +179,7 @@ export async function loadGitHistoryFromExecutor(
     if (
       !Array.isArray(revisions) ||
       revisions.length < 1 ||
-      revisions.length > GIT_HISTORY_MAX_REVISIONS ||
+      revisions.length > GIT_HISTORY_HARD_REF_LIMIT ||
       revisions.some((revision) => !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(revision)) ||
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
@@ -214,27 +215,16 @@ export async function loadGitHistoryFromExecutor(
       ? rawBaseRef
       : undefined
 
-  let branchRevisions: string[] = []
-  if (options.scope === 'all') {
-    const { stdout } = await git(
-      [
-        'for-each-ref',
-        `--count=${GIT_HISTORY_MAX_REVISIONS + 1}`,
-        '--format=%(objectname)',
-        'refs/heads/',
-        'refs/remotes/'
-      ],
-      cwd
-    )
-    branchRevisions = stdout.trim().split(/\r?\n/).filter(Boolean)
-    if (branchRevisions.length > GIT_HISTORY_MAX_REVISIONS) {
-      throw new Error('Too many branch refs to display safely. Select Current branch.')
-    }
-  }
+  const resolved = await resolveHistoryRevisions(
+    git,
+    cwd,
+    options.scope,
+    options.forceAllRefs === true
+  )
   const historyRevisions = [
     ...new Set([
       headOid,
-      ...branchRevisions,
+      ...resolved.revisions,
       ...(options.scope !== 'current' && options.includeRelatedRefs
         ? [remoteRef?.revision, baseRef?.revision].filter((revision): revision is string =>
             Boolean(revision)
@@ -242,7 +232,7 @@ export async function loadGitHistoryFromExecutor(
         : [])
     ])
   ]
-  if (historyRevisions.length > GIT_HISTORY_MAX_REVISIONS) {
+  if (historyRevisions.length > GIT_HISTORY_HARD_REF_LIMIT) {
     throw new Error('Too many branch refs to display safely. Select Current branch.')
   }
 
@@ -273,6 +263,9 @@ export async function loadGitHistoryFromExecutor(
   return {
     ...page,
     ...(options.scope ? { scope: options.scope } : {}),
+    ...(resolved.refLimitExceeded ? { refLimitExceeded: true } : {}),
+    ...(resolved.totalRefs === undefined ? {} : { totalRefs: resolved.totalRefs }),
+    ...(resolved.exhaustiveRefs ? { exhaustiveRefs: true } : {}),
     currentRef,
     remoteRef,
     baseRef,

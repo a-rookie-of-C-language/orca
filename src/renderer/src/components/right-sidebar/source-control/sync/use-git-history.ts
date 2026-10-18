@@ -45,8 +45,11 @@ export function useSourceControlGitHistory({
   refreshGitHistoryRef: RefObject<() => Promise<void>>
   gitHistoryScope: GitHistoryScope
   setGitHistoryScope: (scope: GitHistoryScope) => void
+  gitHistoryExhaustive: boolean
+  setGitHistoryExhaustive: (exhaustive: boolean) => void
 } {
   const [gitHistoryScope, setGitHistoryScope] = useState<GitHistoryScope>('all')
+  const [gitHistoryExhaustive, setGitHistoryExhaustive] = useState(false)
   const [gitHistoryByWorktree, setGitHistoryByWorktree] = useState<
     Record<string, GitHistoryPanelState>
   >({})
@@ -123,7 +126,8 @@ export function useSourceControlGitHistory({
           limit: 50,
           baseRef: compareBaseRef,
           includeRelatedRefs: gitHistoryScope === 'all',
-          scope: gitHistoryScope
+          scope: gitHistoryScope,
+          ...(gitHistoryScope === 'all' && gitHistoryExhaustive ? { forceAllRefs: true } : {})
         }
       )
       if (gitHistoryRequestByWorktreeRef.current[worktreeId] !== requestId) {
@@ -154,6 +158,7 @@ export function useSourceControlGitHistory({
     activeWorktreeId,
     compareBaseRef,
     gitHistoryScope,
+    gitHistoryExhaustive,
     isBranchVisible,
     isFolder,
     isGitHistoryExpanded,
@@ -264,6 +269,7 @@ export function useSourceControlGitHistory({
     activeWorktreeId,
     compareBaseRef,
     gitHistoryScope,
+    gitHistoryExhaustive,
     isBranchVisible,
     isFolder,
     isGitHistoryExpanded,
@@ -279,6 +285,8 @@ export function useSourceControlGitHistory({
     refreshGitHistoryRef,
     loadMoreGitHistory,
     gitHistoryScope,
-    setGitHistoryScope
+    setGitHistoryScope,
+    gitHistoryExhaustive,
+    setGitHistoryExhaustive
   }
 }

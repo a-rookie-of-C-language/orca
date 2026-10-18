@@ -1,9 +1,4 @@
 {
-  "accounts": {
-    "claude": {
-      "profileSwitching": "Switching applies to the next Claude you start in any tab."
-    }
-  },
   "agentsSidebarIntro": {
     "migrated": {
       "action": "Open Agents"
@@ -14,6 +9,12 @@
       "hiddenToast": "Agents tab hidden. Re-enable it in Settings → Experimental.",
       "hide": "Hide Agents",
       "title": "Meet your Agents tab"
+    }
+  },
+  "app": {
+    "sidebarLayout": {
+      "moveLeft": "Move tools sidebar to the left (VS Code layout)",
+      "moveRight": "Move tools sidebar to the right"
     }
   },
   "auto": {
@@ -814,6 +815,7 @@
           "GitHistoryPanel": {
             "111e1d0db4": "error",
             "62e685d5ec": "idle",
+            "6d1e0a7c3b": "Failed to load commit files",
             "9a8b85882d": "loading"
           },
           "HostedReviewActions": {
@@ -994,6 +996,7 @@
             "45b78f03bc": "side",
             "6306b48afd": "source-control",
             "9f83375839": "checks",
+            "9fffaf17c1": "Toggle tools sidebar ({{value0}})",
             "b37ff4a89a": "ports",
             "ef182dcb12": "search",
             "fc3095d2ed": "explorer"
@@ -2933,6 +2936,7 @@
         "commandAfterAnswer": "Answer the agent's question or approval, then run /{{command}}.",
         "commandRefused": "This command didn't run.",
         "commandRefusedTryAgain": "This command didn't run. Try it again.",
+        "commandUnavailable": "This command isn't available in {{agent}} chats, so it was not sent.",
         "compactionFailed": "Compaction failed.",
         "compactionFailedQuoted": "Compaction failed: {{detail}}.",
         "compactionUnconfirmed": "Compaction completion is unconfirmed.",
@@ -2942,7 +2946,6 @@
         "couldNotStopTheAgent": "Couldn't stop the agent.",
         "editSavedArguments": "Edit them in Settings > Agents > Arguments.",
         "emptyMessage": "This message is empty, so it was not sent.",
-        "commandUnavailable": "This command isn't available in {{agent}} chats, so it was not sent.",
         "historyInOtherAccount": "This chat's history is in another Claude account. Switch back to that account to continue it.",
         "historyTooLarge": "This conversation's history is too large to restore here.",
         "hostFault": "Orca ran into a problem, so this didn't go through.",

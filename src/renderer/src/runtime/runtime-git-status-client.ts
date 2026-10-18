@@ -169,6 +169,30 @@ export async function getRuntimeGitHistory(
   context: RuntimeGitContext,
   options: GitHistoryOptions = {}
 ): Promise<GitHistoryResult> {
+  try {
+    return await readRuntimeGitHistory(context, options)
+  } catch (error) {
+    // Why: older hosts throw on huge ref counts instead of falling back.
+    if (options.scope === 'all' && !options.forceAllRefs && isHistoryRefLimitError(error)) {
+      const fallback = await readRuntimeGitHistory(context, {
+        ...options,
+        includeRelatedRefs: false,
+        scope: 'current'
+      })
+      return { ...fallback, refLimitExceeded: true }
+    }
+    throw error
+  }
+}
+
+function isHistoryRefLimitError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Too many branch refs')
+}
+
+async function readRuntimeGitHistory(
+  context: RuntimeGitContext,
+  options: GitHistoryOptions
+): Promise<GitHistoryResult> {
   const target = context.target
   if (target.kind === 'local' || !context.worktreeId) {
     return window.api.git.history({

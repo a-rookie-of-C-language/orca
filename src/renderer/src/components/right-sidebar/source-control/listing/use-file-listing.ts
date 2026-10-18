@@ -108,7 +108,9 @@ export function useSourceControlFileListing({
     refreshGitHistoryRef,
     loadMoreGitHistory,
     gitHistoryScope,
-    setGitHistoryScope
+    setGitHistoryScope,
+    gitHistoryExhaustive,
+    setGitHistoryExhaustive
   } = useSourceControlGitHistory({
     activeRepoTarget,
     activeWorktreeId,
@@ -217,6 +219,8 @@ export function useSourceControlFileListing({
     gitHistoryState,
     gitHistoryScope,
     setGitHistoryScope,
+    gitHistoryExhaustive,
+    setGitHistoryExhaustive,
     grouped,
     handleBulkStage,
     handleBulkUnstage,

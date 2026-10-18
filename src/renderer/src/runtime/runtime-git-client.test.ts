@@ -376,6 +376,21 @@ describe('runtime git client', () => {
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
 
+  it('retries the current branch when an older host rejects too many refs', async () => {
+    gitHistory.mockRejectedValueOnce(new Error('Too many branch refs to display safely.'))
+    gitHistory.mockResolvedValueOnce({ items: [] })
+    const result = await getRuntimeGitHistory(
+      { target: { kind: 'local' as const }, worktreeId: 'wt-1', worktreePath: '/repo' },
+      { limit: 50, scope: 'all' }
+    )
+    expect(gitHistory).toHaveBeenCalledTimes(2)
+    expect(gitHistory.mock.calls[1]?.[0]).toMatchObject({
+      scope: 'current',
+      includeRelatedRefs: false
+    })
+    expect(result.refLimitExceeded).toBe(true)
+  })
+
   it('routes status and diffs through the active runtime environment', async () => {
     runtimeEnvironmentCall.mockResolvedValue({
       id: 'rpc-1',

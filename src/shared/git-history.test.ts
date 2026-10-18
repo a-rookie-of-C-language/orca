@@ -5,6 +5,7 @@ import {
   loadGitHistoryFromExecutor,
   parseGitHistoryLog
 } from './git-history'
+import { GIT_HISTORY_MAX_REVISIONS, GIT_HISTORY_RECENT_REF_COUNT } from './git-history-types'
 import { GIT_HISTORY_COMMIT_FORMAT } from './git-history-log-parser'
 
 const HEAD_OID = 'a'.repeat(40)
@@ -216,6 +217,59 @@ describe('git history loader', () => {
     expect(calls.find((args) => args[0] === 'log')).not.toContain(REMOTE_OID)
     expect(calls.find((args) => args[0] === 'log')).toContain('--date-order')
     expect(calls.some((args) => args.includes('--format=%(objectname)'))).toBe(false)
+  })
+
+  it('falls back to recent branches instead of failing when refs exceed the safe limit', async () => {
+    const { executor: base } = createHistoryExecutor(1)
+    // Why: exactly one over the probe limit trips the guard.
+    const overflow = `${'f'.repeat(40)}\n`.repeat(GIT_HISTORY_MAX_REVISIONS + 1)
+    const recentOid = 'e'.repeat(40)
+    const executor = vi.fn(async (args: string[], cwd: string, stdin?: string) => {
+      if (args[0] === 'for-each-ref' && args.includes('--format=%(objectname)')) {
+        if (args.includes('--sort=-committerdate')) {
+          expect(args).toContain(`--count=${GIT_HISTORY_RECENT_REF_COUNT}`)
+          return { stdout: `${recentOid}\n` }
+        }
+        if (args.includes(`--count=${GIT_HISTORY_MAX_REVISIONS + 1}`)) {
+          return { stdout: overflow }
+        }
+      }
+      return base(args, cwd, stdin)
+    })
+    const result = await loadGitHistoryFromExecutor(executor, '/repo', {
+      scope: 'all',
+      includeRelatedRefs: true,
+      limit: 2
+    })
+    expect(result.refLimitExceeded).toBe(true)
+    expect(result.scope).toBe('all')
+    expect(result.items).toHaveLength(1)
+    expect(executor.mock.calls.some(([args]) => args.includes('--sort=-committerdate'))).toBe(true)
+  })
+
+  it('loads every branch tip when the user forces a full load', async () => {
+    const { executor: base } = createHistoryExecutor(1)
+    const overflow = `${'f'.repeat(40)}\n`.repeat(GIT_HISTORY_MAX_REVISIONS + 1)
+    const forcedOids = ['d'.repeat(40), 'e'.repeat(40)]
+    const executor = vi.fn(async (args: string[], cwd: string, stdin?: string) => {
+      if (args[0] === 'for-each-ref' && args.includes('--format=%(objectname)')) {
+        if (args.includes(`--count=${GIT_HISTORY_MAX_REVISIONS + 1}`)) {
+          return { stdout: overflow }
+        }
+        return { stdout: `${forcedOids.join('\n')}\n` }
+      }
+      return base(args, cwd, stdin)
+    })
+    const result = await loadGitHistoryFromExecutor(executor, '/repo', {
+      scope: 'all',
+      includeRelatedRefs: true,
+      forceAllRefs: true,
+      limit: 2
+    })
+    expect(result.exhaustiveRefs).toBe(true)
+    expect(result.refLimitExceeded).toBeUndefined()
+    expect(result.totalRefs).toBe(forcedOids.length)
+    expect(result.items).toHaveLength(1)
   })
 
   it('includes comparison branch tips only when requested', async () => {
