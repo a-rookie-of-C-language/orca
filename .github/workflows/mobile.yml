@@ -102,6 +102,9 @@ jobs:
     # platform, so frozen bundler installs without an aarch64-linux entry.
     runs-on: ubuntu-24.04-arm
 
+    outputs:
+      ruby-release-checks: ${{ steps.ruby-scope.outputs.should_run }}
+
     env:
       # Why: an unfrozen bundler silently re-resolves when Gemfile.lock drifts
       # from the Gemfile, which is how the release jobs could land on different
@@ -238,6 +241,35 @@ jobs:
 
       - name: Check formatting
         run: pnpm format:check
+
+  ios-installer:
+    name: Mobile CocoaPods installer
+    needs: verify
+    if: needs.verify.outputs.ruby-release-checks != 'false'
+    runs-on: macos-26
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      BUNDLE_FROZEN: 'true'
+      COCOAPODS_DISABLE_STATS: 'true'
+      ORCA_BACKGROUND_LAUNCH: '1'
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Setup Ruby and release tools
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: mobile
+      - name: Test the locked CocoaPods installer without signing
+        run: bundle exec ruby scripts/check-cocoapods-install.rb
 
   main-tests:
     name: Mobile tests on main

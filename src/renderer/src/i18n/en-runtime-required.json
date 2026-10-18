@@ -387,6 +387,10 @@
           "d07e4b8553": "branch",
           "d16e037f40": "rich"
         },
+        "EditorPanelMarkdownActionsMenu": {
+          "10c39d58c1": "Hide front matter",
+          "8c8b7f5ff5": "Show front matter"
+        },
         "ReviewNotesSendMenuContent": {
           "50f7e753ea": "Sending notes to active agent...",
           "bb9c69a0c9": "Notes sent to active agent.",

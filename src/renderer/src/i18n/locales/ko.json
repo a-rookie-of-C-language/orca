@@ -557,7 +557,9 @@
           "presenceProfileOverflow": "{{names}} 외 {{count}}개",
           "removeProjectFailed": "프로젝트를 삭제하지 못했습니다.",
           "wslFilesystemBoundaryTitle": "이 프로젝트는 Windows 드라이브에 저장되어 있습니다.",
-          "wslFilesystemBoundaryDescription": "이 프로젝트의 Git은 WSL 파일 시스템 브리지를 통해 Windows 드라이브에 연결되는 {{distro}}에서 실행됩니다. git은 {{distro}}에 저장된 복사본에 비해 약 20배 느릴 것으로 예상됩니다."
+          "wslFilesystemBoundaryDescription": "이 프로젝트의 Git은 WSL 파일 시스템 브리지를 통해 Windows 드라이브에 연결되는 {{distro}}에서 실행됩니다. git은 {{distro}}에 저장된 복사본에 비해 약 20배 느릴 것으로 예상됩니다.",
+          "moveToGroupOtherHost": "프로젝트를 그룹으로 이동할 수 없습니다",
+          "moveToGroupOtherHostDesc": "이 프로젝트가 실행되는 컴퓨터에 이 그룹이 없습니다. 프로젝트는 같은 컴퓨터에 저장된 그룹에만 참여할 수 있습니다."
         },
         "settings": {
           "e12dab333b": "서버를 전환하지 못했습니다.",
@@ -5411,6 +5413,12 @@
           "00c4235c10": "'{{value0}}'과(와) 일치하는 항목이 없습니다.",
           "largeInputNoMatches": "이 긴 입력과 일치하는 항목 없음"
         },
+        "SleepTwinWorkspaceDialog": {
+          "title": "Sleep Workspace",
+          "alsoSleeps": "Also sleeps the copy on {{hosts}}",
+          "cancel": "Cancel",
+          "confirm": "Sleep"
+        },
         "RemoveFolderDialog": {
           "4dc5b5065b": "제거",
           "d36883e046": "취소",
@@ -6069,6 +6077,9 @@
               "8bc3fc0671": "워크스페이스를 절전 모드로 전환하지 못했습니다.",
               "legacy": {
                 "unverified": "The older host runtime could not confirm terminal shutdown. The workspace was kept open; update the host and try again."
+              },
+              "twin": {
+                "unattributed": "Orca couldn't tell which host runs this workspace's terminals, so the workspace was kept open. Reconnect its hosts and try again."
               },
               "host": {
                 "unverified": "The host could not confirm terminal shutdown. The workspace was kept open; check the connection and try again."
@@ -18242,6 +18253,8 @@
         "removeImagesToSend": "복원하지 못한 이미지가 있습니다. 보내려면 제거하세요.",
         "imageAttachAgainLabel": "다시 첨부",
         "pastedImageNotKeptLabel": "보존되지 않음",
+        "imageNumber": "이미지 #{{number}}",
+        "imageReferenceMissing": "이미지가 제거됨",
         "imagePasteFailed": "이미지 붙여넣기 실패.",
         "worktreeNotReady": "워크트리가 준비되지 않았습니다 — 잠시 후 다시 시도하세요.",
         "pasteUnavailable": "붙여넣을 수 없습니다 — 이 채팅은 지금 입력을 받을 수 없습니다.",

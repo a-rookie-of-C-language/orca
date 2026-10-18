@@ -1,0 +1,140 @@
+import { describe, expect, it } from 'vitest'
+import type { FolderWorkspace } from '../folder-workspace-types'
+import type { Repo } from '../repo-types'
+import type { Worktree } from '../worktree/types'
+import { buildWorkspaceRows, WorkspaceRowsSnapshotSchema } from './workspace-rows'
+
+const localRepo: Repo = {
+  id: 'repo-1',
+  path: '/r',
+  displayName: 'r',
+  badgeColor: 'blue',
+  addedAt: 1
+}
+const sshRepo: Repo = { ...localRepo, path: '/remote/r', connectionId: 'box' }
+
+function worktree(overrides: Partial<Worktree> = {}): Worktree {
+  return {
+    id: 'repo-1::/r/a',
+    repoId: 'repo-1',
+    path: '/r/a',
+    head: 'abc',
+    branch: 'refs/heads/a',
+    isBare: false,
+    isMainWorktree: false,
+    displayName: 'a',
+    comment: '',
+    linkedIssue: null,
+    linkedPR: null,
+    linkedLinearIssue: null,
+    isArchived: false,
+    isUnread: false,
+    isPinned: false,
+    sortOrder: 0,
+    lastActivityAt: 0,
+    ...overrides
+  }
+}
+
+const folder: FolderWorkspace = {
+  id: 'f1',
+  projectGroupId: 'g1',
+  name: 'Notes',
+  folderPath: '/notes',
+  linkedTask: null,
+  comment: 'hi',
+  isArchived: false,
+  isUnread: true,
+  isPinned: true,
+  sortOrder: 0,
+  lastActivityAt: 5,
+  createdAt: 2,
+  updatedAt: 3
+}
+
+describe('buildWorkspaceRows', () => {
+  it('keys rows by host and keeps catalog and metadata only', () => {
+    const rows = buildWorkspaceRows({
+      worktrees: [
+        worktree({ hostId: 'local', isPinned: true, linkedPR: 12, lastActivityAt: 99 }),
+        worktree({ hostId: 'ssh:box', branch: '', head: '' })
+      ],
+      folderWorkspaces: [folder],
+      repos: [localRepo, sshRepo],
+      lineageById: {}
+    })
+    expect([...rows.keys()]).toEqual([
+      'local|repo-1::/r/a',
+      'ssh:box|repo-1::/r/a',
+      'local|folder:f1'
+    ])
+    expect(rows.get('local|repo-1::/r/a')).toMatchObject({
+      kind: 'git',
+      hostId: 'local',
+      isPinned: true,
+      linkedPR: 12,
+      defaultBranch: false
+    })
+    expect(rows.get('local|repo-1::/r/a')).not.toHaveProperty('lastActivityAt')
+    expect(rows.get('ssh:box|repo-1::/r/a')).toMatchObject({ hostId: 'ssh:box', branch: '' })
+    expect(rows.get('local|folder:f1')).toMatchObject({
+      kind: 'folder',
+      repoId: 'folder-workspace:g1',
+      displayName: 'Notes',
+      isPinned: true,
+      isUnread: true,
+      lineage: null
+    })
+  })
+
+  it('takes the host from the repo when the row has none, and leaves paired-server rows out', () => {
+    const rows = buildWorkspaceRows({
+      worktrees: [
+        worktree(),
+        worktree({ id: 'repo-2::/x', repoId: 'repo-2', hostId: 'runtime:env-1' })
+      ],
+      folderWorkspaces: [{ ...folder, executionHostId: 'runtime:env-1' }],
+      repos: [localRepo],
+      lineageById: {}
+    })
+    expect([...rows.keys()]).toEqual(['local|repo-1::/r/a'])
+  })
+
+  it('carries the stored lineage edge for the builder to validate', () => {
+    const rows = buildWorkspaceRows({
+      worktrees: [worktree({ hostId: 'local', instanceId: 'a-1' })],
+      folderWorkspaces: [],
+      repos: [localRepo],
+      lineageById: {
+        'repo-1::/r/a': {
+          worktreeId: 'repo-1::/r/a',
+          worktreeInstanceId: 'a-1',
+          parentWorktreeId: 'repo-1::/r',
+          parentWorktreeInstanceId: 'p-1',
+          origin: 'cli',
+          capture: { source: 'explicit-cli-flag', confidence: 'explicit' },
+          createdAt: 1
+        }
+      }
+    })
+    expect(rows.get('local|repo-1::/r/a')).toMatchObject({
+      instanceId: 'a-1',
+      lineage: {
+        parentWorktreeId: 'repo-1::/r',
+        worktreeInstanceId: 'a-1',
+        parentWorktreeInstanceId: 'p-1'
+      }
+    })
+  })
+
+  it('parses what it builds', () => {
+    const rows = buildWorkspaceRows({
+      worktrees: [worktree({ hostId: 'local' })],
+      folderWorkspaces: [folder],
+      repos: [localRepo],
+      lineageById: {}
+    })
+    const snapshot = { revision: 1, rows: Object.fromEntries(rows) }
+    expect(WorkspaceRowsSnapshotSchema.parse(snapshot)).toEqual(snapshot)
+  })
+})

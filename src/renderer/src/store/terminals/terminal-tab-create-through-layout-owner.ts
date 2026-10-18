@@ -8,7 +8,7 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { afterLayoutFrame, layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { expectTabRowFields } from '@/runtime/layout-owner-pane-intents'
-import { getExplicitRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { newGroupSplitOf } from '@/runtime/layout-owner-new-group-split'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { layoutFrameTerminalTab } from '@/runtime/layout-frame-terminal-panes'
@@ -79,6 +79,7 @@ export function terminalTabCreateCommand(
         }
       : {}),
     ...(entry?.viewMode ? { viewMode: entry.viewMode } : {}),
+    ...(tab.quickCommandLabel?.trim() ? { quickCommandLabel: tab.quickCommandLabel.trim() } : {}),
     createdAt: entry?.createdAt ?? tab.createdAt,
     creation
   }
@@ -96,7 +97,8 @@ export function recordCreatedTerminalTabInLayoutOwner(
   // Why: a paired server mirrors this workspace's tabs; main does not own its layout. A tab main
   // already holds is its own.
   if (
-    getExplicitRuntimeEnvironmentIdForWorktree(state, command.workspace) ||
+    // Why: as `sendLayoutApply`, a twin stays on main's path: it edits this window's layout.
+    runtimeEnvironmentIdUnlessTwin(state, command.workspace) !== null ||
     layoutFrameTerminalTab(command.workspace, command.tabId)
   ) {
     return
@@ -129,7 +131,7 @@ export function createInitialTerminalThroughLayoutOwner(
   worktreeId: string,
   create: (ids?: { tabId: string; leafId: string }) => void
 ): boolean {
-  if (getExplicitRuntimeEnvironmentIdForWorktree(getState(), worktreeId)) {
+  if (runtimeEnvironmentIdUnlessTwin(getState(), worktreeId) !== null) {
     return false
   }
   const tabId = createBrowserUuid()

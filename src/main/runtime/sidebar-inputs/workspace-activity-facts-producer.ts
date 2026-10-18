@@ -1,3 +1,4 @@
+import { ProducerRevision } from './producer-revision'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   isFreshNonDoneAgentStatus,
@@ -16,6 +17,7 @@ import {
   type WorkspaceActivityFactsSnapshot
 } from '../../../shared/sidebar-list/workspace-activity-facts'
 import type { AgentHookServer } from '../../agent-hooks/server'
+import type { SidebarClock } from './sidebar-clock'
 
 export type WorkspaceSurfaceActivity = Omit<WorkspaceActivityFacts, 'agent'>
 
@@ -27,6 +29,8 @@ export type AgentStatusStoreView = Pick<
   | 'subscribeStatusRowMutations'
   | 'subscribeStatusFreshness'
 >
+
+const AGENT_FRESHNESS_DEADLINE = 'agent-freshness'
 
 type AgentPane = { worktreeId: string; status: LiveAgentWorktreeStatus; staleAt: number }
 
@@ -40,19 +44,19 @@ export class WorkspaceActivityFactsProducer {
   private readonly agentPanes = new Map<string, AgentPane>()
   private readonly agentPanesByWorktree = new Map<string, Map<string, AgentPane>>()
   private agentStore: AgentStatusStoreView | null = null
-  private revision = 0
-  private expiryTimer: ReturnType<typeof setTimeout> | null = null
+  readonly revision = new ProducerRevision()
   private expiryAt = Infinity
 
   constructor(
     private readonly deps: {
       readSurfaces: (worktreeId: string) => WorkspaceSurfaceActivity
       resolveTabWorktreeId: (tabId: string) => string | undefined
+      clock: SidebarClock
     }
   ) {}
 
   snapshot(): WorkspaceActivityFactsSnapshot {
-    return { revision: this.revision, facts: Object.fromEntries(this.facts) }
+    return { revision: this.revision.value, facts: Object.fromEntries(this.facts) }
   }
 
   /** Re-reads the workspace's surfaces; the runtime calls this per publication. */
@@ -185,23 +189,19 @@ export class WorkspaceActivityFactsProducer {
       }
       this.facts.set(worktreeId, next)
     }
-    this.revision += 1
+    this.revision.bump()
   }
 
-  // One timer for the earliest lease; a renewed lease only moves later, so an early fire re-arms.
+  // One deadline for the earliest lease; a renewed lease only moves later, so an early fire re-arms.
   private armExpiry(staleAt: number): void {
     if (staleAt >= this.expiryAt) {
       return
     }
-    this.clearExpiryTimer()
     this.expiryAt = staleAt
-    this.expiryTimer = setTimeout(() => this.expireAgentPanes(), staleAt - Date.now())
-    // A lease must never keep a headless host from its idle exit.
-    this.expiryTimer.unref?.()
+    this.deps.clock.schedule(AGENT_FRESHNESS_DEADLINE, staleAt, () => this.expireAgentPanes())
   }
 
   private expireAgentPanes(): void {
-    this.expiryTimer = null
     this.expiryAt = Infinity
     const now = Date.now()
     const stale: string[] = []
@@ -219,10 +219,7 @@ export class WorkspaceActivityFactsProducer {
   }
 
   private clearExpiryTimer(): void {
-    if (this.expiryTimer) {
-      clearTimeout(this.expiryTimer)
-    }
-    this.expiryTimer = null
+    this.deps.clock.cancel(AGENT_FRESHNESS_DEADLINE)
     this.expiryAt = Infinity
   }
 }

@@ -481,7 +481,17 @@ describe('orcad-e2e-routing', () => {
           'tests/e2e/helpers/orcad-managed-workspace.ts',
           'src/renderer/src/components/terminal-pane/terminal-host-workspace-file.ts',
           'src/renderer/src/components/terminal-pane/terminal-host-file-link-existence.ts',
-          'src/renderer/src/runtime/runtime-terminal-artifact-read.ts'
+          'src/renderer/src/runtime/runtime-terminal-artifact-read.ts',
+          // #30130's Disconnect sources merged with this lane skipped.
+          'src/main/ipc/ssh-host-user-disconnect.ts',
+          'src/main/ipc/ssh-connect-flow.ts',
+          'src/main/ipc/ssh-connection-handlers.ts',
+          'src/main/ipc/runtime-environment-connectivity-handlers.ts',
+          'src/main/ipc/runtime-environment-manual-disconnect.ts',
+          'src/main/ssh/ssh-connection-manager.ts',
+          'src/main/ssh/ssh-user-disconnect.ts',
+          'src/renderer/src/runtime/web-session-close-intent.ts',
+          'src/renderer/src/runtime/web-session-close-replay.ts'
         ],
         spec
       )

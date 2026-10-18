@@ -232,6 +232,7 @@ export const PR_E2E_SOURCE_ROUTES = [
   },
   {
     // Why: managed SSH hosts are now the only SSH path, so these specs carry its user journeys.
+    // Connect/Disconnect sources too: the journeys disconnect and reconnect a managed host (#30130).
     id: 'ssh.orcad-journeys',
     specs: [
       'tests/e2e/ssh-orcad-terminal-journeys.spec.ts',
@@ -244,7 +245,7 @@ export const PR_E2E_SOURCE_ROUTES = [
         file
       ) ||
       (isProductSource(file) &&
-        /^src\/(?:main\/ssh\/orcad-managed-|main\/ipc\/ssh-port-forward|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
+        /^src\/(?:main\/ssh\/orcad-managed-|main\/ipc\/ssh-port-forward|main\/(?:ipc\/(?:ssh-(?:connect-flow|connection-handlers|host-user-disconnect|session-teardown)|runtime-environment-(?:connectivity-handlers|manual-disconnect))|ssh\/ssh-(?:connection-manager|user-disconnect))\.ts$|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|web-session-close-|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
           file
         ))
   },

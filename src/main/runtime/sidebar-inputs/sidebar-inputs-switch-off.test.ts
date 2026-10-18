@@ -9,6 +9,7 @@ describe('sidebar inputs with the switch off', () => {
     const runtime = new OrcaRuntimeService()
     expect(runtime.sidebarFacts).toBeNull()
     expect(runtime.pairedServerRows).toBeNull()
+    expect(runtime.repoIconDataUrls).toBeNull()
     expect(runtime.workspaceCreations).toBeNull()
     expect(runtime.collapseWriteOrder).toBeNull()
     const gated = new Set<string>(SIDEBAR_INPUT_METHODS.map((method) => method.name))

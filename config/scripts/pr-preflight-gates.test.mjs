@@ -232,6 +232,7 @@ it('pins every foreground and background step to its selected phase', () => {
       './.github/actions/install-mobile-dependencies',
       `${staticPhase} && needs.code_paths.outputs.mobile_dependencies == 'true'`
     ],
+    ['Verify locked audit tools', staticPhase],
     ['Enforce React Doctor on changed lines', staticPhase],
     ['Check Zustand selector fan-out budget', staticPhase],
     ['Check reliability gate manifest', staticPhase],
