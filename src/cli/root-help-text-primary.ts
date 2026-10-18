@@ -34,7 +34,7 @@ export const ROOT_HELP_TEXT_PRIMARY = [
   '  skills share              Publish selected skills behind one unlisted link',
   '  skills list               List version-matched skill guides bundled with this Orca CLI',
   '  skills get                Print a version-matched skill guide as Markdown',
-  '  skills install            Install bundled Orca skills globally via the community skills CLI',
+  '  skills install            Install Orca skills using the locked bundled installer',
   '  skills update             Update Orca skills to the version this Orca build ships',
   '',
   'Hosts:',

@@ -210,6 +210,10 @@ export type OrcadArtifact = {
 
 export const ORCAD_ARTIFACTS: readonly OrcadArtifact[] = [
   { filename: ORCAD_CLI_ENTRY_FILENAME },
+  { filename: 'out/cli/skills-installer/dist/cli.mjs' },
+  { filename: 'out/cli/skills-installer/package.json' },
+  { filename: 'out/cli/skills-installer/LICENSE' },
+  { filename: 'out/cli/skills-installer/ThirdPartyNoticeText.txt' },
   { filename: ORCAD_CLI_PACKAGE_FILENAME },
   { filename: ORCAD_LAUNCHER_FILENAME },
   { filename: ORCAD_SERVER_ENTRY_FILENAME },

@@ -1,12 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import type { SkillUpdateRun } from '../../shared/skill-freshness'
-import {
-  getSpawnArgsForWindows,
-  WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
-} from '../../shared/windows-batch-spawn'
 import { CANCEL_RELEASE_TIMEOUT_MS, SkillUpdateRunner } from './skill-update-run'
-import { SKILLS_CLI_VERSION } from '../../shared/agent-feature-install-commands'
 
 class FakeChild extends EventEmitter {
   stdout = new EventEmitter()
@@ -20,7 +15,7 @@ function makeRunner(
     rescanOutdatedNames?: (names: string[]) => Promise<string[]>
     resolveCommand?: (name: string) => string
     killTree?: (pid: number, killRoot: () => void) => Promise<void>
-    buildSpawnArgs?: (command: string, args: string[]) => { spawnCmd: string; spawnArgs: string[] }
+    resolveInstaller?: () => string
   } = {}
 ) {
   const child = new FakeChild()
@@ -28,13 +23,14 @@ function makeRunner(
   const states: SkillUpdateRun[] = []
   const runner = new SkillUpdateRunner({
     sourceCommit: '0123456789abcdef0123456789abcdef01234567',
+    resolveInstaller:
+      overrides.resolveInstaller ?? (() => '/bundled/skills-installer/dist/cli.mjs'),
     detectAgentKeys: () => ['claude-code', 'universal'],
     now: () => 1000,
-    resolveCommand: overrides.resolveCommand ?? (() => '/usr/local/bin/npx'),
+    resolveCommand: overrides.resolveCommand ?? (() => '/usr/local/bin/node'),
     rescanOutdatedNames: overrides.rescanOutdatedNames,
     // Default to a no-op sweep so tests never signal a real PID.
     killTree: overrides.killTree ?? (async (_pid, killRoot) => killRoot()),
-    buildSpawnArgs: overrides.buildSpawnArgs,
     onState: (run) => states.push(run),
     spawnProcess: ((command: string, args: string[], options: Record<string, unknown>) => {
       spawnCalls.push({ command, args, options })
@@ -53,12 +49,10 @@ describe('SkillUpdateRunner', () => {
     const { runner, spawnCalls } = makeRunner()
 
     expect(runner.start(['orchestration', 'orca-cli'])).toEqual({ started: true })
-    expect(spawnCalls[0].command).toBe('/usr/local/bin/npx')
-    // `npx --yes` skips the install prompt; `skills -y` takes the CLI's own
-    // non-interactive branch. Dropping either can wedge the run.
+    expect(spawnCalls[0].command).toBe('/usr/local/bin/node')
+    // The bundled installer keeps the upstream unattended mode.
     expect(spawnCalls[0].args).toEqual([
-      '--yes',
-      `skills@${SKILLS_CLI_VERSION}`,
+      '/bundled/skills-installer/dist/cli.mjs',
       'add',
       'https://github.com/stablyai/orca/tree/0123456789abcdef0123456789abcdef01234567',
       '--skill',
@@ -178,7 +172,7 @@ describe('SkillUpdateRunner', () => {
 
   it('refuses a new run until the cancelled process tree is actually dead', async () => {
     // The sweep waits for a descendant snapshot before it signals anything, so
-    // releasing the UI synchronously would let a second npx write the same
+    // releasing the UI synchronously would let a second installer write the same
     // bundles as the one still being killed.
     let finishKill = (): void => {}
     const { runner } = makeRunner({
@@ -230,9 +224,10 @@ describe('SkillUpdateRunner', () => {
     const states: SkillUpdateRun[] = []
     const runner = new SkillUpdateRunner({
       sourceCommit: '0123456789abcdef0123456789abcdef01234567',
+      resolveInstaller: () => '/bundled/skills-installer/dist/cli.mjs',
       detectAgentKeys: () => ['universal'],
       now: () => 1000,
-      resolveCommand: () => '/usr/local/bin/npx',
+      resolveCommand: () => '/usr/local/bin/node',
       rescanOutdatedNames: async () => [],
       // Never let a test reach the real sweep — it would signal live PIDs.
       killTree: async (_pid, killRoot) => killRoot(),
@@ -290,7 +285,7 @@ describe('SkillUpdateRunner', () => {
     expect(runner.getState()).toEqual({ state: 'idle' })
   })
 
-  it('kills the whole npx tree on cancel, not just the wrapper', async () => {
+  it('kills the whole installer tree on cancel, not just the wrapper', async () => {
     const killTree = vi.fn(async (_pid: number, killRoot: () => void) => {
       killRoot()
     })
@@ -304,13 +299,10 @@ describe('SkillUpdateRunner', () => {
     expect(child.kill).toHaveBeenCalled()
   })
 
-  it('surfaces an unspawnable command path instead of silently doing nothing', async () => {
-    // A Windows profile directory containing `&` makes the cmd.exe rail reject
-    // the resolved npx path; the names are already canonical by this point.
+  it('surfaces a missing artifact instead of downloading an installer', async () => {
     const { runner, states } = makeRunner({
-      resolveCommand: () => 'C:\\Users\\A&B\\AppData\\Roaming\\npm\\npx.cmd',
-      buildSpawnArgs: () => {
-        throw new Error('unsafe batch arguments')
+      resolveInstaller: () => {
+        throw new Error('missing locked skills installer')
       }
     })
 
@@ -321,21 +313,20 @@ describe('SkillUpdateRunner', () => {
     expect(run.state).toBe('error')
     expect(run.state === 'error' && run.failedNames).toEqual(['orca-cli'])
     expect(states.at(-1)?.state).toBe('error')
-    // Why: the message used to name a character set the guard no longer matches.
-    expect(run.state === 'error' && run.message).toContain(WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL)
+    expect(run.state === 'error' && run.message).toContain('missing locked skills installer')
   })
 
-  it('spawns npx from a Program Files (x86) install instead of refusing it', () => {
+  it('runs Node directly from a Program Files (x86) install', () => {
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     try {
-      const npx = 'C:\\Program Files (x86)\\nodejs\\npx.cmd'
+      const node = 'C:\\Program Files (x86)\\nodejs\\node.exe'
       const { runner, spawnCalls } = makeRunner({
-        resolveCommand: () => npx,
-        buildSpawnArgs: getSpawnArgsForWindows
+        resolveCommand: () => node
       })
 
       expect(runner.start(['orca-cli']).started).toBe(true)
-      expect(spawnCalls[0]?.args.slice(0, 3)).toEqual(['/d', '/c', npx])
+      expect(spawnCalls[0]?.command).toBe(node)
+      expect(spawnCalls[0]?.args[0]).toBe('/bundled/skills-installer/dist/cli.mjs')
     } finally {
       platform.mockRestore()
     }

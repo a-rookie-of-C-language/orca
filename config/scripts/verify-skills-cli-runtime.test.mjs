@@ -95,11 +95,28 @@ describe('skills CLI runtime closure', () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-skills-cli-closure-'))
     try {
       await writeSkillsCliFixture(root, '')
+      const installer = join(root, 'cli', 'skills-installer')
+      await mkdir(join(installer, 'dist'), { recursive: true })
+      for (const file of ['dist/cli.mjs', 'package.json', 'LICENSE', 'ThirdPartyNoticeText.txt']) {
+        await writeFile(join(installer, file), '')
+      }
 
       expect(verifySkillsCliRuntime(root, undefined, { executeCommands: false })).toEqual({
-        closureFiles: 2,
+        closureFiles: 3,
         commands: 0
       })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires the locked installer even when cross-arch execution is disabled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-skills-cli-closure-'))
+    try {
+      await writeSkillsCliFixture(root, '')
+      expect(() => verifySkillsCliRuntime(root, undefined, { executeCommands: false })).toThrow(
+        'missing locked installer artifact'
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

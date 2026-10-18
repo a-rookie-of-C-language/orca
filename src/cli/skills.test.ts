@@ -1,33 +1,22 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import type * as BundledSkillsInstallerModule from '../shared/bundled-skills-installer'
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { delimiter, join } from 'node:path'
-import type * as CodexCliCommandModule from '../shared/node-cli-command-resolution'
-import { WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../shared/windows-batch-spawn'
-import { SKILLS_CLI_VERSION } from '../shared/agent-feature-install-commands'
 
+const INSTALLER = '/bundled/skills-installer/dist/cli.mjs'
 const COMMIT = '0123456789abcdef0123456789abcdef01234567'
-const PINNED_ADD = [
-  '--yes',
-  `skills@${SKILLS_CLI_VERSION}`,
-  'add',
-  `https://github.com/stablyai/orca/tree/${COMMIT}`
-]
+const PINNED_ADD = [INSTALLER, 'add', `https://github.com/stablyai/orca/tree/${COMMIT}`]
 const DETECTED_AGENTS = ['--agent', 'claude-code', '--agent', 'universal']
 
 const {
   detectCommandsMock,
   guideModuleLoadMock,
   readOrcaCliBuildCommitMock,
-  resolveCliCommandMock,
   runtimeClientConstructorMock,
   spawnMock
 } = vi.hoisted(() => ({
   detectCommandsMock: vi.fn(() => new Set<string>(['claude'])),
   guideModuleLoadMock: vi.fn(),
   readOrcaCliBuildCommitMock: vi.fn<() => string | null>(() => null),
-  resolveCliCommandMock: vi.fn(() => 'npx'),
   runtimeClientConstructorMock: vi.fn(),
   spawnMock: vi.fn()
 }))
@@ -38,10 +27,9 @@ vi.mock('../shared/local-agent-install-dir-detection', () => ({
   detectCommandsInInstallDirs: detectCommandsMock
 }))
 
-// Why: override only the npx lookup so the real Windows .cmd rail still runs.
-vi.mock('../shared/node-cli-command-resolution', async (importOriginal) => ({
-  ...(await importOriginal<typeof CodexCliCommandModule>()),
-  resolveCliCommand: resolveCliCommandMock
+vi.mock('../shared/bundled-skills-installer', async (importOriginal) => ({
+  ...(await importOriginal<typeof BundledSkillsInstallerModule>()),
+  resolveBundledSkillsInstaller: () => '/bundled/skills-installer/dist/cli.mjs'
 }))
 
 // Why: the install pins to the build's commit; a test run has no compiled package boundary.
@@ -49,8 +37,9 @@ vi.mock('./cli-version', () => ({
   readOrcaCliBuildCommit: readOrcaCliBuildCommitMock
 }))
 
-vi.mock('node:child_process', () => ({
-  spawn: spawnMock
+vi.mock('@orca/process-host', () => ({
+  spawnProcess: ({ program, args, ...options }: { program: string; args: string[] }) =>
+    spawnMock(program, args, options)
 }))
 
 vi.mock('./bundled-skill-guides.js', () => {
@@ -113,8 +102,6 @@ describe('orca skills CLI', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     runtimeClientConstructorMock.mockClear()
-    resolveCliCommandMock.mockReset()
-    resolveCliCommandMock.mockReturnValue('npx')
     detectCommandsMock.mockReset()
     detectCommandsMock.mockReturnValue(new Set<string>(['claude']))
     spawnMock.mockReset()
@@ -340,7 +327,7 @@ describe('orca skills CLI', () => {
           error: {
             code: 'invalid_argument',
             message:
-              "orca skills install --json only supports --dry-run. Real installs stream npx's " +
+              "orca skills install --json only supports --dry-run. Real installs stream the installer's " +
               "own output, which isn't JSON."
           },
           _meta: { runtimeId: null }
@@ -358,7 +345,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'install', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -372,7 +359,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y`,
+          command: `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: true,
           executed: false
@@ -389,7 +376,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'install', '--skill', 'alpha', '--local', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y\n\n` +
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
 
@@ -402,7 +389,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
+          command: `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: false,
           executed: false
@@ -413,7 +400,61 @@ describe('orca skills CLI', () => {
     )
   })
 
-  it('runs npx without --global for --local, with git messages forced to English', async () => {
+  it('keeps interactive selection in the upstream installer without unattended flags', async () => {
+    const child = createFakeChild()
+    spawnMock.mockReturnValue(child)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const operation = main(
+      ['skills', 'install', '--skill', 'alpha', '--interactive', '--locked-installer'],
+      '/tmp/repo'
+    )
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
+    expect(spawnMock.mock.calls[0]?.[1]).toEqual([...PINNED_ADD, '--skill', 'alpha', '--global'])
+    child.emit('exit', 0)
+    await operation
+  })
+
+  it('honors the official build commit carried by a generated install command', async () => {
+    const sourceCommit = 'a'.repeat(40)
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    await main(
+      ['skills', 'install', '--skill', 'alpha', '--source-commit', sourceCommit, '--dry-run'],
+      '/tmp/repo'
+    )
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining(`/tree/${sourceCommit}`))
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid source commit before starting an executable', async () => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    await main(['skills', 'install', '--skill', 'alpha', '--source-commit', 'latest'], '/tmp/repo')
+    expect(process.exitCode).toBe(1)
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('passes the execution host homes without application credentials or Node loaders', async () => {
+    vi.stubEnv('HOME', '/home/guest')
+    vi.stubEnv('OPENAI_API_KEY', 'private-key')
+    vi.stubEnv('GH_TOKEN', 'private-token')
+    vi.stubEnv('NODE_OPTIONS', '--require=/tmp/injected.js')
+    const child = createFakeChild()
+    spawnMock.mockReturnValue(child)
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const operation = main(
+      ['skills', 'install', '--skill', 'alpha', '--agent', 'universal'],
+      '/tmp/repo'
+    )
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
+    const environment = spawnMock.mock.calls[0]?.[2]?.env
+    expect(environment.HOME).toBe('/home/guest')
+    expect(environment.OPENAI_API_KEY).toBeUndefined()
+    expect(environment.GH_TOKEN).toBeUndefined()
+    expect(environment.NODE_OPTIONS).toBeUndefined()
+    child.emit('exit', 0)
+    await operation
+  })
+
+  it('runs the bundled installer without --global for --local, with git messages forced to English', async () => {
     // A translated git error stops the skills CLI falling back to fetching the commit (#28914).
     vi.stubEnv('LC_ALL', 'de_DE.UTF-8')
     const child = createFakeChild()
@@ -426,61 +467,10 @@ describe('orca skills CLI', () => {
     await resultPromise
 
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [...PINNED_ADD, '--skill', 'alpha', ...DETECTED_AGENTS, '-y'],
       expect.objectContaining({ stdio: 'inherit', env: expect.objectContaining({ LC_ALL: 'C' }) })
     )
-  })
-
-  it('routes a resolved Windows .cmd shim through cmd.exe', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
-    resolveCliCommandMock.mockReturnValue('C:\\Program Files\\nodejs\\npx.cmd')
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    expect(spawnMock).toHaveBeenCalledWith(
-      'C:\\Windows\\System32\\cmd.exe',
-      [
-        '/d',
-        '/c',
-        'C:\\Program Files\\nodejs\\npx.cmd',
-        '--yes',
-        `skills@${SKILLS_CLI_VERSION}`,
-        'add',
-        `https://github.com/stablyai/orca/tree/${COMMIT}`,
-        '--skill',
-        'alpha',
-        '--global',
-        ...DETECTED_AGENTS,
-        '-y'
-      ],
-      expect.objectContaining({ stdio: 'inherit' })
-    )
-  })
-
-  it('spawns a resolved npx path directly when it is not a .cmd shim', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    resolveCliCommandMock.mockReturnValue('C:\\Program Files\\nodejs\\npx.exe')
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    // Why: an .exe shim must stay a direct spawn so a missing npx still raises
-    // ENOENT on the child instead of hiding inside cmd.exe's own exit code.
-    expect(spawnMock.mock.calls[0]?.[0]).toBe('C:\\Program Files\\nodejs\\npx.exe')
-    expect(spawnMock.mock.calls[0]?.[1]?.[0]).toBe('--yes')
   })
 
   it('resolves a legacy topic alias to the canonical skill name for install', async () => {
@@ -494,13 +484,13 @@ describe('orca skills CLI', () => {
     await resultPromise
 
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [...PINNED_ADD, '--skill', 'alpha', '--global', ...DETECTED_AGENTS, '-y'],
       expect.objectContaining({ stdio: 'inherit' })
     )
   })
 
-  it('runs npx for --all and forwards its exit code', async () => {
+  it('runs the bundled installer for --all and forwards its exit code', async () => {
     const child = createFakeChild()
     spawnMock.mockReturnValue(child)
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
@@ -511,7 +501,7 @@ describe('orca skills CLI', () => {
     await resultPromise
 
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [
         ...PINNED_ADD,
         '--skill',
@@ -537,13 +527,11 @@ describe('orca skills CLI', () => {
 
     const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
     await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('error', new Error('spawn npx ENOENT'))
+    child.emit('error', new Error('spawn node ENOENT'))
     await resultPromise
 
     expect(process.exitCode).toBe(1)
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Could not run npx: spawn npx ENOENT. Install Node.js and ensure npx is on PATH.'
-    )
+    expect(errorSpy).toHaveBeenCalledWith('spawn node ENOENT')
   })
 
   it('lists updatable skills when no --skill/--all is given', async () => {
@@ -572,7 +560,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'update', '--skill', 'legacy-alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to update now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -589,7 +577,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
+          command: `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: false,
           executed: false
@@ -611,7 +599,7 @@ describe('orca skills CLI', () => {
     await resultPromise
 
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [...PINNED_ADD, '--skill', 'alpha', ...DETECTED_AGENTS, '-y'],
       expect.objectContaining({ stdio: 'inherit' })
     )
@@ -641,107 +629,6 @@ describe('orca skills CLI', () => {
     expect(spawnMock).not.toHaveBeenCalled()
     expect(process.exitCode).toBe(1)
     expect(String(errorSpy.mock.calls[0]?.[0])).toContain('writes to the machine that runs it')
-  })
-
-  it('puts the resolved npx directory on the child PATH', async () => {
-    // Why a real directory with a real sibling node: pairing only fires when the
-    // node it would add actually exists, so a fictional path proves nothing.
-    const npxBin = mkdtempSync(join(tmpdir(), 'orca-npx-'))
-    for (const name of ['node', 'npx']) {
-      writeFileSync(join(npxBin, name), '')
-      chmodSync(join(npxBin, name), 0o755)
-    }
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    resolveCliCommandMock.mockReturnValue(join(npxBin, 'npx'))
-    vi.stubEnv('PATH', `/usr/bin${delimiter}/bin`)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    // Why: npx is an `env node` script, so an off-PATH npx exits 127 with no
-    // 'error' event unless node ships alongside it on the child's PATH.
-    const env = spawnMock.mock.calls[0]?.[2]?.env
-    // Why: the child still needs the inherited PATH and the rest of the parent
-    // environment; replacing it outright breaks git, node, HOME and npm config.
-    expect(env?.PATH).toBe(`${npxBin}${delimiter}/usr/bin${delimiter}/bin`)
-    expect(env?.HOME ?? env?.USERPROFILE).toBe(process.env.HOME ?? process.env.USERPROFILE)
-  })
-
-  it('leaves PATH untouched when no node ships beside the resolved npx', async () => {
-    // Why: prepending a directory that has no node buys nothing and would shadow
-    // the caller's own ordering for every other binary the child resolves.
-    const npxBin = mkdtempSync(join(tmpdir(), 'orca-npx-bare-'))
-    writeFileSync(join(npxBin, 'npx'), '')
-    chmodSync(join(npxBin, 'npx'), 0o755)
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    resolveCliCommandMock.mockReturnValue(join(npxBin, 'npx'))
-    vi.stubEnv('PATH', `/usr/bin${delimiter}/bin`)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    expect(spawnMock.mock.calls[0]?.[2]?.env?.PATH).toBe(`/usr/bin${delimiter}/bin`)
-  })
-
-  it('reports a Windows npx path cmd.exe would reinterpret', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
-    resolveCliCommandMock.mockReturnValue('C:\\Users\\A&B\\npx.cmd')
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    await main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-
-    expect(spawnMock).not.toHaveBeenCalled()
-    expect(process.exitCode).toBe(1)
-    expect(String(errorSpy.mock.calls[0]?.[0])).toContain('cmd.exe would reinterpret')
-    // Why: remediation advice that names the wrong characters is unactionable.
-    expect(String(errorSpy.mock.calls[0]?.[0])).toContain(WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL)
-  })
-
-  it('runs npx from a Program Files (x86) install instead of refusing it', async () => {
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
-    const npx = 'C:\\Program Files (x86)\\nodejs\\npx.cmd'
-    resolveCliCommandMock.mockReturnValue(npx)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    expect(spawnMock.mock.calls[0]?.[0]).toBe('C:\\Windows\\System32\\cmd.exe')
-    expect(spawnMock.mock.calls[0]?.[1]?.slice(0, 3)).toEqual(['/d', '/c', npx])
-  })
-
-  it('never puts the current directory on the child PATH when npx is unresolvable', async () => {
-    const child = createFakeChild()
-    spawnMock.mockReturnValue(child)
-    // Why: resolveCliCommand returns the bare name when it finds nothing, and
-    // dirname('npx') is '.', which would run ./npx out of the caller's checkout.
-    resolveCliCommandMock.mockReturnValue('npx')
-    vi.stubEnv('PATH', `/usr/bin${delimiter}/bin`)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-
-    const resultPromise = main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
-    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalled())
-    child.emit('exit', 0, null)
-    await resultPromise
-
-    // Why: assert the constructed value, not the ambient one — a dev PATH with a
-    // trailing separator carries its own '' entry and would fake a failure here.
-    expect(spawnMock.mock.calls[0]?.[2]?.env?.PATH).toBe(`/usr/bin${delimiter}/bin`)
   })
 
   it('refuses to install when Orca detects no agent, instead of targeting them all', async () => {
@@ -812,7 +699,7 @@ describe('orca skills CLI', () => {
     )
 
     expect(stdoutText(stdoutSpy)).toContain(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent universal -y`
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent universal -y`
     )
   })
 
@@ -823,7 +710,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'update', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toContain(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent universal -y`
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent universal -y`
     )
   })
 
@@ -908,7 +795,7 @@ describe('orca skills CLI', () => {
     // Why: the documented primary invocation. Dropping 'skill' from the
     // repeatable-flag set silently installs one skill instead of two.
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [...PINNED_ADD, '--skill', 'alpha', '--skill', 'zeta', '--global', ...DETECTED_AGENTS, '-y'],
       expect.objectContaining({ stdio: 'inherit' })
     )
@@ -923,7 +810,7 @@ describe('orca skills CLI', () => {
     )
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -941,7 +828,7 @@ describe('orca skills CLI', () => {
 
     // Why: stdout belongs to the child, so this record has to go to stderr.
     expect(stderrSpy).toHaveBeenCalledWith(
-      `Running: npx --yes skills@${SKILLS_CLI_VERSION} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n`
+      `Running: ${process.execPath} ${INSTALLER} add https://github.com/stablyai/orca/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n`
     )
   })
 
@@ -956,7 +843,7 @@ describe('orca skills CLI', () => {
     await resultPromise
 
     expect(spawnMock).toHaveBeenCalledWith(
-      'npx',
+      process.execPath,
       [
         ...PINNED_ADD,
         '--skill',
@@ -988,7 +875,7 @@ describe('orca skills CLI', () => {
           error: {
             code: 'invalid_argument',
             message:
-              "orca skills update --json only supports --dry-run. Real updates stream npx's " +
+              "orca skills update --json only supports --dry-run. Real updates stream the installer's " +
               "own output, which isn't JSON."
           },
           _meta: { runtimeId: null }

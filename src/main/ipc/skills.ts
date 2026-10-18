@@ -1,4 +1,6 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
+import { join } from 'node:path'
+import { resolveBundledSkillsInstaller } from '../../shared/bundled-skills-installer'
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import {
@@ -38,6 +40,7 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
 
   const runner = new SkillUpdateRunner({
     sourceCommit: ORCA_BUILD_COMMIT,
+    resolveInstaller: () => resolveBundledSkillsInstaller(join(app.getAppPath(), 'out', 'main')),
     // Why: per-skill outcomes come from re-hashing what is actually on disk, not
     // from scraping stdout.
     rescanOutdatedNames: async (names) => {

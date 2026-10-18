@@ -597,6 +597,9 @@ importers:
       shiki:
         specifier: 4.5.0
         version: 4.5.0
+      skills:
+        specifier: 1.7.2
+        version: 1.7.2
       sonner:
         specifier: 2.0.7
         version: 2.0.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -7228,6 +7231,11 @@ packages:
 
   sisteransi@1.0.5:
     resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
+
+  skills@1.7.2:
+    resolution: {integrity: sha512-j+GzyF/oNahsjjjup6y3lJpFkC1lQjIkf4kAMXICA1hboBqi0fAGXAGoE4x9FRZiP1br/YE9+L3/Tqq6PIAe0A==}
+    engines: {node: '>=22.20.0'}
+    hasBin: true
 
   slice-ansi@7.1.2:
     resolution: {integrity: sha512-iOBWFgUX7caIZiuutICxVgX1SdxwAVFFKwt1EvMYYec/NWO5meOJ6K5uQxhrYBdQJne4KxiqZc+KptFOWFSI9w==}
@@ -14876,6 +14884,11 @@ snapshots:
       semver: 7.8.1
 
   sisteransi@1.0.5: {}
+
+  skills@1.7.2:
+    dependencies:
+      tar: 7.5.22
+      yaml: 2.9.1
 
   slice-ansi@7.1.2:
     dependencies:

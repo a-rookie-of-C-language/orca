@@ -19,21 +19,23 @@ describe('agent feature skill commands', () => {
 
   it('builds a global install command by default', () => {
     expect(buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit })).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --global`
+      `orca skills install --skill orca-cli --interactive --source-commit ${sourceCommit} --locked-installer`
     )
   })
 
   it('drops --global when installing locally', () => {
     expect(
       buildAgentFeatureSkillInstallCommand(['orca-cli'], { sourceCommit, global: false })
-    ).toBe(`npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli`)
+    ).toBe(
+      `orca skills install --skill orca-cli --local --interactive --source-commit ${sourceCommit} --locked-installer`
+    )
   })
 
   it('repeats --skill per name for multi-skill installs', () => {
     expect(
       buildAgentFeatureSkillInstallCommand(['orca-cli', 'orchestration'], { sourceCommit })
     ).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --skill orchestration --global`
+      `orca skills install --skill orca-cli --skill orchestration --interactive --source-commit ${sourceCommit} --locked-installer`
     )
     expect(
       buildAgentFeatureSkillInstallArgs(['orca-cli', 'orchestration'], { sourceCommit })
@@ -97,7 +99,7 @@ describe('agent feature skill commands', () => {
         agents: ['universal']
       })
     ).toBe(
-      `npx skills@${SKILLS_CLI_VERSION} add ${source} --skill orca-cli --global --agent universal -y`
+      `orca skills install --skill orca-cli --agent universal --source-commit ${sourceCommit} --locked-installer`
     )
   })
 })
