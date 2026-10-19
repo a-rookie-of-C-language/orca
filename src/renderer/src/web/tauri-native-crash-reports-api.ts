@@ -5,13 +5,58 @@ import type {
   CrashReportSubmitArgs,
   CrashReportSubmitResult,
   ReactErrorBoundaryReportArgs,
-  ReactErrorBoundaryReportResult
+  ReactErrorBoundaryReportResult,
+  UncapturedCrashReportContext
 } from '../../../shared/crash-reporting'
 import type { CrashReportsApi } from '../../../preload/api/crash-report-api'
-import { formatCrashReportText } from '../../../shared/crash-reporting'
+import {
+  formatCrashReportText,
+  formatUncapturedCrashReportText
+} from '../../../shared/crash-reporting'
+import {
+  assertClipboardTextWriteWithinLimit,
+  isClipboardTextWriteTooLargeError
+} from '../../../shared/clipboard-text'
+import { formatCrashReportCopyText } from '../../../main/crash-reporting/crash-report-copy-text'
 import { invokeNative, invokePlugin, isTauriNativeHost } from './tauri-native-host'
+import { getBrowserPlatform } from './preload-api/web-storage'
 
 type CrashReportLookup = { reportId?: string }
+
+type TauriNativePlatformInfo = {
+  platform?: unknown
+  osRelease?: unknown
+  arch?: unknown
+}
+
+function asNonEmptyString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value ? value : fallback
+}
+
+function asNodePlatform(value: unknown): NodeJS.Platform {
+  if (value === 'win32' || value === 'darwin' || value === 'linux') {
+    return value
+  }
+  return getBrowserPlatform()
+}
+
+async function readUncapturedContext(): Promise<UncapturedCrashReportContext> {
+  const [version, platformInfo] = await Promise.all([
+    invokeNative<string>('poc_updater_get_version').catch(() => 'unknown'),
+    invokeNative<TauriNativePlatformInfo>('poc_platform_info').catch(() => null)
+  ])
+  return {
+    createdAt: new Date().toISOString(),
+    appVersion: asNonEmptyString(version, 'unknown'),
+    platform: asNodePlatform(platformInfo?.platform),
+    osRelease: asNonEmptyString(platformInfo?.osRelease, ''),
+    arch: asNonEmptyString(platformInfo?.arch, ''),
+    electronVersion: 'tauri',
+    chromeVersion: 'webview'
+  }
+}
+
+const COPY_TOO_LARGE_ERROR = 'Crash diagnostics are too large to copy safely.'
 
 export function createTauriNativeCrashReportsApi(): CrashReportsApi | null {
   if (!isTauriNativeHost()) {
@@ -37,16 +82,31 @@ export function createTauriNativeCrashReportsApi(): CrashReportsApi | null {
         'poc_crash_reports_get_requested',
         lookup
       )
-      if (!report) {
-        return { ok: false as const, error: 'No captured crash report is available.' }
+      // Mirror Electron: copy falls back to uncaptured text when nothing was captured.
+      const baseText = report
+        ? formatCrashReportText(report, args?.notes)
+        : formatUncapturedCrashReportText(await readUncapturedContext(), args?.notes)
+      let copyText: string
+      try {
+        copyText = assertClipboardTextWriteWithinLimit(
+          formatCrashReportCopyText(baseText, args?.submissionFailure)
+        )
+      } catch (error) {
+        if (isClipboardTextWriteTooLargeError(error)) {
+          return { ok: false as const, error: COPY_TOO_LARGE_ERROR }
+        }
+        throw error
       }
       try {
         await invokePlugin('clipboard-manager', 'write_text', {
-          text: formatCrashReportText(report, args?.notes),
+          text: copyText,
           label: null
         })
         return { ok: true as const }
       } catch (error) {
+        if (isClipboardTextWriteTooLargeError(error)) {
+          return { ok: false as const, error: COPY_TOO_LARGE_ERROR }
+        }
         return { ok: false as const, error: error instanceof Error ? error.message : String(error) }
       }
     },

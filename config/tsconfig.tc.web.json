@@ -57,6 +57,7 @@
     "../src/main/browser/grab-guest-react-script.ts",
     "../src/main/browser/grab-guest-selection-scripts.ts",
     "../src/main/browser/grab-guest-script.ts",
+    "../src/main/crash-reporting/crash-report-copy-text.ts",
     "../src/main/persistence/applying-settings/ui-state-read.ts",
     "../src/main/persistence/applying-settings/ui-state-update.ts",
     "../src/main/persistence/applying-settings/ui-selection-normalization.ts",
