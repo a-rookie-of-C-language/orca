@@ -56,6 +56,12 @@ export const TerminalInspectProcess = TerminalHandle.extend({
   scanChildProcesses: z.boolean().optional()
 })
 
+export const TerminalSignal = TerminalHandle.extend({
+  // Why additive like scanChildProcesses: a legacy host strips the intent and the
+  // caller falls back to its previous interrupt delivery instead of failing Ctrl+C.
+  signal: requiredString('Missing signal name').pipe(z.string().max(16))
+})
+
 export const TerminalListParams = z.object({
   worktree: OptionalString,
   limit: OptionalFiniteNumber,

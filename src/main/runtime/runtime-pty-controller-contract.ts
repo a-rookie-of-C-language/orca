@@ -146,6 +146,8 @@ export type RuntimePtyController = {
   hasChildProcesses?(ptyId: string): Promise<boolean>
   clearBuffer?(ptyId: string): Promise<void>
   resetInputModes?(ptyId: string): Promise<void>
+  /** Deliver an OS signal to the PTY (e.g. SIGINT). Fail-closed: absent means unsupported. */
+  signal?(ptyId: string, signal: string): Promise<void> | void
   resize?(ptyId: string, cols: number, rows: number): boolean
   // Why: exact-id mobile polls should not enumerate every local and SSH PTY.
   hasPty?(ptyId: string): boolean | null

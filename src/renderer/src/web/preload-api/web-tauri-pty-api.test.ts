@@ -259,13 +259,66 @@ describe('Tauri PTY preload API', () => {
     const api = createTauriPtyApi()
     const result = await spawn(false)
     requireActiveEnvironment.mockReturnValue({ id: 'env-2' })
+    callTauriPtyHost.mockResolvedValueOnce({
+      signal: { handle: 'terminal-1', signaled: true }
+    })
     api.signal(result.id, 'SIGINT')
     api.clearBuffer(result.id)
     api.resetInputModes(result.id)
-    expect(callTauriPtyHost.mock.calls).toEqual([
-      [result.id, 'terminal.send', { terminal: 'terminal-1', interrupt: true }],
-      [result.id, 'terminal.clearBuffer', { terminal: 'terminal-1' }],
-      [result.id, 'terminal.resetInputModes', { terminal: 'terminal-1' }]
-    ])
+    await vi.waitFor(() =>
+      expect(callTauriPtyHost.mock.calls).toEqual([
+        [result.id, 'terminal.signal', { terminal: 'terminal-1', signal: 'SIGINT' }],
+        [result.id, 'terminal.clearBuffer', { terminal: 'terminal-1' }],
+        [result.id, 'terminal.resetInputModes', { terminal: 'terminal-1' }]
+      ])
+    )
+  })
+
+  it('delivers SIGINT through the true signal path without the legacy interrupt write', async () => {
+    const api = createTauriPtyApi()
+    const result = await spawn(false)
+    callTauriPtyHost.mockResolvedValueOnce({
+      signal: { handle: 'terminal-1', signaled: true }
+    })
+
+    api.signal(result.id, 'SIGINT')
+    await vi.waitFor(() =>
+      expect(callTauriPtyHost).toHaveBeenCalledWith(result.id, 'terminal.signal', {
+        terminal: 'terminal-1',
+        signal: 'SIGINT'
+      })
+    )
+    await Promise.resolve()
+    expect(callTauriPtyHost).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the legacy interrupt write when the host reports signaled false', async () => {
+    const api = createTauriPtyApi()
+    const result = await spawn(false)
+    callTauriPtyHost.mockResolvedValueOnce({
+      signal: { handle: 'terminal-1', signaled: false }
+    })
+
+    api.signal(result.id, 'SIGINT')
+    await vi.waitFor(() =>
+      expect(callTauriPtyHost).toHaveBeenCalledWith(result.id, 'terminal.send', {
+        terminal: 'terminal-1',
+        interrupt: true
+      })
+    )
+  })
+
+  it('falls back to the legacy interrupt write when the signal call rejects', async () => {
+    const api = createTauriPtyApi()
+    const result = await spawn(false)
+    callTauriPtyHost.mockRejectedValueOnce(new Error('terminal.signal unknown'))
+
+    api.signal(result.id, 'SIGINT')
+    await vi.waitFor(() =>
+      expect(callTauriPtyHost).toHaveBeenCalledWith(result.id, 'terminal.send', {
+        terminal: 'terminal-1',
+        interrupt: true
+      })
+    )
   })
 })

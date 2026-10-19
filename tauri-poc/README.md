@@ -133,13 +133,13 @@ first native slice covers the low-risk operations that the renderer already expe
   paired clients.
 - a native tray/menu-bar entry with Open Orca, Settings, and Quit actions; an explicit tray
   Settings action is queued until the renderer mounts, so it is safe to click while Orca is
-  starting in the background. Windows ensure/attention/rebuild round-trips against the live shell in ``tauri-poc/scripts/check-tray.mjs``; menu-item clicks still need a visible run with OS-level input.
+  starting in the background. Windows ensure/attention/rebuild round-trips against the live shell in `tauri-poc/scripts/check-tray.mjs`; menu-item clicks still need a visible run with OS-level input.
 - a native File/Edit/View/Help application menu with settings, quit, clipboard actions, reload,
   zoom, fullscreen, worktree palette, Appearance toggles, left/right sidebar, setup-guide,
   feature-tour, and crash-report commands routed through the shared renderer UI API.
   The View menu mirrors Electron's order — Reset/Zoom In/Zoom Out before
   Worktree Palette, then Fullscreen, then the Appearance submenu (which owns
-  the two sidebar toggles). Popup-menu clicks pop the *installed* application
+  the two sidebar toggles). Popup-menu clicks pop the _installed_ application
   menu so accelerators, hints, locale labels and Appearance checkmarks match
   the menu bar exactly; the pre-PoC custom context menu is gone.
   Windows' "minimize to tray on close" works through the same surface Electron
@@ -202,6 +202,12 @@ first native slice covers the low-risk operations that the renderer already expe
   rides the stream verdict to `window.api.pty.onExit`, so `exit 42` in PowerShell surfaces 42
   in Tauri exactly as Electron reports it over IPC. Hosts that end without a code still read
   as 0 for a proven finish and 1 otherwise.
+- true OS-signal delivery for Ctrl+C on Windows: `window.api.pty.signal('SIGINT')` now travels
+  `terminal.signal` to the daemon provider's `sendSignal` instead of writing the ETX byte the
+  ConPTY ingest ignores, so the pane exits with code 1 exactly like Electron's `pty:signal`
+  IPC. Hosts that predate the controller method answer `signaled: false` and the renderer
+  falls back to the legacy interrupt write. Covered live by
+  `tauri-poc/scripts/check-terminal-ops.mjs`.
 - host-owned PTY buffer snapshots for Tauri remounts, including grid geometry, output sequence,
   scrollback and provider-backed authoritative recovery through `terminal.bufferSnapshot`.
 - live terminal directories through the execution-host-owned `terminal.cwd` RPC, fenced against
@@ -225,7 +231,7 @@ first native slice covers the low-risk operations that the renderer already expe
   grant-scoped local document previews with CSP, directory authorization, failure events, and
   external-link interception. On Windows, local development hosts also expose the certificate
   failure overlay and a page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
-  by ``tauri-poc/scripts/check-browser-certificate-exception.mjs`` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
+  by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
 - the Workspace Space secondary window: native Tauri window creation/reuse/close, state and
   worktree-reveal event routing between the main renderer and the Space renderer, background
   launch behavior that never activates the window, local directory size analysis with progress,

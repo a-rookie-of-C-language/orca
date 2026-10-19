@@ -263,10 +263,20 @@ export function createTauriPtyApi(): TauriPtyApi {
       if (signal === 'SIGWINCH') {
         state.stream.resize(state.size.cols, state.size.rows)
       } else if (signal === 'SIGINT') {
-        void callTauriPtyHost(state.id, 'terminal.send', {
+        // Why true signal first: ConPTY ignores the ETX byte the legacy interrupt send
+        // writes, while the daemon signal path ends the pane like Electron.
+        const legacyInterrupt = (): Promise<unknown> =>
+          callTauriPtyHost(state.id, 'terminal.send', {
+            terminal: state.handle,
+            interrupt: true
+          }).catch(() => {})
+        void callTauriPtyHost<{ signal: { signaled: boolean } }>(state.id, 'terminal.signal', {
           terminal: state.handle,
-          interrupt: true
-        }).catch(() => {})
+          signal: 'SIGINT'
+        }).then(
+          (result) => (result?.signal?.signaled === true ? undefined : legacyInterrupt()),
+          () => legacyInterrupt()
+        )
       }
     },
     clearBuffer: (id) => {

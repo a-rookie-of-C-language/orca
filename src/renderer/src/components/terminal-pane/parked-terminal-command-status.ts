@@ -12,6 +12,7 @@ import { dispatchTerminalCommandFinishedEvent } from '@/hooks/terminal-command-f
 import { resolveLiveAgentStatusConnectionRouting } from '@/lib/agent-status-connection-ownership'
 import { getConnectionIdFromState } from '@/lib/connection-owner-resolution'
 import { rendererAgentStatusObservations } from '@/lib/renderer-agent-status-observations'
+import { confirmRuntimeTerminalForegroundProcess } from '@/runtime/runtime-terminal-inspection'
 import { useAppStore } from '@/store'
 import {
   cancelCommandCodeDoneSettle,
@@ -19,7 +20,6 @@ import {
   setCommandCodeDoneSettleExecutor
 } from './command-code-done-settle'
 import { canCommandCodeOutputOwnPane } from './command-code-output-ownership'
-import { isRemoteExecutionHostPtyId } from './remote-execution-host-pty'
 
 export type ParkedTerminalCommandStatusPolicy = {
   onCommandFinished: (bestEffortExitCode: number | null) => void
@@ -160,11 +160,13 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       return
     }
     // Why: a parked pane holds no remote incarnation to fence host evidence with, so it has no answer.
-    const remote = isRemoteExecutionHostPtyId(ptyId) || parseAppSshPtyId(ptyId) !== null
+    // Why SSH-only: remote-runtime panes now confirm over RPC (local orcad or paired
+    // host); an SSH pane holds no remote incarnation to fence host evidence with.
+    const ssh = parseAppSshPtyId(ptyId) !== null
     let processName: string | null = null
-    if (!remote) {
+    if (!ssh) {
       try {
-        processName = await window.api.pty.confirmForegroundProcess(ptyId)
+        processName = await confirmRuntimeTerminalForegroundProcess(ptyId)
       } catch {
         processName = null
       }

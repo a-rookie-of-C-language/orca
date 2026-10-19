@@ -58,7 +58,10 @@ describe('terminal multiplex end verdict', () => {
       expect(endEvents(harness.messages)).toContainEqual({
         type: 'end',
         streamId: 7,
-        verdict: 'exited'
+        verdict: 'exited',
+        // Why the code: the multiplex end event carries the proven numeric status
+        // since exit-code parity; legacy hosts omit it and still read as codeless.
+        exitCode: 0
       })
     )
     harness.registry.cleanupSubscription('terminal-multiplex:conn-desktop-first-paint')

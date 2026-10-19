@@ -8,7 +8,6 @@ import {
   getRemoteRuntimePtyOwner
 } from './runtime-terminal-stream'
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
-import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import {
   classifyTerminalProcessInspectionFailure,
   clientOnlyUnverifiableInspection,
@@ -116,16 +115,26 @@ export async function inspectRuntimeTerminalProcess(
 /**
  * Forces a fresh, uncached foreground scan for a pane whose cached inspection
  * is suspect (issue #11064: the cached read can flap to the shell for a live
- * agent). Local/daemon panes only — runtime environments expose no fresh-scan
- * RPC, and an SSH provider without confirm support answers null, which callers
- * must read as "no new evidence", never as a shell confirmation.
+ * agent). Remote-runtime panes go through the confirm RPC so the Tauri native
+ * host and paired hosts get the same fresh evidence Electron reads locally;
+ * a host that predates the method answers unknown and the caller reads null
+ * as "no new evidence", never as a shell confirmation.
  */
 export async function confirmRuntimeTerminalForegroundProcess(
   ptyId: string
 ): Promise<string | null> {
-  // Why any remote id: an id without an owner segment still runs off this host, never locally.
-  if (isRemoteRuntimePtyId(ptyId)) {
-    return null
+  const owner = getRemoteRuntimePtyOwner(ptyId)
+  if (owner) {
+    try {
+      const result = await callRuntimeRpc<{ process: { handle: string; process: string | null } }>(
+        owner.target,
+        'terminal.confirmForegroundProcess',
+        { terminal: owner.terminal }
+      )
+      return result.process.process
+    } catch {
+      return null
+    }
   }
   const confirmForegroundProcess = window.api.pty.confirmForegroundProcess
   // Why the shape check: a preload older than this handler has no such method.

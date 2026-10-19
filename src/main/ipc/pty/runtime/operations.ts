@@ -228,6 +228,12 @@ export async function resetInputModesFromRuntimeController(
   }
 }
 
+export async function signalPtyFromRuntimeController(ptyId: string, signal: string): Promise<void> {
+  // Why provider-direct like the Electron pty:signal IPC: a signal is process
+  // control, not renderer state, so there is no window broadcast to mirror.
+  await getProviderForPty(ptyId).sendSignal(ptyId, signal)
+}
+
 const settledLocalPtyProviderStartups = new WeakSet<Promise<void>>()
 const watchedLocalPtyProviderStartups = new WeakSet<Promise<void>>()
 

@@ -9,7 +9,10 @@ import {
 import { createTerminalCommandLifecycle } from '../terminal-command-lifecycle'
 import { createPaneForegroundAgentTracker } from '../pane-foreground-agent-tracker'
 import { isRemoteExecutionHostPtyId } from '../remote-execution-host-pty'
-import { inspectRuntimeTerminalProcess } from '@/runtime/runtime-terminal-inspection'
+import {
+  confirmRuntimeTerminalForegroundProcess,
+  inspectRuntimeTerminalProcess
+} from '@/runtime/runtime-terminal-inspection'
 import { parseAppSshPtyId } from '../../../../../shared/ssh-pty-id'
 import { dispatchTerminalCommandFinishedEvent } from '@/hooks/terminal-command-finished-event'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
@@ -191,9 +194,11 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
         ? inspectRuntimeTerminalProcess(id, options)
         : window.api.pty.getForegroundProcess(id),
     confirmForegroundProcess: (id, options) =>
-      isRemotePtyId(id)
+      // Why SSH-only: remote-runtime panes confirm over RPC (local orcad or paired
+      // host); an SSH pane holds no remote incarnation to fence host evidence with.
+      parseAppSshPtyId(id) !== null
         ? inspectRuntimeTerminalProcess(id, options)
-        : window.api.pty.confirmForegroundProcess(id),
+        : confirmRuntimeTerminalForegroundProcess(id),
     isRemotePtyId,
     getExpectedIncarnationId: () => session.remotePtyIncarnationId ?? null,
     publish: (entry) => useAppStore.getState().setPaneForegroundAgent(session.cacheKey, entry),

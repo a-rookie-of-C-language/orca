@@ -626,6 +626,7 @@ import {
   TerminalReveal,
   TerminalSend,
   TerminalSetViewerColors,
+  TerminalSignal,
   TerminalSplit,
   TerminalStopExact,
   TerminalWait
@@ -1428,6 +1429,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.close': TerminalHandle,
   'terminal.closeAll': TerminalCloseAll,
   'terminal.closeTab': TerminalHandle,
+  'terminal.confirmForegroundProcess': TerminalHandle,
   'terminal.create': TerminalCreateParams,
   'terminal.createAgentSession': CreateAgentSessionParams,
   'terminal.cwd': TerminalHandle,
@@ -1456,6 +1458,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.setDisplayMode': TerminalSetDisplayMode,
   'terminal.setViewerColors': TerminalSetViewerColors,
   'terminal.show': TerminalHandle,
+  'terminal.signal': TerminalSignal,
   'terminal.sleep': TerminalCloseAll,
   'terminal.split': TerminalSplit,
   'terminal.stop': TerminalCloseAll,

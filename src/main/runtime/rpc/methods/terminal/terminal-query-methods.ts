@@ -11,7 +11,8 @@ import {
   TerminalRecoverPane,
   TerminalRename,
   TerminalResolveActive,
-  TerminalResolvePane
+  TerminalResolvePane,
+  TerminalSignal
 } from '../../../../../shared/rpc-contract/terminal-unary-params'
 
 export const TERMINAL_QUERY_METHODS = [
@@ -163,6 +164,22 @@ export const TERMINAL_QUERY_METHODS = [
     params: TerminalHandle,
     handler: async (params, { runtime }) => ({
       reset: await runtime.resetTerminalInputModes(params.terminal)
+    })
+  }),
+  defineMethod({
+    name: 'terminal.signal',
+    permission: 'workspace',
+    params: TerminalSignal,
+    handler: async (params, { runtime }) => ({
+      signal: await runtime.sendTerminalSignal(params.terminal, params.signal)
+    })
+  }),
+  defineMethod({
+    name: 'terminal.confirmForegroundProcess',
+    permission: 'workspace',
+    params: TerminalHandle,
+    handler: async (params, { runtime }) => ({
+      process: await runtime.confirmTerminalForegroundProcess(params.terminal)
     })
   }),
   defineMethod({

@@ -710,3 +710,54 @@ describe('OrcaRuntimeService', () => {
     expect(read.tail.join('\n')).not.toContain('Stale TUI')
   })
 })
+
+describe('OrcaRuntimeService terminal.signal', () => {
+  it('routes the signal through the PTY controller with the leaf pty id', async () => {
+    const signal = vi.fn().mockResolvedValue(undefined)
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      signal
+    })
+    syncSinglePty(runtime, 'pty-1')
+    const [terminal] = (await runtime.listTerminals()).terminals
+
+    await expect(runtime.sendTerminalSignal(terminal.handle, 'SIGINT')).resolves.toEqual({
+      handle: terminal.handle,
+      signaled: true
+    })
+    expect(signal).toHaveBeenCalledWith('pty-1', 'SIGINT')
+  })
+
+  it('stays fail-closed when the controller predates the signal method', async () => {
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+    syncSinglePty(runtime, 'pty-1')
+    const [terminal] = (await runtime.listTerminals()).terminals
+
+    await expect(runtime.sendTerminalSignal(terminal.handle, 'SIGINT')).resolves.toEqual({
+      handle: terminal.handle,
+      signaled: false
+    })
+  })
+
+  it('rejects a handle with no live leaf', async () => {
+    const runtime = new OrcaRuntimeService(store)
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      signal: vi.fn()
+    })
+
+    await expect(runtime.sendTerminalSignal('terminal-missing', 'SIGINT')).rejects.toThrow(
+      'terminal_not_found'
+    )
+  })
+})
