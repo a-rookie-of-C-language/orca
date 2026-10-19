@@ -1,6 +1,9 @@
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import { TERMINAL_MULTIPLEX_STREAM_LIMIT_ERROR } from '../../../shared/terminal-multiplex-flow-control'
-import { parseTerminalStreamEndVerdict } from '../../../shared/terminal-stream-end-verdict'
+import {
+  parseTerminalStreamEndExitCode,
+  parseTerminalStreamEndVerdict
+} from '../../../shared/terminal-stream-end-verdict'
 import { shouldHoldE2eRemoteTerminalEnd } from './remote-runtime-terminal-e2e-control'
 import { RemoteRuntimeTerminalFlowController } from './remote-runtime-terminal-flow-controller'
 import {
@@ -111,7 +114,15 @@ export abstract class RemoteRuntimeTerminalResponseController extends RemoteRunt
           stream.callbacks.onError?.(TERMINAL_MULTIPLEX_STREAM_LIMIT_ERROR)
         }
       } else {
-        stream.callbacks.onEnd?.(parseTerminalStreamEndVerdict(event.verdict))
+        // Why a split call: legacy hosts send a bare end, and existing onEnd
+        // implementers assert single-arg delivery for that shape.
+        const endVerdict = parseTerminalStreamEndVerdict(event.verdict)
+        const endExitCode = parseTerminalStreamEndExitCode(event.exitCode)
+        if (endExitCode === null) {
+          stream.callbacks.onEnd?.(endVerdict)
+        } else {
+          stream.callbacks.onEnd?.(endVerdict, endExitCode)
+        }
       }
       this.closeIfIdle()
     } else if (event.type === 'error') {

@@ -22,7 +22,13 @@ export type TerminalMultiplexEvent =
       }
       inputLedgerId?: string
     }
-  | { type: 'end'; streamId: number; verdict?: TerminalStreamEndVerdict }
+  | {
+      type: 'end'
+      streamId: number
+      verdict?: TerminalStreamEndVerdict
+      /** Numeric exit status when the host proved the process ended. Absent on legacy hosts. */
+      exitCode?: number
+    }
   | { type: 'error'; streamId: number; message?: string }
   | {
       type: 'fit-override-changed'
@@ -62,7 +68,7 @@ export type RemoteRuntimeMultiplexedTerminalCallbacks = {
   onOutputPauseCapability?: () => void
   /** The host discarded output while this stream was paused (negotiated streams only). */
   onPausedOutputDropped?: () => void
-  onEnd?: (verdict: TerminalStreamEndVerdict) => void
+  onEnd?: (verdict: TerminalStreamEndVerdict, exitCode?: number) => void
   onError?: (message: string) => void
   onFitOverrideChanged?: (event: {
     mode: 'mobile-fit' | 'remote-desktop-fit' | 'desktop-fit'

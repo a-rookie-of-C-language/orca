@@ -111,10 +111,12 @@ async function spawnTauriPty(opts: TauriPtySpawnOptions): Promise<SpawnResult> {
             ...meta,
             rawLength: meta?.rawLength ?? data.length
           }),
-        onEnd: (verdict) => {
+        onEnd: (verdict, exitCode) => {
           snapshotHandshake.fail(new Error(`terminal_initial_snapshot_${verdict}`))
           const exited = verdict === 'exited'
-          retireTauriPty(id, inputSession, subscribedStream, exited ? 0 : 1, exited, !exited)
+          // Why ?? 0: legacy hosts end codeless; Electron reports 0 for a clean finish.
+          const code = exited ? (exitCode ?? 0) : 1
+          retireTauriPty(id, inputSession, subscribedStream, code, exited, !exited)
         },
         onError: () => {
           snapshotHandshake.fail(new Error('terminal_initial_snapshot_unavailable'))

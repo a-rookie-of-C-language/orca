@@ -198,6 +198,10 @@ first native slice covers the low-risk operations that the renderer already expe
 - replacement terminal streams ignore late output, acknowledgments and close events from the
   previous stream; unverified stream endings preserve the renderer binding and pending input
   instead of claiming that the execution host's process exited.
+- proven numeric exit statuses through the multiplex `end` event: the host's exit code now
+  rides the stream verdict to `window.api.pty.onExit`, so `exit 42` in PowerShell surfaces 42
+  in Tauri exactly as Electron reports it over IPC. Hosts that end without a code still read
+  as 0 for a proven finish and 1 otherwise.
 - host-owned PTY buffer snapshots for Tauri remounts, including grid geometry, output sequence,
   scrollback and provider-backed authoritative recovery through `terminal.bufferSnapshot`.
 - live terminal directories through the execution-host-owned `terminal.cwd` RPC, fenced against
