@@ -317,7 +317,7 @@ Not migrated yet:
   fingerprinting, and the WebView2 round trip are proven live by `tauri-poc/scripts/check-browser-jar-names.mjs` (derived `persist:tauri-browser-v1-*` partitions, repeat-resolve stability, per-environment
   separation, CDP cookie write/read on the resolved partition). Cross-partition isolation stays
   Windows-blocked: Tauri documents `data_store_identifier` as macOS/iOS-only and drops it on
-  Windows (wry profile wiring is absent on Windows), so child webviews share one jar there.
+  Windows (wry profile wiring is absent on Windows), so child webviews share one jar there. so child webviews share one jar there. Authority settle (note/import/close) and source-badge record/list are proven live by check-client-route-partition.mjs, with derivation, idempotent reload, traversal rejection, and LRU eviction covered by the store unit tests.
   Local browser-profile cookie import is a separate
   implemented path, not evidence of remote client-host parity.
 - Native crash reports now persist renderer errors, breadcrumbs and dismissal state in the Tauri
