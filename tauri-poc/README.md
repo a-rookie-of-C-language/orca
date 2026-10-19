@@ -395,7 +395,10 @@ Not migrated yet:
   from the prerelease series — and report availability with the release-page
   URL, while installation of channel builds stays manual with a guided
   download error (mirroring Electron's own pinned-dev-channel behavior on
-  signed builds).
+  signed builds). Dismissing an un-acted channel card abandons the pinned session
+  and returns status to idle like Electron, while plain signed-feed cards keep
+  dismissing renderer-locally (resolver unit tests; live proof awaits a fresh
+  GitHub rate-limit window).
   The Window menu gains the macOS-only `Zoom` entry (Electron `role: 'zoom'`),
   routed to the same maximize/restore pair the renderer uses, and the Quit item
   keeps Electron's platform convention: `Cmd+Q` on macOS, `Ctrl+Q` on Linux,

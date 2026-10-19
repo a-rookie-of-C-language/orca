@@ -704,7 +704,8 @@ mod tests {
     use super::{
         channel_check_kind, compare_release_versions, has_installable_asset,
         is_perf_prerelease_version, is_supported_release_version, release_channel_for_version,
-        resolve_channel_build, ChannelCheckKind, NativeReleaseBuild, UpdaterCheckArgs,
+        resolve_channel_build, should_abandon_channel_card, ChannelCheckKind, NativeReleaseBuild,
+        NativeUpdaterStatus, UpdaterCheckArgs,
     };
     use std::cmp::Ordering;
 
@@ -890,6 +891,29 @@ mod tests {
             assert!(has_installable_asset(&["latest-linux.yml".to_string()]));
         }
     }
+
+    fn available_status() -> NativeUpdaterStatus {
+        NativeUpdaterStatus::Available {
+            version: "9.9.9".to_string(),
+            changelog: None,
+        }
+    }
+
+    #[test]
+    fn dismiss_abandons_only_unacted_channel_cards() {
+        assert!(should_abandon_channel_card(&available_status(), true));
+        assert!(!should_abandon_channel_card(&available_status(), false));
+        assert!(!should_abandon_channel_card(
+            &NativeUpdaterStatus::Idle,
+            true
+        ));
+        assert!(!should_abandon_channel_card(
+            &NativeUpdaterStatus::Downloaded {
+                version: "9.9.9".to_string()
+            },
+            true
+        ));
+    }
 }
 
 #[tauri::command]
@@ -973,11 +997,37 @@ pub fn poc_updater_quit_and_install(
     Ok(())
 }
 
-#[tauri::command]
-pub fn poc_updater_dismiss_nudge() {}
+/// Whether dismissing the update card abandons native state.
+/// Why mirrored: Electron only abandons un-acted local/pinned cards — a plain
+/// signed-feed card dismisses renderer-locally and keeps its pending update.
+fn should_abandon_channel_card(status: &NativeUpdaterStatus, channel_pending: bool) -> bool {
+    channel_pending && matches!(status, NativeUpdaterStatus::Available { .. })
+}
 
 #[tauri::command]
-pub fn poc_updater_dismiss_available_update() {}
+pub fn poc_updater_dismiss_nudge() {
+    // No-op by parity: Tauri runs no nudge campaigns and its statuses never carry
+    // an active nudge id, so the renderer only calls this with nothing to dismiss.
+}
+
+#[tauri::command]
+pub fn poc_updater_dismiss_available_update(app: AppHandle, state: State<UpdaterState>) {
+    let channel_pending = state
+        .pending_channel_build
+        .lock()
+        .map(|pending| pending.is_some())
+        .unwrap_or(false);
+    let abandon = state
+        .status
+        .lock()
+        .map(|status| should_abandon_channel_card(&status, channel_pending))
+        .unwrap_or(false);
+    if !abandon {
+        return;
+    }
+    clear_channel_build(&state);
+    publish_status(&app, &state, NativeUpdaterStatus::Idle);
+}
 
 fn status_message(status: &NativeUpdaterStatus) -> String {
     match status {
