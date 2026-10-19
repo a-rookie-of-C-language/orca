@@ -264,7 +264,7 @@ first native slice covers the low-risk operations that the renderer already expe
   worktree-reveal event routing between the main renderer and the Space renderer, background
   launch behavior that never activates the window, local directory size analysis with progress,
   cancellation, and a profile-scoped cached snapshot. Remote worktrees remain explicit
-  unavailable rows until an SSH/runtime-owned scan RPC is added.
+  unavailable rows until an SSH/runtime-owned scan RPC is added. Open/reuse, zoom seeding, analysis, progress, snapshot caching, and cancel behavior are proven live by `tauri-poc/scripts/check-space-scan.mjs`.
 
 The adapter is in `src/renderer/src/web/tauri-native-bridge.ts`. It is deliberately layered over
 the existing web API: a normal browser keeps the current fallbacks, Electron keeps its preload
