@@ -257,8 +257,10 @@ first native slice covers the low-risk operations that the renderer already expe
   permission and popup events, a renderer-owned context menu, persisted
   default/isolated session profiles, the annotation viewport bridge used by grab mode, and
   grant-scoped local document previews with CSP, directory authorization, failure events, and
-  external-link interception. On Windows, local development hosts also expose the certificate
-  failure overlay and a page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
+  external-link interception. Grant minting accepts the renderer camelCase owner shape, and
+  unlisted text extensions serve as octet-stream (binary-sniffed content keeps the 415).
+  On Windows, local development hosts also expose the certificate failure overlay and a
+  page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
   by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
 - the Workspace Space secondary window: native Tauri window creation/reuse/close, state and
   worktree-reveal event routing between the main renderer and the Space renderer, background

@@ -18,9 +18,9 @@ const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DocPreviewOwner {
-    Ssh {
-        connection_id: String,
-    },
+    #[serde(rename_all = "camelCase")]
+    Ssh { connection_id: String },
+    #[serde(rename_all = "camelCase")]
     Runtime {
         environment_id: String,
         worktree_selector: String,
@@ -343,6 +343,25 @@ fn content_type(path: &Path) -> Option<(&'static str, bool)> {
     Some(value)
 }
 
+/// Binary heuristic shared with the renderer direct-SSH reader: a NUL byte in
+/// the first 8 KiB means binary.
+fn is_binary_probe(bytes: &[u8]) -> bool {
+    const BINARY_PROBE_BYTES: usize = 8192;
+    bytes.iter().take(BINARY_PROBE_BYTES).any(|byte| *byte == 0)
+}
+
+/// Resolve the served MIME for a cached preview file. Unknown extensions fall
+/// back to octet-stream for caller-decoded text (the renderer only omits the
+/// content type for text); a caller-provided type for an unknown extension
+/// stays rejected like before.
+fn cache_mime_for(file_path: &Path, caller_type: Option<&str>) -> Option<(&'static str, bool)> {
+    match (content_type(file_path), caller_type) {
+        (Some(known), _) => Some(known),
+        (None, None) => Some(("application/octet-stream", false)),
+        (None, Some(_)) => None,
+    }
+}
+
 fn response(status: u16, content_type: &str, body: Vec<u8>) -> tauri::http::Response<Vec<u8>> {
     tauri::http::Response::builder()
         .status(status)
@@ -484,16 +503,7 @@ pub fn handle_protocol_request(app: &AppHandle, uri: &str) -> tauri::http::Respo
             AUTHORIZATION_REQUIRED_MESSAGE,
         );
     }
-    let Some((mime, binary)) = content_type(&canonical_target) else {
-        return failure_response(
-            app,
-            &grant_id,
-            &relative_path,
-            "unsupported-asset",
-            415,
-            UNSERVABLE_ASSET_MESSAGE,
-        );
-    };
+    let known = content_type(&canonical_target);
     let Ok(metadata) = fs::metadata(&canonical_target) else {
         return failure_response(
             app,
@@ -504,12 +514,19 @@ pub fn handle_protocol_request(app: &AppHandle, uri: &str) -> tauri::http::Respo
             "Not found",
         );
     };
-    let limit = if binary {
-        MAX_BINARY_BYTES
-    } else {
-        MAX_TEXT_BYTES
+    // Named types keep their declared cap; unnamed paths cannot exceed the
+    // binary cap before the content sniff below refines the limit.
+    let early_limit = match known {
+        Some((_, binary)) => {
+            if binary {
+                MAX_BINARY_BYTES
+            } else {
+                MAX_TEXT_BYTES
+            }
+        }
+        None => MAX_BINARY_BYTES,
     };
-    if metadata.len() > limit {
+    if metadata.len() > early_limit {
         return failure_response(
             app,
             &grant_id,
@@ -519,16 +536,45 @@ pub fn handle_protocol_request(app: &AppHandle, uri: &str) -> tauri::http::Respo
             "This document is too large for the server to send in full.",
         );
     }
-    match fs::read(&canonical_target) {
-        Ok(bytes) => response(200, mime, bytes),
-        Err(_) => failure_response(
+    let bytes = match fs::read(&canonical_target) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return failure_response(
+                app,
+                &grant_id,
+                &relative_path,
+                "unreadable",
+                404,
+                "Not found",
+            );
+        }
+    };
+    match known {
+        Some((mime, _)) => response(200, mime, bytes),
+        // No named type: mirror the octet-stream fallback for text the table
+        // does not list, while content that looks binary keeps the 415 used
+        // for a mime-less binary outcome.
+        None if is_binary_probe(&bytes) => failure_response(
             app,
             &grant_id,
             &relative_path,
-            "unreadable",
-            404,
-            "Not found",
+            "unsupported-asset",
+            415,
+            UNSERVABLE_ASSET_MESSAGE,
         ),
+        None => {
+            if bytes.len() as u64 > MAX_TEXT_BYTES {
+                return failure_response(
+                    app,
+                    &grant_id,
+                    &relative_path,
+                    "too-large",
+                    413,
+                    "This document is too large for the server to send in full.",
+                );
+            }
+            response(200, "application/octet-stream", bytes)
+        }
     }
 }
 
@@ -756,7 +802,10 @@ pub fn poc_doc_preview_cache_file(
     if file_path != candidate || !is_ssh_authorized(grant, &candidate) {
         return Ok(false);
     }
-    let Some((inferred_type, binary)) = content_type(Path::new(&request.file_path)) else {
+    let Some((inferred_type, binary)) = cache_mime_for(
+        Path::new(&request.file_path),
+        request.content_type.as_deref(),
+    ) else {
         return Ok(false);
     };
     if let Some(content_type) = request.content_type.as_deref() {
@@ -882,11 +931,11 @@ pub fn guest_script(grant_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_preview_url, runtime_directory_already_authorized, safe_relative_path,
-        ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
+        build_preview_url, cache_mime_for, is_binary_probe, runtime_directory_already_authorized,
+        safe_relative_path, ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
     };
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn preview_urls_encode_segments_and_reject_traversal() {
@@ -973,5 +1022,61 @@ mod tests {
         let grant = ssh_grant("/docs", "/docs", &["/docs/assets"]);
         assert!(ssh_directory_already_authorized(&grant, "/docs/assets/sub"));
         assert!(!ssh_directory_already_authorized(&grant, "/docs/other"));
+    }
+
+    #[test]
+    fn binary_probe_uses_nul_in_first_8kib() {
+        assert!(!is_binary_probe(b"plain text"));
+        assert!(is_binary_probe(b"\0binary"));
+        let mut edge = vec![97u8; 8192];
+        edge[8191] = 0;
+        assert!(is_binary_probe(&edge));
+        let mut past = vec![97u8; 8193];
+        past[8192] = 0;
+        assert!(!is_binary_probe(&past));
+    }
+
+    #[test]
+    fn cache_mime_falls_back_to_octet_stream_for_text() {
+        assert_eq!(
+            cache_mime_for(Path::new("notes.md"), None),
+            Some(("text/plain; charset=utf-8", false))
+        );
+        assert_eq!(
+            cache_mime_for(Path::new("notes.ts"), None),
+            Some(("application/octet-stream", false))
+        );
+        assert_eq!(
+            cache_mime_for(Path::new("logo.png"), None),
+            Some(("image/png", true))
+        );
+        assert_eq!(
+            cache_mime_for(Path::new("data.bin"), Some("image/png")),
+            None
+        );
+    }
+
+    #[test]
+    fn owner_wire_shape_matches_renderer_camel_case() {
+        let ssh: DocPreviewOwner =
+            serde_json::from_str(r#"{"kind":"ssh","connectionId":"conn-1"}"#)
+                .expect("ssh owner shape");
+        assert!(matches!(ssh, DocPreviewOwner::Ssh { .. }));
+        let runtime: DocPreviewOwner = serde_json::from_str(
+            r#"{"kind":"runtime","environmentId":"e","worktreeSelector":"s","worktreeRoot":"r"}"#,
+        )
+        .expect("runtime owner shape");
+        match runtime {
+            DocPreviewOwner::Runtime {
+                environment_id,
+                worktree_selector,
+                worktree_root,
+            } => {
+                assert_eq!(environment_id, "e");
+                assert_eq!(worktree_selector, "s");
+                assert_eq!(worktree_root, "r");
+            }
+            DocPreviewOwner::Ssh { .. } => panic!("wrong variant"),
+        }
     }
 }
