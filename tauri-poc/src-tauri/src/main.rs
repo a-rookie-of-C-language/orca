@@ -1258,6 +1258,10 @@ fn main() {
             workspace_space::poc_workspace_space_get_cached_analysis
         ])
         .setup(|app| {
+            // Why first: a panic anywhere later in setup must already land a
+            // pending native report for the next launch.
+            let metadata = crash_reports::feedback_metadata(&app.handle());
+            crash_reports::install_native_panic_hook(&app.handle(), metadata);
             app.manage(browser_webview::BrowserWebviewState::default());
             app.manage(browser_cdp_events::BrowserCdpEventState::default());
             app.manage(browser_identity::BrowserIdentityState::from_app(

@@ -517,7 +517,7 @@ pub(crate) struct FeedbackMetadata {
     arch: String,
 }
 
-fn feedback_metadata(app: &AppHandle) -> FeedbackMetadata {
+pub(crate) fn feedback_metadata(app: &AppHandle) -> FeedbackMetadata {
     FeedbackMetadata {
         app_version: app.package_info().version.to_string(),
         platform: node_platform().to_string(),
@@ -630,6 +630,99 @@ pub(crate) fn record_runtime_exit(
         state,
         runtime_exit_report(&metadata, breadcrumbs, exit),
     )
+}
+/// Native shell panic captured for the next launch. Breadcrumbs are skipped:
+/// the hook runs while the process is unwinding, so touching the state lock
+/// could deadlock a thread that panicked while holding it.
+#[derive(Debug, Clone)]
+pub(crate) struct NativePanicDetails {
+    pub message: String,
+    pub location: Option<String>,
+}
+
+pub(crate) fn native_panic_report(
+    metadata: &FeedbackMetadata,
+    panic: NativePanicDetails,
+) -> CrashReportRecord {
+    let mut details = Map::new();
+    details.insert(
+        "panicMessage".into(),
+        Value::from(string_value(&panic.message, MAX_STRING_LENGTH)),
+    );
+    if let Some(location) = optional_string(panic.location.as_deref(), MAX_DETAIL_STRING_LENGTH) {
+        details.insert("panicLocation".into(), Value::from(location));
+    }
+    CrashReportRecord {
+        id: report_id(),
+        created_at: now_iso(),
+        status: "pending".into(),
+        source: "native".into(),
+        process_type: "shell".into(),
+        reason: "rust-panic".into(),
+        exit_code: None,
+        app_version: metadata.app_version.clone(),
+        platform: metadata.platform.clone(),
+        os_release: metadata.os_release.clone(),
+        arch: metadata.arch.clone(),
+        electron_version: "tauri".into(),
+        chrome_version: "none".into(),
+        details,
+        breadcrumbs: None,
+    }
+}
+
+pub(crate) fn record_native_panic_report(
+    path: &Path,
+    metadata: &FeedbackMetadata,
+    panic: NativePanicDetails,
+) -> Result<CrashReportRecord, String> {
+    let mut reports = read_reports(path);
+    let report = native_panic_report(metadata, panic);
+    reports.insert(0, report.clone());
+    reports.truncate(MAX_REPORTS);
+    write_reports(path, &reports)?;
+    Ok(report)
+}
+
+fn panic_message(info: &std::panic::PanicHookInfo) -> String {
+    let payload = info.payload();
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        return message.to_string();
+    }
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+    "unknown panic payload".to_string()
+}
+
+pub(crate) fn install_native_panic_hook_with_path(path: PathBuf, metadata: FeedbackMetadata) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let location = info.location().map(|location| {
+            format!(
+                "{}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            )
+        });
+        let _ = record_native_panic_report(
+            &path,
+            &metadata,
+            NativePanicDetails {
+                message: panic_message(info),
+                location,
+            },
+        );
+        previous(info);
+    }));
+}
+
+pub(crate) fn install_native_panic_hook(app: &AppHandle, metadata: FeedbackMetadata) {
+    let Ok(path) = app_data_path(app) else {
+        return;
+    };
+    install_native_panic_hook_with_path(path, metadata);
 }
 
 #[tauri::command]
@@ -1163,5 +1256,84 @@ mod tests {
         assert_eq!(report.details.get("hadPairing"), Some(&Value::Bool(true)));
         assert_eq!(report.app_version, "9.9.9");
         assert!(report.breadcrumbs.is_none());
+    }
+
+    #[test]
+    fn native_panic_report_carries_shell_attribution() {
+        let report = native_panic_report(
+            &test_metadata(),
+            NativePanicDetails {
+                message: "explicit panic".to_string(),
+                location: Some("src/main.rs:10:2".to_string()),
+            },
+        );
+        assert_eq!(report.status, "pending");
+        assert_eq!(report.source, "native");
+        assert_eq!(report.process_type, "shell");
+        assert_eq!(report.reason, "rust-panic");
+        assert_eq!(report.exit_code, None);
+        assert_eq!(
+            report.details.get("panicMessage"),
+            Some(&Value::from("explicit panic")),
+        );
+        assert_eq!(
+            report.details.get("panicLocation"),
+            Some(&Value::from("src/main.rs:10:2")),
+        );
+        assert!(report.breadcrumbs.is_none());
+    }
+
+    #[test]
+    fn native_panic_storage_truncates_and_caps_reports() {
+        let dir = std::env::temp_dir().join(format!("orca-tauri-panic-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("crash-reports.json");
+        let metadata = test_metadata();
+        let long = "m".repeat(MAX_STRING_LENGTH + 40);
+        for _ in 0..(MAX_REPORTS + 2) {
+            record_native_panic_report(
+                &path,
+                &metadata,
+                NativePanicDetails {
+                    message: long.clone(),
+                    location: None,
+                },
+            )
+            .unwrap();
+        }
+        let reports = read_reports(&path);
+        assert_eq!(reports.len(), MAX_REPORTS);
+        let message = reports[0]
+            .details
+            .get("panicMessage")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert_eq!(message.len(), MAX_STRING_LENGTH);
+        assert!(reports[0].details.get("panicLocation").is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn panic_hook_persists_report_for_next_launch() {
+        let dir = std::env::temp_dir().join(format!("orca-tauri-panic-hook-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("crash-reports.json");
+        let previous = std::panic::take_hook();
+        install_native_panic_hook_with_path(path.clone(), test_metadata());
+        let result = std::panic::catch_unwind(|| panic!("probe panic"));
+        std::panic::set_hook(previous);
+        assert!(result.is_err());
+        let reports = read_reports(&path);
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].reason, "rust-panic");
+        assert_eq!(reports[0].process_type, "shell");
+        let message = reports[0]
+            .details
+            .get("panicMessage")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(message.contains("probe panic"));
+        assert!(reports[0].details.get("panicLocation").is_some());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
