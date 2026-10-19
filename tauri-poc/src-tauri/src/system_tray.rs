@@ -520,15 +520,6 @@ pub fn poc_tray_set_visible(app: AppHandle, visible: bool) -> Result<bool, Strin
     Ok(false)
 }
 
-#[tauri::command]
-pub fn poc_tray_destroy(app: AppHandle) -> Result<bool, String> {
-    if !cfg!(target_os = "windows") && !cfg!(target_os = "macos") {
-        return Ok(false);
-    }
-    app.remove_tray_by_id(TRAY_ICON_ID);
-    Ok(app.tray_by_id(TRAY_ICON_ID).is_none())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -254,13 +254,6 @@ pub struct BrowserPageNavigateArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BrowserPageFindArgs {
-    pub browser_page_id: String,
-    pub query: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct BrowserPageBoundsArgs {
     pub browser_page_id: String,
     pub bounds: BrowserPageBounds,
@@ -2885,18 +2878,6 @@ pub fn poc_browser_set_zoom(
     }
     child_webview(&app, &state, &args.browser_page_id)?
         .set_zoom(args.scale_factor)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-pub fn poc_browser_find(
-    app: AppHandle,
-    state: State<BrowserWebviewState>,
-    args: BrowserPageFindArgs,
-) -> Result<(), String> {
-    let query = serde_json::to_string(&args.query).map_err(|error| error.to_string())?;
-    child_webview(&app, &state, &args.browser_page_id)?
-        .eval(format!("window.find({query});"))
         .map_err(|error| error.to_string())
 }
 
