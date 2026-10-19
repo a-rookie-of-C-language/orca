@@ -217,8 +217,10 @@ first native slice covers the low-risk operations that the renderer already expe
   mirrors Electron's native template item for item (Add link, the Format/Paragraph/Insert
   submenus, the Table submenu with header-row disabled states, and Cut/Copy/Paste/Select all)
   and dispatches the same payloads through `runRichMarkdownContextCommand`, so formatting and
-  table edits behave exactly like Electron's `rich-markdown:context-command` IPC. Covered by
-  `rich-markdown-dom-context-menu.test.tsx` (11 tests: gate, model parity, and dispatches
+  table edits behave exactly like Electron's `rich-markdown:context-command` IPC. The menu is
+  fully keyboard operable like the native one (arrows/Home/End, Enter/Space, Right/Left for
+  submenus, Escape closes submenu then menu, Tab dismisses). Covered by
+  `rich-markdown-dom-context-menu.test.tsx` (gate, model parity, keyboard model, and dispatches
   against a real editor) and live by `tauri-poc/scripts/check-rich-markdown-dom-menu.mjs`
   (gate on, model order, and a real right-click → Bold round-trip when a markdown editor is
   open; the probe never opens files itself so the shared dev workspace stays untouched).

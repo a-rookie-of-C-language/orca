@@ -171,3 +171,67 @@ export function runRichMarkdownDomMenuEditAction(
       }).catch(() => undefined)
   }
 }
+
+// Why: Electron's native menu is fully keyboard operable, so the DOM
+// replacement tracks the same focus model: one level at a time (top level or
+// the open submenu), wrapping past the ends and skipping separators and
+// disabled entries.
+export type RichMarkdownDomMenuFocus = {
+  inSubmenu: boolean
+  index: number
+}
+
+export function enabledDomMenuEntryIndices(entries: RichMarkdownDomMenuEntry[]): number[] {
+  const indices: number[] = []
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index]
+    if (entry.kind === 'separator') {
+      continue
+    }
+    // Why: submenu triggers carry no disabled flag, so they are always actionable.
+    if (entry.kind === 'submenu' || entry.disabled !== true) {
+      indices.push(index)
+    }
+  }
+  return indices
+}
+
+export function initialDomMenuFocus(
+  entries: RichMarkdownDomMenuEntry[]
+): RichMarkdownDomMenuFocus | null {
+  const [first] = enabledDomMenuEntryIndices(entries)
+  return first === undefined ? null : { inSubmenu: false, index: first }
+}
+
+export function levelDomMenuEntries(
+  model: RichMarkdownDomMenuEntry[],
+  openSubmenuIndex: number | null,
+  inSubmenu: boolean
+): RichMarkdownDomMenuEntry[] {
+  if (!inSubmenu || openSubmenuIndex === null) {
+    return model
+  }
+  const open = model[openSubmenuIndex]
+  return open?.kind === 'submenu' ? open.items : model
+}
+
+export function moveDomMenuFocus(options: {
+  model: RichMarkdownDomMenuEntry[]
+  openSubmenuIndex: number | null
+  focus: RichMarkdownDomMenuFocus | null
+  direction: 1 | -1
+}): RichMarkdownDomMenuFocus | null {
+  const { model, openSubmenuIndex, focus, direction } = options
+  // Why: a submenu focus without an open submenu is stale (closing the menu
+  // level always resets it), so snap back to the top level instead of walking
+  // a level that is no longer rendered.
+  const inSubmenu = focus?.inSubmenu === true && model[openSubmenuIndex ?? -1]?.kind === 'submenu'
+  const entries = levelDomMenuEntries(model, openSubmenuIndex, inSubmenu)
+  const enabled = enabledDomMenuEntryIndices(entries)
+  if (enabled.length === 0) {
+    return focus
+  }
+  const current = focus ? enabled.indexOf(focus.index) : -1
+  const next = enabled[(current + direction + enabled.length) % enabled.length]
+  return { inSubmenu, index: next }
+}

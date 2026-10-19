@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import {
   buildRichMarkdownDomContextMenuModel,
+  enabledDomMenuEntryIndices,
+  initialDomMenuFocus,
+  levelDomMenuEntries,
+  moveDomMenuFocus,
   shouldUseRichMarkdownDomContextMenu,
   type RichMarkdownDomMenuEntry
 } from './rich-markdown-dom-context-menu-model'
@@ -181,6 +185,105 @@ describe('rich markdown dom context menu model', () => {
   })
 })
 
+describe('rich markdown dom context menu keyboard model', () => {
+  it('starts on the first enabled entry and skips separators', () => {
+    const model = buildRichMarkdownDomContextMenuModel({ cellType: null, hasSelection: true })
+    expect(initialDomMenuFocus(model)).toEqual({ inSubmenu: false, index: 0 })
+    expect(enabledDomMenuEntryIndices(model)).toEqual([0, 2, 3, 4, 6, 7, 8, 9, 10])
+  })
+
+  it('returns null when nothing is actionable', () => {
+    expect(initialDomMenuFocus([])).toBeNull()
+    expect(initialDomMenuFocus([{ kind: 'separator' }])).toBeNull()
+  })
+
+  it('moves within the level with wraparound', () => {
+    const model = buildRichMarkdownDomContextMenuModel({ cellType: null, hasSelection: true })
+    expect(moveDomMenuFocus({ model, openSubmenuIndex: null, focus: null, direction: 1 })).toEqual({
+      inSubmenu: false,
+      index: 0
+    })
+    // Index 1 is the separator after Add link, so moving down skips it.
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: null,
+        focus: { inSubmenu: false, index: 0 },
+        direction: 1
+      })
+    ).toEqual({ inSubmenu: false, index: 2 })
+    // Wrapping past the last entry lands back on Add link.
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: null,
+        focus: { inSubmenu: false, index: 10 },
+        direction: 1
+      })
+    ).toEqual({ inSubmenu: false, index: 0 })
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: null,
+        focus: { inSubmenu: false, index: 0 },
+        direction: -1
+      })
+    ).toEqual({ inSubmenu: false, index: 10 })
+  })
+
+  it('navigates submenu items only while a submenu is open', () => {
+    const model = buildRichMarkdownDomContextMenuModel({ cellType: 'body', hasSelection: true })
+    const tableIndex = model.findIndex(
+      (entry) =>
+        entry.kind === 'submenu' &&
+        entry.items.some((item) => item.kind === 'command' && item.command === 'delete-table')
+    )
+    expect(tableIndex).toBeGreaterThan(-1)
+    // Closed: movement stays on the top level even with a submenu focus.
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: null,
+        focus: { inSubmenu: true, index: 0 },
+        direction: 1
+      })?.inSubmenu
+    ).toBe(false)
+    // Open: movement walks the table entries and wraps inside them.
+    expect(levelDomMenuEntries(model, tableIndex, true).length).toBe(9)
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: tableIndex,
+        focus: { inSubmenu: true, index: 0 },
+        direction: 1
+      })
+    ).toEqual({ inSubmenu: true, index: 1 })
+    expect(
+      moveDomMenuFocus({
+        model,
+        openSubmenuIndex: tableIndex,
+        focus: { inSubmenu: true, index: 8 },
+        direction: 1
+      })
+    ).toEqual({ inSubmenu: true, index: 0 })
+  })
+
+  it('skips disabled entries without stranding focus', () => {
+    const model = buildRichMarkdownDomContextMenuModel({ cellType: 'header', hasSelection: true })
+    const headerTableIndex = model.findIndex(
+      (entry) =>
+        entry.kind === 'submenu' &&
+        entry.items.some((item) => item.kind === 'command' && item.command === 'delete-table')
+    )
+    expect(headerTableIndex).toBeGreaterThan(-1)
+    // Insert row above (index 0) is disabled in header rows, so the submenu opens on row below.
+    expect(initialDomMenuFocus(levelDomMenuEntries(model, headerTableIndex, true))).toEqual({
+      inSubmenu: false,
+      index: 1
+    })
+  })
+})
+
 describe('rich markdown dom context menu component', () => {
   it('runs bold against the right-clicked selection', () => {
     const { editor, element } = createEditor('hello world')
@@ -289,6 +392,125 @@ describe('rich markdown dom context menu component', () => {
         document.body.querySelector('[data-testid="rich-markdown-dom-context-menu"]')
       ).toBeNull()
       expect(editor.getHTML()).not.toContain('<strong>')
+    } finally {
+      view.unmount()
+      editor.destroy()
+      element.remove()
+    }
+  })
+
+  it('focuses the first entry on open and walks with arrows', () => {
+    const { editor, element } = createEditor('hello world')
+    const view = render(
+      <RichMarkdownDomContextMenu
+        editor={editor}
+        rootRef={{ current: element }}
+        toggleLink={vi.fn()}
+        pickImage={vi.fn()}
+      />
+    )
+    try {
+      fireEvent.contextMenu(editor.view.dom, { clientX: 50, clientY: 60 })
+      const focusedLabel = (): string | null => {
+        const focused = document.body.querySelector(
+          '[data-testid="rich-markdown-dom-context-menu"] [data-focused="true"]'
+        )
+        return focused?.textContent ?? null
+      }
+      expect(focusedLabel()).toBe('Add link')
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      expect(focusedLabel()).toBe('Format')
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      expect(focusedLabel()).toBe('Paragraph')
+      fireEvent.keyDown(window, { key: 'ArrowUp' })
+      expect(focusedLabel()).toBe('Format')
+      fireEvent.keyDown(window, { key: 'End' })
+      expect(focusedLabel()).toBe('Select all')
+      fireEvent.keyDown(window, { key: 'Home' })
+      expect(focusedLabel()).toBe('Add link')
+    } finally {
+      view.unmount()
+      editor.destroy()
+      element.remove()
+    }
+  })
+
+  it('opens submenus with enter and runs commands from the keyboard', () => {
+    const { editor, element } = createEditor('hello world')
+    const view = render(
+      <RichMarkdownDomContextMenu
+        editor={editor}
+        rootRef={{ current: element }}
+        toggleLink={vi.fn()}
+        pickImage={vi.fn()}
+      />
+    )
+    try {
+      const from = textPosition(editor, 'hello world')
+      editor.commands.setTextSelection({ from, to: from + 'hello world'.length })
+      vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ inside: -1, pos: from + 1 })
+      fireEvent.contextMenu(editor.view.dom, { clientX: 50, clientY: 60 })
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      expect(
+        document.body.querySelector('[data-submenu="Format"]')?.getAttribute('data-focused')
+      ).toBe('true')
+      fireEvent.keyDown(window, { key: 'Enter' })
+      expect(
+        document.body.querySelector('[data-command="bold"]')?.getAttribute('data-focused')
+      ).toBe('true')
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      expect(
+        document.body.querySelector('[data-command="italic"]')?.getAttribute('data-focused')
+      ).toBe('true')
+      fireEvent.keyDown(window, { key: 'Enter' })
+      expect(editor.getHTML()).toContain('<em>')
+      expect(
+        document.body.querySelector('[data-testid="rich-markdown-dom-context-menu"]')
+      ).toBeNull()
+    } finally {
+      view.unmount()
+      editor.destroy()
+      element.remove()
+    }
+  })
+
+  it('closes the submenu before the menu on repeated escape', () => {
+    const { editor, element } = createEditor(TABLE)
+    const view = render(
+      <RichMarkdownDomContextMenu
+        editor={editor}
+        rootRef={{ current: element }}
+        toggleLink={vi.fn()}
+        pickImage={vi.fn()}
+      />
+    )
+    try {
+      fireEvent.contextMenu(element.querySelector('td')!, { clientX: 12, clientY: 34 })
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      expect(
+        document.body.querySelector('[data-submenu="Table"]')?.getAttribute('data-focused')
+      ).toBe('true')
+      fireEvent.keyDown(window, { key: 'ArrowRight' })
+      expect(document.body.querySelector('[data-command="delete-row"]')).not.toBeNull()
+      fireEvent.keyDown(window, { key: 'ArrowLeft' })
+      expect(document.body.querySelector('[data-command="delete-row"]')).toBeNull()
+      expect(
+        document.body.querySelector('[data-testid="rich-markdown-dom-context-menu"]')
+      ).not.toBeNull()
+      fireEvent.keyDown(window, { key: 'ArrowRight' })
+      expect(document.body.querySelector('[data-command="delete-row"]')).not.toBeNull()
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(document.body.querySelector('[data-command="delete-row"]')).toBeNull()
+      expect(
+        document.body.querySelector('[data-testid="rich-markdown-dom-context-menu"]')
+      ).not.toBeNull()
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(
+        document.body.querySelector('[data-testid="rich-markdown-dom-context-menu"]')
+      ).toBeNull()
     } finally {
       view.unmount()
       editor.destroy()

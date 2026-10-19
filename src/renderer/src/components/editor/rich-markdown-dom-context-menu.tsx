@@ -5,9 +5,14 @@ import type { Editor } from '@tiptap/react'
 import { cn } from '@/lib/utils'
 import {
   buildRichMarkdownDomContextMenuModel,
+  enabledDomMenuEntryIndices,
+  initialDomMenuFocus,
+  levelDomMenuEntries,
+  moveDomMenuFocus,
   runRichMarkdownDomMenuEditAction,
   type RichMarkdownDomMenuCellType,
-  type RichMarkdownDomMenuEntry
+  type RichMarkdownDomMenuEntry,
+  type RichMarkdownDomMenuFocus
 } from './rich-markdown-dom-context-menu-model'
 import {
   isRichMarkdownContextCommandTarget,
@@ -22,7 +27,7 @@ import {
 const MENU_PANEL_CLASS =
   'z-[70] min-w-[11rem] overflow-hidden rounded-[11px] border border-black/14 bg-[rgba(255,255,255,0.82)] p-[4px] text-black dark:text-white shadow-[0_12px_28px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl dark:border-white/14 dark:bg-[rgba(0,0,0,0.72)] dark:shadow-[0_16px_34px_rgba(0,0,0,0.40),inset_0_1px_0_rgba(255,255,255,0.04)]'
 const MENU_ITEM_CLASS =
-  "relative flex cursor-default items-center gap-2 rounded-md px-2 py-[4px] text-[12px] leading-[17px] font-[450] outline-hidden select-none hover:bg-black/8 dark:hover:bg-white/14 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5"
+  "relative flex cursor-default items-center gap-2 rounded-md px-2 py-[4px] text-[12px] leading-[17px] font-[450] outline-hidden select-none hover:bg-black/8 dark:hover:bg-white/14 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[focused=true]:bg-black/8 dark:data-[focused=true]:bg-white/14 data-[focused=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5"
 const MENU_SEPARATOR_CLASS = 'my-[3px] h-px bg-border/60'
 const SUBMENU_WIDTH_ESTIMATE = 240
 
@@ -44,9 +49,14 @@ export function RichMarkdownDomContextMenu({
   pickImage: () => void
 }): React.JSX.Element | null {
   const [menu, setMenu] = useState<DomMenuState | null>(null)
-  const [openSubmenu, setOpenSubmenu] = useState<{ label: string; flip: boolean } | null>(null)
+  const [openSubmenu, setOpenSubmenu] = useState<{ index: number; flip: boolean } | null>(null)
+  const [focus, setFocus] = useState<RichMarkdownDomMenuFocus | null>(null)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // Why: the keyboard handler below reads the latest model and focus without
+  // re-registering listeners, the same ref-forward pattern RichMarkdownEditor
+  // uses for its toolbar callbacks.
+  const dispatchEntryRef = useRef<(entry: RichMarkdownDomMenuEntry) => void>(() => {})
 
   useEffect(() => {
     if (!editor) {
@@ -62,12 +72,21 @@ export function RichMarkdownDomContextMenu({
       event.preventDefault()
       const target = event.target instanceof Element ? event.target.closest('td, th') : null
       const cell = target && dom.contains(target) ? target : null
+      const cellType = cell ? (cell.tagName === 'TH' ? 'header' : 'body') : null
       setOpenSubmenu(null)
       setPosition(null)
+      setFocus(
+        initialDomMenuFocus(
+          buildRichMarkdownDomContextMenuModel({
+            cellType,
+            hasSelection: !editor.state.selection.empty
+          })
+        )
+      )
       setMenu({
         x: event.clientX,
         y: event.clientY,
-        cellType: cell ? (cell.tagName === 'TH' ? 'header' : 'body') : null
+        cellType
       })
     }
     dom.addEventListener('contextmenu', onContextMenu)
@@ -87,8 +106,109 @@ export function RichMarkdownDomContextMenu({
       setMenu(null)
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        setMenu(null)
+      const model = buildRichMarkdownDomContextMenuModel({
+        cellType: menu.cellType,
+        hasSelection: editor?.state.selection.empty === false
+      })
+      const openSubmenuEntries =
+        openSubmenu === null ? null : levelDomMenuEntries(model, openSubmenu.index, true)
+      const activateFocused = (): void => {
+        const entries = focus?.inSubmenu === true && openSubmenuEntries ? openSubmenuEntries : model
+        const entry = focus ? entries[focus.index] : undefined
+        if (!entry || entry.kind === 'separator') {
+          return
+        }
+        if (entry.kind === 'submenu') {
+          openFocusedSubmenu()
+          return
+        }
+        if (entry.disabled === true) {
+          return
+        }
+        dispatchEntryRef.current(entry)
+      }
+      const openFocusedSubmenu = (): void => {
+        if (!focus || focus.inSubmenu) {
+          return
+        }
+        const entry = model[focus.index]
+        if (entry?.kind !== 'submenu' || openSubmenu?.index === focus.index) {
+          return
+        }
+        const panelRight = panelRef.current?.getBoundingClientRect().right ?? menu.x
+        setOpenSubmenu({
+          index: focus.index,
+          flip: panelRight + SUBMENU_WIDTH_ESTIMATE > window.innerWidth
+        })
+        const next = initialDomMenuFocus(entry.items)
+        setFocus(next ? { inSubmenu: true, index: next.index } : null)
+      }
+      const jumpToEdge = (edge: 'first' | 'last'): void => {
+        const inSubmenu = focus?.inSubmenu === true
+        const entries = levelDomMenuEntries(model, openSubmenu?.index ?? null, inSubmenu)
+        const enabled = enabledDomMenuEntryIndices(entries)
+        const target = edge === 'first' ? enabled.at(0) : enabled.at(-1)
+        if (target !== undefined) {
+          setFocus({ inSubmenu, index: target })
+        }
+      }
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault()
+          setFocus((current) =>
+            moveDomMenuFocus({
+              model,
+              openSubmenuIndex: openSubmenu?.index ?? null,
+              focus: current,
+              direction: 1
+            })
+          )
+          return
+        case 'ArrowUp':
+          event.preventDefault()
+          setFocus((current) =>
+            moveDomMenuFocus({
+              model,
+              openSubmenuIndex: openSubmenu?.index ?? null,
+              focus: current,
+              direction: -1
+            })
+          )
+          return
+        case 'ArrowRight':
+          event.preventDefault()
+          openFocusedSubmenu()
+          return
+        case 'ArrowLeft':
+          event.preventDefault()
+          if (focus?.inSubmenu === true && openSubmenu) {
+            setOpenSubmenu(null)
+            setFocus({ inSubmenu: false, index: openSubmenu.index })
+          }
+          return
+        case 'Home':
+          event.preventDefault()
+          jumpToEdge('first')
+          return
+        case 'End':
+          event.preventDefault()
+          jumpToEdge('last')
+          return
+        case 'Enter':
+        case ' ':
+          event.preventDefault()
+          activateFocused()
+          return
+        case 'Tab':
+          setMenu(null)
+          return
+        case 'Escape':
+          if (focus?.inSubmenu === true && openSubmenu) {
+            setOpenSubmenu(null)
+            setFocus({ inSubmenu: false, index: openSubmenu.index })
+            return
+          }
+          setMenu(null)
       }
     }
     const close = (): void => setMenu(null)
@@ -102,7 +222,7 @@ export function RichMarkdownDomContextMenu({
       window.removeEventListener('blur', close)
       window.removeEventListener('resize', close)
     }
-  }, [menu])
+  }, [menu, editor, openSubmenu, focus])
 
   useLayoutEffect(() => {
     if (!menu || !panelRef.current) {
@@ -143,6 +263,7 @@ export function RichMarkdownDomContextMenu({
     runRichMarkdownContextCommand({ payload, editor, toggleLink, pickImage })
     setMenu(null)
   }
+  dispatchEntryRef.current = dispatchEntry
 
   const model = buildRichMarkdownDomContextMenuModel({
     cellType: menu.cellType,
@@ -151,20 +272,27 @@ export function RichMarkdownDomContextMenu({
 
   const renderEntries = (
     entries: RichMarkdownDomMenuEntry[],
-    submenuLabel: string
+    inSubmenu: boolean
   ): React.JSX.Element[] =>
     entries.map((entry, index) => {
-      const key = `${submenuLabel}:${index}`
+      const key = `${inSubmenu ? 'sub' : 'root'}:${index}`
+      const focused = focus?.inSubmenu === inSubmenu && focus?.index === index
       if (entry.kind === 'separator') {
         return <div key={key} role="separator" className={MENU_SEPARATOR_CLASS} />
       }
       if (entry.kind === 'submenu') {
-        const open = openSubmenu?.label === `${submenuLabel}>${entry.label}`
+        // Why: the Electron template nests only one submenu level, so an open
+        // submenu always belongs to the top level and children never recurse.
+        const open = !inSubmenu && openSubmenu?.index === index
         // Why: spread a CSSProperties-typed offset like components/ui/context-menu
         // does so the Electron-only drag-region opt-out compiles the same way.
-        const submenuOffset: React.CSSProperties = openSubmenu?.flip
-          ? { right: 'calc(100% - 2px)' }
-          : { left: 'calc(100% - 2px)' }
+        const submenuOffset: React.CSSProperties =
+          openSubmenu?.flip === true ? { right: 'calc(100% - 2px)' } : { left: 'calc(100% - 2px)' }
+        const openSubmenuAt = (flip: boolean): void => {
+          setOpenSubmenu({ index, flip })
+          const next = initialDomMenuFocus(entry.items)
+          setFocus(next ? { inSubmenu: true, index: next.index } : { inSubmenu: false, index })
+        }
         return (
           <div
             key={key}
@@ -172,15 +300,17 @@ export function RichMarkdownDomContextMenu({
             aria-haspopup="menu"
             aria-expanded={open}
             data-submenu={entry.label}
+            data-focused={focused ? 'true' : undefined}
             className={cn(MENU_ITEM_CLASS, 'justify-between')}
             onMouseEnter={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
               setOpenSubmenu({
-                label: `${submenuLabel}>${entry.label}`,
+                index,
                 flip: rect.right + SUBMENU_WIDTH_ESTIMATE > window.innerWidth
               })
+              setFocus({ inSubmenu: false, index })
             }}
-            onClick={() => setOpenSubmenu({ label: `${submenuLabel}>${entry.label}`, flip: false })}
+            onClick={() => openSubmenuAt(false)}
           >
             <span>{entry.label}</span>
             <ChevronRightIcon />
@@ -192,7 +322,7 @@ export function RichMarkdownDomContextMenu({
                 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: WebkitAppRegion is Electron's drag-region hint and absent from csstype, like the shadcn context-menu primitive this mirrors.
                 style={{ ...submenuOffset, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               >
-                {renderEntries(entry.items, `${submenuLabel}>${entry.label}`)}
+                {renderEntries(entry.items, true)}
               </div>
             )}
           </div>
@@ -205,9 +335,15 @@ export function RichMarkdownDomContextMenu({
           data-command={entry.kind === 'command' ? entry.command : undefined}
           data-edit={entry.kind === 'edit' ? entry.action : undefined}
           data-disabled={entry.disabled === true ? 'true' : undefined}
+          data-focused={focused ? 'true' : undefined}
           aria-disabled={entry.disabled === true}
           className={MENU_ITEM_CLASS}
-          onMouseEnter={() => setOpenSubmenu(null)}
+          onMouseEnter={() => {
+            if (!inSubmenu) {
+              setOpenSubmenu(null)
+            }
+            setFocus({ inSubmenu, index })
+          }}
           onClick={() => {
             if (entry.disabled === true) {
               return
@@ -231,7 +367,7 @@ export function RichMarkdownDomContextMenu({
       style={{ ...panelPosition, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       onMouseLeave={() => setOpenSubmenu(null)}
     >
-      {renderEntries(model, 'root')}
+      {renderEntries(model, false)}
     </div>,
     document.body
   )
