@@ -125,17 +125,24 @@ fn main_window_zoom_level() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Seed the label's zoom map slot from the main window's latest level and
-/// apply it through `set_zoom`. Called by `poc_workspace_space_open` (and any
-/// future secondary-window opener) so the new window honors the app-wide zoom.
-pub(crate) fn seed_secondary_window_zoom(app: &AppHandle, label: &str) {
+/// Seed the label zoom map slot from the main window latest level.
+/// Called by secondary-window openers so the new window honors app-wide zoom.
+/// Only the map slot is seeded here; the factor lands on page load.
+pub(crate) fn seed_secondary_window_zoom_level(label: &str) {
     let level = main_window_zoom_level();
-    {
-        let map = window_zoom_levels();
-        if let Ok(mut levels) = map.lock() {
-            levels.insert(label.to_string(), level);
-        }
+    if let Ok(mut levels) = window_zoom_levels().lock() {
+        levels.insert(label.to_string(), level);
     }
+}
+/// Push the seeded level through set_zoom. Call only once the page has loaded,
+/// never synchronously after build: set_zoom on a just-built window can block
+/// until the webview answers, wedging the invoke and every later one.
+pub(crate) fn apply_seeded_secondary_window_zoom(app: &AppHandle, label: &str) {
+    let level = window_zoom_levels()
+        .lock()
+        .ok()
+        .and_then(|levels| levels.get(label).copied())
+        .unwrap_or(0.0);
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.set_zoom(UI_ZOOM_BASE.powf(level));
     }

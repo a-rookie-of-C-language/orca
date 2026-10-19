@@ -678,7 +678,7 @@ fn space_url() -> Result<WebviewUrl, String> {
 }
 
 #[tauri::command]
-pub fn poc_workspace_space_open(app: AppHandle) -> Result<(), String> {
+pub async fn poc_workspace_space_open(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(SPACE_WINDOW_LABEL) {
         if !is_background_launch() {
             let _ = window.show();
@@ -688,19 +688,21 @@ pub fn poc_workspace_space_open(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
+    // Why page-load, not inline: `set_zoom` on a just-built window can block
+    // until the webview answers, wedging this invoke and every later one, so
+    // only the map slot is seeded here and the factor lands on page load.
+    crate::seed_secondary_window_zoom_level(SPACE_WINDOW_LABEL);
     let visible = !is_background_launch();
     let window = WebviewWindowBuilder::new(&app, SPACE_WINDOW_LABEL, space_url()?)
         .title("Orca Space")
         .inner_size(1180.0, 820.0)
         .min_inner_size(700.0, 520.0)
         .visible(visible)
+        .on_page_load(|window, _| {
+            crate::apply_seeded_secondary_window_zoom(window.app_handle(), window.label());
+        })
         .build()
         .map_err(|error| format!("failed to create Orca Space window: {error}"))?;
-
-    // Why: Electron applies the persisted `uiZoomLevel` to the space window on
-    // dom-ready; the Tauri shell does the same so a zoomed app does not open a
-    // 100%-zoom Space window.
-    crate::seed_secondary_window_zoom(&app, SPACE_WINDOW_LABEL);
 
     let notified = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let app_for_close = app.clone();
