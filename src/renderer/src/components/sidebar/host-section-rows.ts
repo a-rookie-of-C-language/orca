@@ -138,7 +138,10 @@ function localizePendingRowsForHost(
   const localized: Extract<Row, { type: 'header' }>[] = []
   for (const row of rows) {
     if (!row.hostWorktreeCounts) {
-      localized.push(row)
+      // Headers without per-host counts describe the host-owned rows that
+      // follow them. Give each copy its section identity so React keys stay
+      // unique when the same project group is rendered on multiple hosts.
+      localized.push(row.hostId === hostId ? row : { ...row, hostId })
       continue
     }
     const count = row.hostWorktreeCounts.get(hostId)

@@ -47,7 +47,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
       // Why 120x40: no window measured the group the tab opens in: none attached (serve, orcad), a
       // multi-group workspace not shown since launch, or no pane at the default font mounted yet.
       // #1707's original size.
-      const initialSize = (groupId && this.terminalGroupGridSizes?.[groupId]) ||
+      const initialSize = launchOpts.initialSize ||
+        (groupId && this.terminalGroupGridSizes?.[groupId]) ||
         singleGroupSize || { cols: 120, rows: 40 }
       let preAllocatedHandle =
         launchOpts.preAllocatedHandle ?? this.createPreAllocatedTerminalHandle()

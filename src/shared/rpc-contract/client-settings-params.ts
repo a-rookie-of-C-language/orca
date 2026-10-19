@@ -125,7 +125,9 @@ export const SettingsUpdate = z
       .unknown()
       .transform((value) => normalizePRBotAuthorOverrides(value))
       .optional(),
-    nativeChatPermissionMode: z.enum(AGENT_CHAT_PERMISSION_MODES).optional()
+    nativeChatPermissionMode: z.enum(AGENT_CHAT_PERMISSION_MODES).optional(),
+    computerAwakeMode: z.enum(['on', 'off', 'auto']).optional(),
+    keepComputerAwakeWhileAgentsRun: z.boolean().optional()
   })
   .strict()
   .default({})

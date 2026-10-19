@@ -15,7 +15,8 @@ import { clearSshCredentialDeclined, isSshCredentialDeclined } from '../ssh/ssh-
 export function registerSshConnectionHandlers(): void {
   setSshTargetRegistryHandlers({
     connect: connectTarget,
-    getState: (targetId: string) => getPublicSshState(targetId)
+    getState: (targetId: string) => getPublicSshState(targetId),
+    disconnect: disconnectRegisteredSshTarget
   })
 
   ipcMain.handle('ssh:connect', async (_event, args: { targetId: string; automatic?: boolean }) => {
