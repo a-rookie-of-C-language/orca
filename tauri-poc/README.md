@@ -363,7 +363,7 @@ Not migrated yet:
   restores decorations at startup, matching Electron's 1x-zoom layout. Zoom-level
   repositioning still needs a Tauri runtime setter that does not exist yet, and mac
   visual verification is still pending.
-- Keep-awake-while-agents-run is wired end to end but not live-verified: orcad
+- Keep-awake-while-agents-run is wired end to end and live-verified on Windows: orcad
   `OrcadAgentAwakeService` owns the verdict (reuses `AgentAwakeStatusLease`,
   the agent hook-server status stream, and `onSettingsChanged` through
   `normalizeComputerAwakeMode`), publishes it over RPC
@@ -375,9 +375,13 @@ Not migrated yet:
   window destroy) and re-emits `agentAwake:changed` for the
   `CaffeinateStatusSegment`. Settings (`computerAwakeMode`,
   `keepComputerAwakeWhileAgentsRun`) flow from the renderer through
-  `RuntimeClientSettings` into the orcad profile store. Remaining: macOS
-  `caffeinate` / Linux `systemd-inhibit` mirror the Electron assertions but
-  need live-OS verification, plus tray/dock live checks.
+  `RuntimeClientSettings` into the orcad profile store. Windows proof: `tauri-poc/scripts/check-keep-awake.mjs`
+  drives the hidden development app through the Rust command, `window.api.agentAwake.getStatus()`,
+  `agentAwake:changed` delivery, and release reset, while the Rust test in `agent_awake.rs`
+  executes the `SetThreadExecutionState` call both ways (observing the held OS request needs
+  elevation, so `powercfg /requests` cannot serve as the user-mode oracle). Remaining: macOS
+  `caffeinate` / Linux `systemd-inhibit` mirror the Electron assertions but need live-OS
+  verification, plus tray/dock live checks.
 - Windows/WSL/SSH native-boundary audits and production signing.
 
 Those systems are the remaining high-risk parity work; Electron remains the production desktop

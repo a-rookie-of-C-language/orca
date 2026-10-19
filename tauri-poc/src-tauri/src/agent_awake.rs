@@ -147,3 +147,27 @@ pub fn release_agent_awake_blocker(app: &AppHandle) {
         state.active.store(false, Ordering::SeqCst);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn awake_state_starts_released() {
+        let state = AgentAwakeState::default();
+        assert!(!state.active.load(Ordering::SeqCst));
+        assert_eq!(state.mode.lock().unwrap().as_str(), "off");
+        assert!(state.helper.lock().unwrap().is_none());
+    }
+
+    // Runs the platform assertion both ways so a wrong native binding or a
+    // faulting unsafe block fails the suite. On Windows this executes the
+    // real SetThreadExecutionState; observing the held OS request needs
+    // elevation, which the live check in check-keep-awake.mjs documents.
+    #[test]
+    fn os_blocker_applies_and_releases_without_fault() {
+        let helper = Mutex::new(None);
+        set_os_blocker(true, &helper);
+        set_os_blocker(false, &helper);
+    }
+}
