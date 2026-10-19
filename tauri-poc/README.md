@@ -133,7 +133,7 @@ first native slice covers the low-risk operations that the renderer already expe
   paired clients.
 - a native tray/menu-bar entry with Open Orca, Settings, and Quit actions; an explicit tray
   Settings action is queued until the renderer mounts, so it is safe to click while Orca is
-  starting in the background.
+  starting in the background. Windows ensure/attention/rebuild round-trips against the live shell in ``tauri-poc/scripts/check-tray.mjs``; menu-item clicks still need a visible run with OS-level input.
 - a native File/Edit/View/Help application menu with settings, quit, clipboard actions, reload,
   zoom, fullscreen, worktree palette, Appearance toggles, left/right sidebar, setup-guide,
   feature-tour, and crash-report commands routed through the shared renderer UI API.
@@ -271,7 +271,7 @@ Not migrated yet:
   paired runtime remains the authority for workspace files; document-folder imports are native).
 - Session History deletion now uses the Tauri-safe OS-trash boundary exposed by the paired runtime;
   end-to-end verification across packaged profiles is still part of release validation.
-- Packaged runtime staging/update supervision, live tray proof plus the full dock attention
+- Packaged runtime staging/update supervision, tray menu-click routing plus the full dock attention
   behavior, certificate exception end-to-end verification and non-Windows support,
   SSH/remote document-preview transfer, and
   release packaging.
