@@ -160,7 +160,15 @@ first native slice covers the low-risk operations that the renderer already expe
   connect rejects like Electron main and no state is retained). `ssh.testConnection` now probes through orcad (borrowed transport, suppressed fan-out),
   proven live by the refused-loopback run in `check-ssh-direct.mjs` which reports the real
   `ECONNREFUSED` instead of the retired stub. Still stubbed on the web client:
-  `needsPassphrasePrompt`; the managed-server relay ladder still
+  `needsPassphrasePrompt`. `ssh.needsPassphrasePrompt` now answers from orcad with the
+  desktop rule (a declined credential reprompts; otherwise prompt only when the last
+  connect needed a passphrase and no live connection caches it), proven live by
+  `tauri-poc/scripts/check-ssh-needs-passphrase.mjs` (fresh loopback target answers a
+  real boolean false, and an empty targetId is rejected by the orcad schema while the
+  retired stub ignored its args). `listDetectedPorts`/`onDetectedPortsChanged` stay
+  stubbed on the web client, matching Electron's direct path where the handler serves
+  an empty list and nothing ever emits the event (detected ports only arrive over the
+  managed-server relay); the managed-server relay ladder still
   remains on the Electron path.
 - WSL distro hosts when the existing internal WSL gate is enabled: distro discovery, add/remove,
   connect/reconnect, visible-work liveness, account environment propagation, status snapshots and

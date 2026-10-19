@@ -44,6 +44,7 @@ import {
 import { submitSshRuntimeCredential } from '../../../ssh/ssh-runtime-credential-bridge'
 import { resolveVsCodeSshAuthority } from '../../../ssh/vscode-ssh-authority'
 import { SSH_PORT_FORWARD_METHODS } from './ssh-port-forwards'
+import { SSH_NEEDS_PASSPHRASE_METHODS } from './ssh-needs-passphrase'
 import { SSH_TEST_CONNECTION_METHODS } from './ssh-test-connection'
 
 // Why: `generation` stays optional on the wire — an old server simply omits it and its rows key on target id alone.
@@ -294,5 +295,6 @@ export const SSH_METHODS = [
     }
   }),
   ...SSH_PORT_FORWARD_METHODS,
+  ...SSH_NEEDS_PASSPHRASE_METHODS,
   ...SSH_TEST_CONNECTION_METHODS
 ]

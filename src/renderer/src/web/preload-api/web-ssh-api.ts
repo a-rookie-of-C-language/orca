@@ -98,9 +98,19 @@ export function createSshApi(): NonNullable<Partial<PreloadApi>['ssh']> {
       )
       return state
     },
-    needsPassphrasePrompt: () => Promise.resolve(false),
+    needsPassphrasePrompt: async (args) => {
+      if (!requireActiveEnvironmentOrNull()) {
+        return false
+      }
+      const { needsPrompt } = await callRuntimeResult<{ needsPrompt: boolean }>(
+        'ssh.needsPassphrasePrompt',
+        { targetId: args.targetId }
+      )
+      return needsPrompt
+    },
     testConnection: (args: { targetId: string }) =>
-      callRuntimeResult<{ success: boolean; error?: string; state?: SshConnectionState | null }>(
+      // Why: orcad returns state on success and omits it on failure, never null — match the preload contract.
+      callRuntimeResult<{ success: boolean; error?: string; state?: SshConnectionState }>(
         'ssh.testConnection',
         { targetId: args.targetId }
       ),
