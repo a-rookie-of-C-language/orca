@@ -117,6 +117,23 @@ export const SshPortForwardUpdate = z.object({
 export const SshPortForwardRemove = z.object({ id: boundedText(200) })
 export const SshPortForwardList = z.object({ targetId: boundedText(200).optional() })
 
+// Why these bounds: relay-era app PTY ids (`ssh:<target>@@<relay id>`) stay well under
+// 4k, matching the Electron IPC schema for the same channels.
+export const SshLegacyRelayPane = z.object({
+  ptyId: boundedText(4096)
+})
+export const SshLegacyRelayPaneWrite = SshLegacyRelayPane.extend({
+  // Do not trim: terminal input may legitimately be whitespace.
+  data: z.string().max(1_048_576)
+})
+export const SshLegacyRelayPaneResize = SshLegacyRelayPane.extend({
+  cols: z.number().int().positive().max(10_000),
+  rows: z.number().int().positive().max(10_000)
+})
+export const SshLegacyRelayPaneOutputPaused = SshLegacyRelayPane.extend({
+  paused: z.boolean()
+})
+
 export const RepoAddRemote = z.object({
   connectionId: requiredString('Missing SSH target'),
   remotePath: requiredString('Missing remote path'),

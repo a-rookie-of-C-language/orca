@@ -170,6 +170,14 @@ first native slice covers the low-risk operations that the renderer already expe
   an empty list and nothing ever emits the event (detected ports only arrive over the
   managed-server relay); the managed-server relay ladder still
   remains on the Electron path.
+  The legacy relay bridge now runs on orcad too: the bridge host is installed in the Tauri
+  runtime (leases, connection, client events and telemetry mirror the Electron wiring), its
+  seven pane channels are `ssh.*LegacyRelayBridgedPane*` RPC methods, pane lifecycle travels
+  over four new runtime client events, and the managed-server decision keeps a `bridged`
+  connect up like Electron instead of failing closed — proven live by
+  `tauri-poc/scripts/check-ssh-legacy-relay-bridge.mjs` (empty pane list, `not-bridged`
+  attach verdict, schema rejection of an empty pty id). Serving a real relay-era terminal
+  end to end still needs a host that runs one, which no probe machine here provides.
 - WSL distro hosts when the existing internal WSL gate is enabled: distro discovery, add/remove,
   connect/reconnect, visible-work liveness, account environment propagation, status snapshots and
   status events all run inside `orcad` through the same runtime RPC boundary. The Tauri client keeps
@@ -278,7 +286,9 @@ Not migrated yet:
   kills), and the next runtime-status poll stores them as pending reports. Complete minidump
   attachments still need a native implementation.
 - Remaining Electron PTY parity (Windows-native terminal capabilities), plus the SSH managed-server/relay
-  ladder. Tauri now exposes renderer-side PTY
+  ladder's end-to-end serving proof against a host that still runs relay-era terminals (the
+  decision, the bridge host, and the `bridged` connect behavior already run on orcad).
+  Tauri now exposes renderer-side PTY
   delivery diagnostics; it intentionally does not claim Electron's main-process hidden-delivery
   counters because Tauri does not have that delivery gate.
 - Local filesystem workspace ownership and the remaining mutation authorization surface (the

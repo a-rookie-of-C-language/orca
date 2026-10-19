@@ -30,6 +30,13 @@ import {
   setSshHostServerStatus
 } from '../ssh/ssh-host-server-status'
 import { unservedHostServerMessage, unservedServerStatus } from '../ssh/ssh-host-unserved-status'
+import {
+  forgetLegacyRelayTarget,
+  installLegacyRelayBridge,
+  startLegacyRelayBridge,
+  stopLegacyRelayBridge
+} from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
+import { installOrcadLegacyRelayBridgeHost } from './orcad-ssh-legacy-relay-bridge'
 
 function publicSshState(state: SshConnectionState): SshConnectionState {
   return getPublicSshState(state) ?? state
@@ -92,8 +99,7 @@ async function connectTargetWithManagedServer(
     const decision = await resolveHostServerOnConnect(
       target,
       createHostServerOnConnectDeps(userDataPath, {
-        // Tauri has no Electron relay bridge yet. A legacy relay is therefore never reported as
-        // managed; the decision below safely returns an actionable unserved status instead.
+        startLegacyRelayBridge,
         progress: (targetId, phase) => {
           notifySshState(runtime, setupState(manager, targetId, phase))
         }
@@ -116,6 +122,14 @@ async function connectTargetWithManagedServer(
 
     const managedServer = unservedServerStatus(decision)
     setSshHostServerStatus(target.id, managedServer)
+    // COMPAT(legacy-relay-bridge): a host that can't move only because relay terminals run in
+    // it stays connected, mirroring Electron, so the bridge keeps those terminals working.
+    if (decision.bridged) {
+      await startLegacyRelayBridge(target.id)
+      const state = connectedState(manager, target.id, managedServer)
+      notifySshState(runtime, state)
+      return publicSshState(state)
+    }
     const state = {
       ...connectedState(manager, target.id, managedServer),
       status: 'error' as const,
@@ -141,9 +155,9 @@ async function connectTargetWithManagedServer(
 /**
  * Installs the SSH pieces that are safe to run in the Node-owned Tauri runtime.
  *
- * Tauri owns the profile target registry, the direct ssh2 transport, and the managed-server
- * decision. Legacy relay panes still need the Electron bridge, so an unserved decision fails
- * closed instead of claiming managed-server parity that Tauri cannot provide yet.
+ * Tauri owns the profile target registry, the direct ssh2 transport, the managed-server
+ * decision, and the legacy relay bridge host (its pane channels travel over the runtime RPC
+ * boundary instead of Electron IPC).
  */
 export function startOrcadSsh(input: {
   runtime: OrcaRuntimeService
@@ -253,6 +267,8 @@ export function startOrcadSsh(input: {
     },
     getState: (targetId) => manager.getState(targetId) ?? undefined,
     disconnect: async (targetId) => {
+      // COMPAT(legacy-relay-bridge): hangs up only this client; the relays keep their terminals.
+      stopLegacyRelayBridge(targetId)
       persistSshPortForwardsWithUnrestored(portForwardPersistence(), targetId)
       await portForwardManager.removeAllForwards(targetId)
       persistSshPortForwardsWithUnrestored(portForwardPersistence(), targetId)
@@ -275,14 +291,18 @@ export function startOrcadSsh(input: {
       persistSshPortForwardsWithUnrestored(portForwardPersistence(), targetId)
       runtime.notifySshPortForwardsChanged(targetId, [])
       await manager.disconnect(targetId)
+      forgetLegacyRelayTarget(targetId)
       sshStore.removeTarget(targetId)
     }
   })
+
+  installOrcadLegacyRelayBridgeHost({ runtime, store, manager })
 
   registerCleanup(async () => {
     connectInFlight.clear()
     decisionTargets.clear()
     await manager.disconnectAll()
+    installLegacyRelayBridge(null)
     setSshConnectionManagerResolver(null)
     setSshPortForwardManagerResolver(null)
     setSshTargetRegistryHandlers({ connect: null, getState: null, disconnect: null })

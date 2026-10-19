@@ -12,6 +12,7 @@ import {
   createMiniMaxCredentialsApi
 } from './preload-api/web-agent-accounts-api'
 import { createWebAgentStatusApi } from './preload-api/web-agent-status-api'
+import { createLegacyRelayBridgeApi } from './preload-api/web-legacy-relay-bridge-api'
 import { createWebAiVaultApi } from './preload-api/web-ai-vault-api'
 import { createWebAppApi } from './preload-api/web-app-api'
 import { createBrowserApi, createEmulatorApi } from './preload-api/web-browser-api'
@@ -206,6 +207,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     automations: createWebAutomationsApi(),
     pty: createPtyApi(),
     ssh: createSshApi(),
+    legacyRelayBridge: createLegacyRelayBridgeApi(),
     wsl: {
       isAvailable: () => callRuntimeResult<boolean>('host.wsl.isAvailable').catch(() => false),
       listDistros: () => callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => [])

@@ -11,6 +11,7 @@ import type { RuntimeNavigationTarget } from './runtime-navigation'
 import type { WorktreeSortOrderUpdate } from './worktree/sort-order-update'
 import type { WslHostStatus } from './wsl-host-types'
 import type { AiVaultScanProgressUpdate } from './ai-vault-scan-progress'
+import type { LegacyRelayBridgedPane } from './legacy-relay-bridge-contract'
 
 export type RuntimeClientEvent =
   | { type: 'reposChanged' }
@@ -34,6 +35,12 @@ export type RuntimeClientEvent =
       targetId: string
       forwards: PortForwardEntry[]
     }
+  // Why: the legacy relay bridge lives on the runtime host on Tauri too, so its
+  // pane lifecycle reaches paired clients over the same stream as the other SSH events.
+  | { type: 'legacyRelayBridgedPanesChanged'; panes: LegacyRelayBridgedPane[] }
+  | { type: 'legacyRelayBridgedPaneData'; ptyId: string; data: string }
+  | { type: 'legacyRelayBridgedPaneReplay'; ptyId: string; replay: string }
+  | { type: 'legacyRelayBridgedPaneExit'; ptyId: string; code: number }
   | {
       type: 'sshCredentialRequest'
       requestId: string

@@ -44,6 +44,7 @@ import {
 import { submitSshRuntimeCredential } from '../../../ssh/ssh-runtime-credential-bridge'
 import { resolveVsCodeSshAuthority } from '../../../ssh/vscode-ssh-authority'
 import { SSH_PORT_FORWARD_METHODS } from './ssh-port-forwards'
+import { SSH_LEGACY_RELAY_BRIDGE_METHODS } from './ssh-legacy-relay-bridge'
 import { SSH_NEEDS_PASSPHRASE_METHODS } from './ssh-needs-passphrase'
 import { SSH_TEST_CONNECTION_METHODS } from './ssh-test-connection'
 
@@ -295,6 +296,7 @@ export const SSH_METHODS = [
     }
   }),
   ...SSH_PORT_FORWARD_METHODS,
+  ...SSH_LEGACY_RELAY_BRIDGE_METHODS,
   ...SSH_NEEDS_PASSPHRASE_METHODS,
   ...SSH_TEST_CONNECTION_METHODS
 ]
