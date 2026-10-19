@@ -24,6 +24,28 @@ pub mod ids {
     pub const TRAY_QUIT: &str = "tray-quit";
 }
 
+/// Tray menu-item routing, shared with the `handle_menu_event` branch in
+/// `main.rs`. Pure so the id-to-action mapping is unit-testable without a
+/// window; delivering an actual OS click to it still needs a visible run
+/// with OS-level input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayMenuRoute {
+    Open,
+    OpenSettings,
+    CheckForUpdates,
+    Quit,
+}
+
+pub fn tray_menu_route(id: &str) -> Option<TrayMenuRoute> {
+    match id {
+        ids::TRAY_OPEN => Some(TrayMenuRoute::Open),
+        ids::TRAY_OPEN_SETTINGS => Some(TrayMenuRoute::OpenSettings),
+        ids::TRAY_CHECK_FOR_UPDATES => Some(TrayMenuRoute::CheckForUpdates),
+        ids::TRAY_QUIT => Some(TrayMenuRoute::Quit),
+        _ => None,
+    }
+}
+
 pub const TRAY_ICON_ID: &str = "main-tray";
 // Windows notification-area glyph: the app icon is larger, so pull this size
 // from the icon resource instead of letting the shell shrink it.
@@ -510,6 +532,36 @@ pub fn poc_tray_destroy(app: AppHandle) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tray_menu_ids_route_to_their_actions() {
+        assert_eq!(tray_menu_route(ids::TRAY_OPEN), Some(TrayMenuRoute::Open));
+        assert_eq!(
+            tray_menu_route(ids::TRAY_OPEN_SETTINGS),
+            Some(TrayMenuRoute::OpenSettings)
+        );
+        assert_eq!(
+            tray_menu_route(ids::TRAY_CHECK_FOR_UPDATES),
+            Some(TrayMenuRoute::CheckForUpdates)
+        );
+        assert_eq!(tray_menu_route(ids::TRAY_QUIT), Some(TrayMenuRoute::Quit));
+    }
+
+    #[test]
+    fn tray_menu_ids_are_distinct_and_closed() {
+        // A duplicated id would silently steal another item's action.
+        let mut sorted = vec![
+            ids::TRAY_OPEN,
+            ids::TRAY_OPEN_SETTINGS,
+            ids::TRAY_CHECK_FOR_UPDATES,
+            ids::TRAY_QUIT,
+        ];
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 4);
+        assert_eq!(tray_menu_route("tray-does-not-exist"), None);
+        assert_eq!(tray_menu_route(""), None);
+    }
 
     fn solid_rgba(width: u32, height: u32, r: u8, g: u8, b: u8, a: u8) -> Vec<u8> {
         let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);

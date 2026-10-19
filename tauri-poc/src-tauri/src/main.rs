@@ -936,21 +936,28 @@ fn handle_menu_event(app: &AppHandle, event: &tauri::menu::MenuEvent) {
             "orca:tauri-ui:checkForUpdates",
             check_for_updates_menu_options(),
         );
-    } else if id == system_tray::ids::TRAY_OPEN {
-        reveal_main_window(app);
-    } else if id == system_tray::ids::TRAY_OPEN_SETTINGS {
-        if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
-            pending.mark();
+    } else if let Some(route) = system_tray::tray_menu_route(id.as_ref()) {
+        // Why one branch: the id-to-action mapping lives in `system_tray` so
+        // it stays unit-testable; only an OS click can prove delivery.
+        match route {
+            system_tray::TrayMenuRoute::Open => reveal_main_window(app),
+            system_tray::TrayMenuRoute::OpenSettings => {
+                if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
+                    pending.mark();
+                }
+                emit_menu_event(app, "orca:tauri-ui:openSettings", ());
+            }
+            system_tray::TrayMenuRoute::CheckForUpdates => {
+                reveal_main_window(app);
+                emit_menu_event(app, "orca:tauri-ui:checkForUpdates", ());
+            }
+            system_tray::TrayMenuRoute::Quit => {
+                if let Some(runtime) = app.try_state::<Arc<OrcadRuntime>>() {
+                    runtime.close_owner();
+                }
+                app.exit(0);
+            }
         }
-        emit_menu_event(app, "orca:tauri-ui:openSettings", ());
-    } else if id == system_tray::ids::TRAY_CHECK_FOR_UPDATES {
-        reveal_main_window(app);
-        emit_menu_event(app, "orca:tauri-ui:checkForUpdates", ());
-    } else if id == system_tray::ids::TRAY_QUIT {
-        if let Some(runtime) = app.try_state::<Arc<OrcadRuntime>>() {
-            runtime.close_owner();
-        }
-        app.exit(0);
     }
     // HELP_ABOUT is a predefined about item and needs no forwarding.
 }
