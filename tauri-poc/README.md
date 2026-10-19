@@ -313,8 +313,12 @@ Not migrated yet:
   and close into a Rust authority store, and cookie import resolves the execution host
   from it (request identity is only a fallback when no lease was noted) and settles
   against it before reporting success. Still missing: legacy-jar migration
-  (intentionally deferred — the pre-release scheme has no shipped users to migrate) and live
-  WebView2 proof of the new jar names. Local browser-profile cookie import is a separate
+  (intentionally deferred — the pre-release scheme has no shipped users to migrate). Naming,
+  fingerprinting, and the WebView2 round trip are proven live by `tauri-poc/scripts/check-browser-jar-names.mjs` (derived `persist:tauri-browser-v1-*` partitions, repeat-resolve stability, per-environment
+  separation, CDP cookie write/read on the resolved partition). Cross-partition isolation stays
+  Windows-blocked: Tauri documents `data_store_identifier` as macOS/iOS-only and drops it on
+  Windows (wry profile wiring is absent on Windows), so child webviews share one jar there.
+  Local browser-profile cookie import is a separate
   implemented path, not evidence of remote client-host parity.
 - Native crash reports now persist renderer errors, breadcrumbs and dismissal state in the Tauri
   profile, can submit captured or uncaptured reports through the native feedback boundary, and
