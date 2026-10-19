@@ -159,7 +159,8 @@ first native slice covers the low-risk operations that the renderer already expe
   connect in `tauri-poc/scripts/check-ssh-direct.mjs` (which also pins the shared failure contract:
   connect rejects like Electron main and no state is retained). `ssh.testConnection` now probes through orcad (borrowed transport, suppressed fan-out),
   proven live by the refused-loopback run in `check-ssh-direct.mjs` which reports the real
-  `ECONNREFUSED` instead of the retired stub. Still stubbed on the web client:
+  `ECONNREFUSED` instead of the retired stub.
+  Password-authenticated direct transport is proven live by `tauri-poc/scripts/check-ssh-transport.mjs` (loopback ssh2 target, bridged password prompt, `testConnection` success with a connected state); its full-`connect` attempt pins the shared dev boundary of reporting `artifacts_unavailable` with no retained state, identical to Electron. Still stubbed on the web client:
   `needsPassphrasePrompt`. `ssh.needsPassphrasePrompt` now answers from orcad with the
   desktop rule (a declined credential reprompts; otherwise prompt only when the last
   connect needed a passphrase and no live connection caches it), proven live by
