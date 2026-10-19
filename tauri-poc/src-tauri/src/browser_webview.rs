@@ -1319,6 +1319,54 @@ pub(crate) fn last_focused_child_webview(
     let page_id = state.last_dom_focused.lock().ok()?.clone()?;
     child_webview(app, state, &page_id).ok()
 }
+/// Edit commands the menu may route into a focused browser guest. Kept as an
+/// allowlist so a menu id can never eval an arbitrary script in the guest.
+const GUEST_EDIT_COMMANDS: [&str; 3] = ["copy", "selectAll", "paste"];
+
+fn is_guest_edit_command(command: &str) -> bool {
+    GUEST_EDIT_COMMANDS.contains(&command)
+}
+
+/// Route an Edit > Copy/SelectAll/Paste click into the most recently
+/// DOM-focused guest. Returns false when no live guest holds focus so the
+/// caller falls back to the renderer event.
+pub(crate) fn route_guest_edit(
+    app: &AppHandle,
+    state: &BrowserWebviewState,
+    command: &str,
+) -> bool {
+    if !is_guest_edit_command(command) {
+        return false;
+    }
+    let Some(webview) = last_focused_child_webview(app, state) else {
+        return false;
+    };
+    // execCommand is sync and idempotent; a rejected eval only loses this one
+    // menu click, so we never surface the error.
+    let _ = webview.eval(&format!("document.execCommand('{command}')"));
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserGuestEditArgs {
+    pub command: String,
+}
+
+// Why a poc command: a real menu click needs a visible OS run, but the
+// routing decision plus the guest-side execCommand are fully drivable
+// headless, so the live check invokes the same shared helper the menu calls.
+#[tauri::command]
+pub fn poc_browser_guest_edit(
+    app: AppHandle,
+    state: State<BrowserWebviewState>,
+    args: BrowserGuestEditArgs,
+) -> Result<bool, String> {
+    if !is_guest_edit_command(&args.command) {
+        return Err("unknown guest edit command".to_string());
+    }
+    Ok(route_guest_edit(&app, &state, &args.command))
+}
 
 fn page_url(url: &Url) -> Option<String> {
     Some(redact_kagi_session_token(url.as_str()))
@@ -3382,7 +3430,7 @@ mod tests {
     use super::{
         browser_context_menu_script, browser_guest_shortcut_script, certificate_endpoint,
         certificate_error_details, certificate_identity_matches, certificate_leaf_sha256,
-        is_agent_injected_input, is_eligible_certificate_host, is_valid_annotation_marker,
+        is_agent_injected_input, is_eligible_certificate_host, is_guest_edit_command, is_valid_annotation_marker,
         is_valid_annotation_token, label_for_page, navigation_failure_details,
         normalize_context_menu_link, redact_kagi_session_token, store_identifier,
         AcceptedCertificateIdentity, AgentInputMark, BrowserWebviewState, BASE64,
@@ -3642,5 +3690,15 @@ mod tests {
             "different",
             "ERR_CERT_AUTHORITY_INVALID"
         ));
+    }
+
+    #[test]
+    fn guest_edit_allowlist_matches_menu_call_sites() {
+        assert!(is_guest_edit_command("copy"));
+        assert!(is_guest_edit_command("selectAll"));
+        assert!(is_guest_edit_command("paste"));
+        assert!(!is_guest_edit_command("cut"));
+        assert!(!is_guest_edit_command(""));
+        assert!(!is_guest_edit_command("document.cookie"));
     }
 }

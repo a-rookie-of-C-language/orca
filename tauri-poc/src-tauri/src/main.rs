@@ -778,13 +778,7 @@ fn route_browser_guest_edit(app: &AppHandle, command: &str) -> bool {
         Some(state) => state,
         None => return false,
     };
-    let Some(webview) = browser_webview::last_focused_child_webview(app, &state) else {
-        return false;
-    };
-    // execCommand is sync and idempotent; a rejected eval only loses this one
-    // menu click, so we never surface the error.
-    let _ = webview.eval(&format!("document.execCommand('{}')", command));
-    true
+    browser_webview::route_guest_edit(app, &state, command)
 }
 
 /// Modifier state at the instant a "Check for Updates" menu item fires.
@@ -1184,6 +1178,7 @@ fn main() {
             browser_webview::poc_browser_reload,
             browser_webview::poc_browser_stop,
             browser_webview::poc_browser_focus,
+            browser_webview::poc_browser_guest_edit,
             browser_webview::poc_browser_set_zoom,
             browser_webview::poc_browser_find,
             browser_webview::poc_browser_set_handled_shortcuts,

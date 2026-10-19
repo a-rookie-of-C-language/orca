@@ -104,6 +104,7 @@
     "allow-poc-browser-stop",
     "allow-poc-browser-find",
     "allow-poc-browser-focus",
+    "allow-poc-browser-guest-edit",
     "allow-poc-browser-proceed-certificate",
     "allow-poc-browser-set-zoom",
     "allow-poc-browser-set-viewport-override",

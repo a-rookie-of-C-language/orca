@@ -372,7 +372,7 @@ Not migrated yet:
   init script reports `focus`/`blur` over the shortcut bridge so the host knows the
   most recently focused page, and the menu handler evaluates `document.execCommand`
   inside that child webview instead of bouncing off the unfocused main window —
-  matching Electron's `webContents.getFocusedWebContents()` branch. Rebindable
+  matching Electron's `webContents.getFocusedWebContents()` branch, proven live by `tauri-poc/scripts/check-menu-guest-edit.mjs` (selectAll selection plus copy event through the menu route, unknown-command rejection, closed-guest fallback). Rebindable
   menu shortcuts also stay live: the renderer pushes each registry change through
   `poc_menu_set_hints` so Zoom/Sidebar/Settings/Force Reload hints track user
   overrides the way Electron's `shortcutLabel` rebuild does.
