@@ -367,7 +367,7 @@ Not migrated yet:
   pasteboard write/read still needs `NSPasteboard` wiring. The remaining application-menu/shortcut items
   and Linux package recovery for updater failures. The macOS App menu is implemented: the
   app-named section owns About, updates and Settings plus the Services and Hide roles, while
-  File exists only off macOS and About/updates stay at the Help tail only off macOS. Force Reload now bypasses the HTTP cache like Electron: the menu drives CDP Page.reload with ignoreCache on the main window (plain-reload fallback), and the Mod+Shift+R chord is claimed by the Tauri-gated renderer shortcut path (`tauri-poc/.cache/probe-main-force-reload.mjs`). Undo/redo no longer preempt the focused surface either: off macOS they are display-only hints (native roles stay on macOS) whose clicks route per-surface through the renderer (`tauri-poc/.cache/probe-main-edit-actions.mjs`).
+  File exists only off macOS and About/updates stay at the Help tail only off macOS. Force Reload now bypasses the HTTP cache like Electron: the menu drives CDP Page.reload with ignoreCache on the main window (plain-reload fallback), and the Mod+Shift+R chord is claimed by the Tauri-gated renderer shortcut path (`tauri-poc/scripts/check-main-force-reload.mjs`). Undo/redo no longer preempt the focused surface either: off macOS they are display-only hints (native roles stay on macOS) whose clicks route per-surface through the renderer (`tauri-poc/scripts/check-main-edit-actions.mjs`).
   Edit > Copy/SelectAll/Paste now follow the focused browser guest too: each guest
   init script reports `focus`/`blur` over the shortcut bridge so the host knows the
   most recently focused page, and the menu handler evaluates `document.execCommand`
