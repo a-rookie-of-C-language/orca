@@ -236,6 +236,11 @@ first native slice covers the low-risk operations that the renderer already expe
   PTY replacement. PowerShell now publishes escaped filesystem URIs from the existing prompt
   wrapper so Windows can track `cd` without guessing from prompt text. Older hosts fall back only
   when the RPC is unsupported; interrupted connections never masquerade as a current directory.
+- viewport geometry parity on Windows: the spawn size reaches ConPTY (the shell reports it),
+  a viewport claim drives ConPTY to the new size, and a bare resize stays observe-only per the
+  multiplex ownership contract — the same rule Electron's remote panes follow through the shared
+  orcad host — while `getSize` bookkeeping tracks every step. Covered live by
+  `tauri-poc/scripts/check-terminal-viewport.mjs`.
 - terminal stop, interrupt, buffer-clear and input-mode-reset requests routed to the pane's encoded
   environment owner, even after the user selects a different runtime connection.
 - detaching a live terminal pane into a new tab commits the existing host-owned layout mutation
