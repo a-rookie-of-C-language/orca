@@ -328,8 +328,9 @@ Not migrated yet:
   kills), and the next runtime-status poll stores them as pending reports. Id-less submit and
   lookup resolution mirrors Electron too: an explicit request without an id resolves nothing
   instead of auto-picking a pending crash, so Help-menu uncaptured reports never absorb one,
-  proven live by `tauri-poc/scripts/check-crash-report-resolution.mjs` (seeded pending report,
-  three-way lookup, dismiss cleanup) with the resolver unit tests. Complete minidump
+  and dismiss leaves in-flight submissions alone while renderer-error dedupe keys are capped
+  oldest-first, proven live by `tauri-poc/scripts/check-crash-report-resolution.mjs` (seeded
+  pending report, three-way lookup, dismiss cleanup) with the resolver unit tests. Complete minidump
   attachments still need a native implementation.
 - Remaining Electron PTY parity (Windows-native terminal capabilities), plus the SSH managed-server/relay
   ladder's end-to-end serving proof against a host that still runs relay-era terminals (the

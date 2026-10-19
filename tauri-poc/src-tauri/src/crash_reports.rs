@@ -16,6 +16,7 @@ const MAX_BREADCRUMBS: usize = 30;
 const MAX_STRING_LENGTH: usize = 8_000;
 const MAX_DETAIL_STRING_LENGTH: usize = 240;
 const RENDERER_ERROR_DEDUPE_MS: u128 = 10 * 60 * 1_000;
+const MAX_RENDERER_ERROR_KEYS: usize = 256;
 const MAX_NOTES_LENGTH: usize = 8_000;
 const FEEDBACK_TIMEOUT_SECONDS: u64 = 60;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
@@ -725,6 +726,37 @@ pub(crate) fn install_native_panic_hook(app: &AppHandle, metadata: FeedbackMetad
     install_native_panic_hook_with_path(path, metadata);
 }
 
+fn apply_dismiss(
+    reports: &mut [CrashReportRecord],
+    report_id: Option<&str>,
+    in_flight: &HashSet<String>,
+) -> Option<CrashReportRecord> {
+    let report = reports
+        .iter_mut()
+        .find(|report| Some(report.id.as_str()) == report_id)?;
+    // Mirror Electron: a dismiss racing an in-flight submission leaves the report alone.
+    if report.status == "pending" && !report_id.is_some_and(|id| in_flight.contains(id)) {
+        report.status = "dismissed".to_string();
+    }
+    Some(report.clone())
+}
+
+fn prune_renderer_error_keys(keys: &mut HashMap<String, u128>, now: u128) {
+    keys.retain(|_, timestamp| now.saturating_sub(*timestamp) <= RENDERER_ERROR_DEDUPE_MS * 2);
+    // Mirror Electron: cap follow-up keys oldest-first so a faulting renderer
+    // cannot grow the map without bound inside the window.
+    while keys.len() > MAX_RENDERER_ERROR_KEYS {
+        let Some(oldest) = keys
+            .iter()
+            .min_by_key(|(_, seen_at)| **seen_at)
+            .map(|(key, _)| key.clone())
+        else {
+            break;
+        };
+        keys.remove(&oldest);
+    }
+}
+
 fn resolve_requested_report(
     reports: Vec<CrashReportRecord>,
     args: Option<CrashReportLookupArgs>,
@@ -811,16 +843,13 @@ pub fn poc_crash_reports_dismiss(
         .lock()
         .map_err(|_| "crash report storage is unavailable".to_string())?;
     let mut reports = read_reports(&path);
-    let Some(report) = reports
-        .iter_mut()
-        .find(|report| args.report_id.as_deref() == Some(report.id.as_str()))
-    else {
+    let in_flight = state
+        .in_flight_submissions
+        .lock()
+        .map_err(|_| "crash report submission state is unavailable".to_string())?;
+    let Some(result) = apply_dismiss(&mut reports, args.report_id.as_deref(), &in_flight) else {
         return Ok(None);
     };
-    if report.status == "pending" {
-        report.status = "dismissed".to_string();
-    }
-    let result = report.clone();
     write_reports(&path, &reports)?;
     Ok(Some(result))
 }
@@ -893,7 +922,7 @@ pub fn poc_crash_reports_record_renderer_error(
         .renderer_error_keys
         .lock()
         .map_err(|_| "renderer error state is unavailable".to_string())?;
-    keys.retain(|_, timestamp| now.saturating_sub(*timestamp) <= RENDERER_ERROR_DEDUPE_MS * 2);
+    prune_renderer_error_keys(&mut keys, now);
     if now.saturating_sub(*keys.get(&key).unwrap_or(&0)) < RENDERER_ERROR_DEDUPE_MS {
         return Ok(serde_json::json!({ "ok": true, "report": null, "deduped": true }));
     }
@@ -1428,5 +1457,45 @@ mod tests {
     fn submit_without_id_never_auto_picks_pending() {
         let reports = vec![test_report("pending-1", "pending")];
         assert!(resolve_submit_report(reports, None).is_none());
+    }
+
+    #[test]
+    fn dismiss_flips_pending_only() {
+        let mut reports = vec![test_report("pending-1", "pending")];
+        let dismissed = apply_dismiss(&mut reports, Some("pending-1"), &HashSet::new())
+            .expect("pending report should dismiss");
+        assert_eq!(dismissed.status, "dismissed");
+        assert_eq!(reports[0].status, "dismissed");
+    }
+
+    #[test]
+    fn dismiss_leaves_sent_and_unknown_reports_alone() {
+        let mut reports = vec![test_report("sent-1", "sent")];
+        let kept = apply_dismiss(&mut reports, Some("sent-1"), &HashSet::new())
+            .expect("sent report should resolve");
+        assert_eq!(kept.status, "sent");
+        assert!(apply_dismiss(&mut reports, Some("missing"), &HashSet::new()).is_none());
+    }
+
+    #[test]
+    fn dismiss_keeps_in_flight_submission_intact() {
+        let mut reports = vec![test_report("pending-1", "pending")];
+        let in_flight = HashSet::from(["pending-1".to_string()]);
+        let kept = apply_dismiss(&mut reports, Some("pending-1"), &in_flight)
+            .expect("in-flight report should resolve");
+        assert_eq!(kept.status, "pending");
+        assert_eq!(reports[0].status, "pending");
+    }
+
+    #[test]
+    fn renderer_error_keys_evict_oldest_beyond_cap() {
+        let mut keys = HashMap::new();
+        for index in 0..=MAX_RENDERER_ERROR_KEYS {
+            keys.insert(format!("key-{index}"), index as u128);
+        }
+        prune_renderer_error_keys(&mut keys, 1_000_000);
+        assert_eq!(keys.len(), MAX_RENDERER_ERROR_KEYS);
+        assert!(!keys.contains_key("key-0"));
+        assert!(keys.contains_key(&format!("key-{MAX_RENDERER_ERROR_KEYS}")));
     }
 }
