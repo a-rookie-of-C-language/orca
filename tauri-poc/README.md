@@ -287,7 +287,7 @@ Validated by this migration slice:
 - A focused browser child WebView forwards shortcut-grade key events (modifier chords, Escape,
   function keys) to the main window, where the shared global keybindings handle them like local
   keypresses. Verified end to end: one guest press produces exactly one bridge event and one
-  re-dispatched window event (`tauri-poc/.cache/probe-guest-shortcut.mjs`).
+  re-dispatched window event (`tauri-poc/scripts/check-guest-shortcut.mjs`).
 - Local diagnostics status, bounded NDJSON bundle collection, redacted preview files, preview
   opening, preview disposal, upload, and remote deletion are now owned by Tauri Rust commands.
   Upload/delete are enabled only when `ORCA_TAURI_DIAGNOSTICS_TOKEN_ENDPOINT` is configured; the
@@ -349,13 +349,13 @@ Not migrated yet:
   page load and re-pushes it into all live guests whenever the set changes
   (remote guests hold no invoke grant, so they never pull it), and the guest
   `preventDefault`s a handled keydown while still bridging it
-  (`tauri-poc/.cache/probe-guest-suppress.mjs`). Automation key/text input marks the page
+  (`tauri-poc/scripts/check-guest-suppress.mjs`). Automation key/text input marks the page
   (depth-nested with a dispatch-lag grace), and Rust drops marked keys at the bridge so they
-  never run app shortcuts (`tauri-poc/.cache/probe-guest-agent-input.mjs`).
+  never run app shortcuts (`tauri-poc/scripts/check-guest-agent-input.mjs`).
   A guest-held Ctrl+Tab switcher commits on Control release like a local press: the guest arms on
   the Ctrl-held Tab release (the host may consume the Ctrl+Tab keydown as an accelerator) and
   reports the bare Control release as a commit, and the main window synthesizes the Control keyup
-  so the shared overlay cannot strand (`tauri-poc/.cache/probe-guest-ctrl-tab.mjs`). Bare modifier taps also cross the bridge in down/up order so the main window can complete a double-tap exactly like a local press (`tauri-poc/.cache/probe-guest-double-tap.mjs`). Shift-held chords cross too, so typing a capital between two Shift taps resets the shared detector instead of phantom-triggering it, while plain typing still lands in the guest (`tauri-poc/.cache/probe-guest-shift-chord.mjs`).
+  so the shared overlay cannot strand (`tauri-poc/scripts/check-guest-ctrl-tab.mjs`). Bare modifier taps also cross the bridge in down/up order so the main window can complete a double-tap exactly like a local press (`tauri-poc/scripts/check-guest-double-tap.mjs`). Shift-held chords cross too, so typing a capital between two Shift taps resets the shared detector instead of phantom-triggering it, while plain typing still lands in the guest (`tauri-poc/scripts/check-guest-shift-chord.mjs`).
   Plain typing never crosses the bridge. Ctrl/Meta+wheel zoom crosses the same
   bridge as a `wheel-zoom` event: the guest consumes Shift/Alt-free Ctrl (Meta on
   macOS) wheels and posts a direction the main window turns into the shared
