@@ -214,6 +214,12 @@ first native slice covers the low-risk operations that the renderer already expe
   `pty:confirmForegroundProcess` IPC. SSH panes and ownerless ids stay fail-closed (null reads
   as "no new evidence"). Covered live by `tauri-poc/scripts/check-terminal-confirm.mjs`.
 - rich-markdown right-click menus on Tauri and the paired web client: a renderer-owned DOM menu
+- process-tree reaping on Windows pane close: killing a pane also reaps grandchildren
+  started from its shell (the same per-PTY job-object behavior Electron relies on), so no
+  orphaned processes linger after close. Covered live by
+  `tauri-poc/scripts/check-terminal-kill-tree.mjs`, which starts a marker `ping` grandchild,
+  kills the pane, and asserts the PID is gone from a second pane.
+- rich-markdown right-click menus on Tauri and the paired web client: a renderer-owned DOM menu
   mirrors Electron's native template item for item (Add link, the Format/Paragraph/Insert
   submenus, the Table submenu with header-row disabled states, and Cut/Copy/Paste/Select all)
   and dispatches the same payloads through `runRichMarkdownContextCommand`, so formatting and
