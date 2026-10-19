@@ -25,6 +25,8 @@ import {
   isRichMarkdownTableContextCommand,
   runRichMarkdownContextCommand
 } from './rich-markdown-context-command-routing'
+import { RichMarkdownDomContextMenu } from './rich-markdown-dom-context-menu'
+import { shouldUseRichMarkdownDomContextMenu } from './rich-markdown-dom-context-menu-model'
 import { useRichMarkdownSpellcheckAttribute } from './rich-markdown-spellcheck'
 import { useRichMarkdownPendingFocus } from './useRichMarkdownPendingFocus'
 import { useRichMarkdownSuperscriptLinkSetup } from './useRichMarkdownSuperscriptLinkSetup'
@@ -351,83 +353,93 @@ export default function RichMarkdownEditor({
   openSearchRef.current = openSearch
 
   return (
-    <RichMarkdownEditorSurface
-      editor={editor}
-      editorFontZoomLevel={editorFontZoomLevel}
-      rootElement={rootRef.current}
-      rootRef={setRootElement}
-      scrollContainerRef={scrollContainerRef}
-      headerSlot={headerSlot}
-      reviewRailExpanded={review.reviewRailExpanded}
-      reviewRailVisible={review.reviewRailVisible}
-      notePositions={review.notePositions}
-      activeReviewCommentId={review.activeReviewCommentId}
-      attentionReviewCommentId={review.attentionReviewCommentId}
-      copiedReviewNoteId={review.copiedReviewNoteId}
-      markdownReviewContent={markdownReviewContent}
-      worktreeId={worktreeId}
-      filePath={filePath}
-      markdownCommentsCount={review.markdownComments.length}
-      reviewRailOpen={review.reviewRailOpen}
-      reviewNotesCopied={review.reviewNotesCopied}
-      unsentMarkdownReviewScope={review.unsentMarkdownReviewScope}
-      linkBubble={linkBubble}
-      isEditingLink={isEditingLink}
-      slashMenu={menu.slashMenu}
-      filteredSlashCommands={menu.filteredSlashCommands}
-      selectedCommandIndex={menu.selectedCommandIndex}
-      emojiMenu={menu.emojiMenu}
-      docLinkMenu={menu.docLinkMenu}
-      docLinkRows={menu.docLinkRows}
-      docLinkTotalMatches={menu.docLinkTotalMatches}
-      selectedDocLinkIndex={menu.selectedDocLinkIndex}
-      annotationTarget={review.annotationTarget}
-      annotationPopover={review.annotationPopover}
-      markdownSourceLineOffset={markdownSourceLineOffset}
-      tableOfContentsItems={tableOfContentsItems}
-      showTableOfContents={showTableOfContents}
-      searchState={searchState}
-      searchActions={searchActions}
-      citationStatus={
-        selectedCitationStatus
-          ? formatSelectedHtmlSuperscriptLinkStatus(selectedCitationStatus)
-          : ''
-      }
-      linkBubbleOwnerId={codec.transport.key}
-      linkBubbleActions={{
-        dismissLinkBubble: () => {
-          setLinkBubble(null)
-          setIsEditingLink(false)
-        },
-        handleLinkSave,
-        handleLinkRemove,
-        handleLinkEditCancel,
-        handleLinkOpen,
-        handleLinkCopy,
-        setIsEditingLink
-      }}
-      onToggleLink={toggleLinkFromToolbar}
-      onImagePick={handleLocalImagePick}
-      onEmojiPick={menu.openEmojiMenu}
-      onCloseEmojiMenu={() => menu.setEmojiMenu(null)}
-      onOpenAnnotationPopover={review.openAnnotationPopover}
-      onCancelAnnotationPopover={() => {
-        review.setAnnotationPopover(null)
-        review.clearAnnotationHighlight()
-      }}
-      onSubmitAnnotation={review.submitAnnotation}
-      onCopyReviewNotes={() => void review.handleCopyMarkdownReviewNotes()}
-      onCopyReviewNote={(note) => void review.handleCopyMarkdownReviewNote(note)}
-      onToggleReviewRail={() => review.setReviewRailOpen((open) => !open)}
-      onReviewNotesDelivered={(notes) => void clearDeliveredDiffComments(worktreeId, notes)}
-      onReviewNoteSourceClick={review.scrollRichMarkdownReviewNoteSourceIntoView}
-      onDeleteReviewComment={(commentId) => void deleteDiffComment(worktreeId, commentId)}
-      onSubmitReviewCommentEdit={(commentId, body) =>
-        updateDiffComment(worktreeId, commentId, body)
-      }
-      onReviewNoteContentResize={review.syncNotePositions}
-      onNavigateTableOfContentsItem={navigateToTableOfContentsItem}
-      onCloseTableOfContents={onCloseTableOfContents}
-    />
+    <>
+      <RichMarkdownEditorSurface
+        editor={editor}
+        editorFontZoomLevel={editorFontZoomLevel}
+        rootElement={rootRef.current}
+        rootRef={setRootElement}
+        scrollContainerRef={scrollContainerRef}
+        headerSlot={headerSlot}
+        reviewRailExpanded={review.reviewRailExpanded}
+        reviewRailVisible={review.reviewRailVisible}
+        notePositions={review.notePositions}
+        activeReviewCommentId={review.activeReviewCommentId}
+        attentionReviewCommentId={review.attentionReviewCommentId}
+        copiedReviewNoteId={review.copiedReviewNoteId}
+        markdownReviewContent={markdownReviewContent}
+        worktreeId={worktreeId}
+        filePath={filePath}
+        markdownCommentsCount={review.markdownComments.length}
+        reviewRailOpen={review.reviewRailOpen}
+        reviewNotesCopied={review.reviewNotesCopied}
+        unsentMarkdownReviewScope={review.unsentMarkdownReviewScope}
+        linkBubble={linkBubble}
+        isEditingLink={isEditingLink}
+        slashMenu={menu.slashMenu}
+        filteredSlashCommands={menu.filteredSlashCommands}
+        selectedCommandIndex={menu.selectedCommandIndex}
+        emojiMenu={menu.emojiMenu}
+        docLinkMenu={menu.docLinkMenu}
+        docLinkRows={menu.docLinkRows}
+        docLinkTotalMatches={menu.docLinkTotalMatches}
+        selectedDocLinkIndex={menu.selectedDocLinkIndex}
+        annotationTarget={review.annotationTarget}
+        annotationPopover={review.annotationPopover}
+        markdownSourceLineOffset={markdownSourceLineOffset}
+        tableOfContentsItems={tableOfContentsItems}
+        showTableOfContents={showTableOfContents}
+        searchState={searchState}
+        searchActions={searchActions}
+        citationStatus={
+          selectedCitationStatus
+            ? formatSelectedHtmlSuperscriptLinkStatus(selectedCitationStatus)
+            : ''
+        }
+        linkBubbleOwnerId={codec.transport.key}
+        linkBubbleActions={{
+          dismissLinkBubble: () => {
+            setLinkBubble(null)
+            setIsEditingLink(false)
+          },
+          handleLinkSave,
+          handleLinkRemove,
+          handleLinkEditCancel,
+          handleLinkOpen,
+          handleLinkCopy,
+          setIsEditingLink
+        }}
+        onToggleLink={toggleLinkFromToolbar}
+        onImagePick={handleLocalImagePick}
+        onEmojiPick={menu.openEmojiMenu}
+        onCloseEmojiMenu={() => menu.setEmojiMenu(null)}
+        onOpenAnnotationPopover={review.openAnnotationPopover}
+        onCancelAnnotationPopover={() => {
+          review.setAnnotationPopover(null)
+          review.clearAnnotationHighlight()
+        }}
+        onSubmitAnnotation={review.submitAnnotation}
+        onCopyReviewNotes={() => void review.handleCopyMarkdownReviewNotes()}
+        onCopyReviewNote={(note) => void review.handleCopyMarkdownReviewNote(note)}
+        onToggleReviewRail={() => review.setReviewRailOpen((open) => !open)}
+        onReviewNotesDelivered={(notes) => void clearDeliveredDiffComments(worktreeId, notes)}
+        onReviewNoteSourceClick={review.scrollRichMarkdownReviewNoteSourceIntoView}
+        onDeleteReviewComment={(commentId) => void deleteDiffComment(worktreeId, commentId)}
+        onSubmitReviewCommentEdit={(commentId, body) =>
+          updateDiffComment(worktreeId, commentId, body)
+        }
+        onReviewNoteContentResize={review.syncNotePositions}
+        onNavigateTableOfContentsItem={navigateToTableOfContentsItem}
+        onCloseTableOfContents={onCloseTableOfContents}
+      />
+      {shouldUseRichMarkdownDomContextMenu() && editor ? (
+        <RichMarkdownDomContextMenu
+          editor={editor}
+          rootRef={rootRef}
+          toggleLink={toggleLinkFromToolbar}
+          pickImage={handleLocalImagePick}
+        />
+      ) : null}
+    </>
   )
 }

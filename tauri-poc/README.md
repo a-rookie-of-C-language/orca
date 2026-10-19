@@ -213,6 +213,15 @@ first native slice covers the low-risk operations that the renderer already expe
   null, so the fresh uncached scan agrees with the cached read exactly like Electron's
   `pty:confirmForegroundProcess` IPC. SSH panes and ownerless ids stay fail-closed (null reads
   as "no new evidence"). Covered live by `tauri-poc/scripts/check-terminal-confirm.mjs`.
+- rich-markdown right-click menus on Tauri and the paired web client: a renderer-owned DOM menu
+  mirrors Electron's native template item for item (Add link, the Format/Paragraph/Insert
+  submenus, the Table submenu with header-row disabled states, and Cut/Copy/Paste/Select all)
+  and dispatches the same payloads through `runRichMarkdownContextCommand`, so formatting and
+  table edits behave exactly like Electron's `rich-markdown:context-command` IPC. Covered by
+  `rich-markdown-dom-context-menu.test.tsx` (11 tests: gate, model parity, and dispatches
+  against a real editor) and live by `tauri-poc/scripts/check-rich-markdown-dom-menu.mjs`
+  (gate on, model order, and a real right-click → Bold round-trip when a markdown editor is
+  open; the probe never opens files itself so the shared dev workspace stays untouched).
 - host-owned PTY buffer snapshots for Tauri remounts, including grid geometry, output sequence,
   scrollback and provider-backed authoritative recovery through `terminal.bufferSnapshot`.
 - live terminal directories through the execution-host-owned `terminal.cwd` RPC, fenced against
@@ -387,7 +396,9 @@ Not migrated yet:
   inert stubs: Electron reads them in `before-input-event` and its native
   `context-menu` handler, neither of which exists on Tauri — shortcut routing
   already runs in the renderer keydown path, and a WebView2 right-click cannot
-  be intercepted into a native menu, so editable context menus remain a gap.
+  be intercepted into a native menu. The rich-markdown editor closes its part of that gap
+  with a renderer-owned DOM menu (see the slice list above); other editable surfaces still
+  have no context menu on Tauri or the paired web client.
 - Remote SSH external-editor launching now resolves the host-owned VS Code Remote authority;
   configured compound commands in the argv-expressible subset (`code --new-window`, quoted
   launcher paths) parse into direct-exec argv without a shell, while shell-only constructs
