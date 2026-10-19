@@ -725,6 +725,35 @@ pub(crate) fn install_native_panic_hook(app: &AppHandle, metadata: FeedbackMetad
     install_native_panic_hook_with_path(path, metadata);
 }
 
+fn resolve_requested_report(
+    reports: Vec<CrashReportRecord>,
+    args: Option<CrashReportLookupArgs>,
+) -> Option<CrashReportRecord> {
+    match args {
+        Some(args) => match args.report_id {
+            Some(report_id) => reports.into_iter().find(|report| report.id == report_id),
+            // Mirror Electron: an explicit lookup without an id resolves nothing
+            // instead of a pending crash that appeared later.
+            None => None,
+        },
+        None => reports
+            .into_iter()
+            .find(|report| report.status == "pending"),
+    }
+}
+
+fn resolve_submit_report(
+    reports: Vec<CrashReportRecord>,
+    report_id: Option<&str>,
+) -> Option<CrashReportRecord> {
+    match report_id {
+        Some(report_id) => reports.into_iter().find(|report| report.id == report_id),
+        // Mirror Electron: id-less submits are uncaptured user reports and
+        // never auto-pick a pending crash.
+        None => None,
+    }
+}
+
 #[tauri::command]
 pub fn poc_crash_reports_get_latest_pending(
     app: AppHandle,
@@ -767,12 +796,7 @@ pub fn poc_crash_reports_get_requested(
         .lock()
         .map_err(|_| "crash report storage is unavailable".to_string())?;
     let reports = read_reports(&path);
-    Ok(match args.and_then(|args| args.report_id) {
-        Some(report_id) => reports.into_iter().find(|report| report.id == report_id),
-        None => reports
-            .into_iter()
-            .find(|report| report.status == "pending"),
-    })
+    Ok(resolve_requested_report(reports, args))
 }
 
 #[tauri::command]
@@ -917,12 +941,7 @@ pub async fn poc_crash_reports_submit(
             .lock()
             .map_err(|_| "crash report storage is unavailable".to_string())?;
         let reports = read_reports(&path);
-        match args.report_id.as_deref() {
-            Some(report_id) => reports.into_iter().find(|report| report.id == report_id),
-            None => reports
-                .into_iter()
-                .find(|report| report.status == "pending"),
-        }
+        resolve_submit_report(reports, args.report_id.as_deref())
     };
 
     if let Some(report) = &report {
@@ -1335,5 +1354,79 @@ mod tests {
         assert!(message.contains("probe panic"));
         assert!(reports[0].details.get("panicLocation").is_some());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    fn test_report(id: &str, status: &str) -> CrashReportRecord {
+        CrashReportRecord {
+            id: id.to_string(),
+            created_at: "2026-10-20T00:00:00.000Z".to_string(),
+            status: status.to_string(),
+            source: "renderer".to_string(),
+            process_type: "shell".to_string(),
+            reason: "rust-panic".to_string(),
+            exit_code: None,
+            app_version: "1.2.3".to_string(),
+            platform: "win32".to_string(),
+            os_release: "Windows Test".to_string(),
+            arch: "x64".to_string(),
+            electron_version: "tauri".to_string(),
+            chrome_version: "webview".to_string(),
+            details: Map::new(),
+            breadcrumbs: None,
+        }
+    }
+
+    fn lookup_args(report_id: Option<&str>) -> Option<CrashReportLookupArgs> {
+        Some(CrashReportLookupArgs {
+            report_id: report_id.map(str::to_string),
+        })
+    }
+
+    #[test]
+    fn requested_report_resolves_latest_pending_without_args() {
+        let reports = vec![
+            test_report("sent-1", "sent"),
+            test_report("pending-1", "pending"),
+        ];
+        let resolved =
+            resolve_requested_report(reports, None).expect("pending report should resolve");
+        assert_eq!(resolved.id, "pending-1");
+    }
+
+    #[test]
+    fn requested_report_with_explicit_id_ignores_status() {
+        let reports = vec![test_report("dismissed-1", "dismissed")];
+        let resolved = resolve_requested_report(reports, lookup_args(Some("dismissed-1")))
+            .expect("explicit id should resolve");
+        assert_eq!(resolved.id, "dismissed-1");
+    }
+
+    #[test]
+    fn requested_report_with_empty_lookup_resolves_nothing() {
+        let reports = vec![test_report("pending-1", "pending")];
+        assert!(resolve_requested_report(reports, lookup_args(None)).is_none());
+    }
+
+    #[test]
+    fn requested_report_with_unknown_id_resolves_nothing() {
+        let reports = vec![test_report("pending-1", "pending")];
+        assert!(resolve_requested_report(reports, lookup_args(Some("missing"))).is_none());
+    }
+
+    #[test]
+    fn submit_resolves_by_id_only() {
+        let reports = vec![
+            test_report("pending-1", "pending"),
+            test_report("pending-2", "pending"),
+        ];
+        let resolved =
+            resolve_submit_report(reports, Some("pending-2")).expect("id should resolve");
+        assert_eq!(resolved.id, "pending-2");
+    }
+
+    #[test]
+    fn submit_without_id_never_auto_picks_pending() {
+        let reports = vec![test_report("pending-1", "pending")];
+        assert!(resolve_submit_report(reports, None).is_none());
     }
 }
