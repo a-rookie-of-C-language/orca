@@ -221,6 +221,32 @@ fn is_ssh_authorized(grant: &DocPreviewGrant, target: &str) -> bool {
     })
 }
 
+// Already-authorized coverage mirrors Electron directoryAuthorityRoots: the implicit
+// root covers its subtree only when it differs from the request base, and every
+// authorized root covers its own subtree. Exact equality would stack one redundant
+// entry per subdirectory instead of stopping at the parent.
+fn runtime_directory_already_authorized(grant: &DocPreviewGrant, directory: &Path) -> bool {
+    if grant.root != grant.request_base && directory.starts_with(&grant.root) {
+        return true;
+    }
+    grant
+        .authorized_roots
+        .iter()
+        .any(|root| directory.starts_with(root))
+}
+
+fn ssh_directory_already_authorized(grant: &DocPreviewGrant, directory: &str) -> bool {
+    if let Some(root) = grant.ssh_root.as_deref() {
+        if grant.ssh_request_base.as_deref() != Some(root) && ssh_path_is_under(directory, root) {
+            return true;
+        }
+    }
+    grant.authorized_roots.iter().any(|root| {
+        let root = root.to_string_lossy();
+        ssh_path_is_under(directory, &root)
+    })
+}
+
 fn candidate_path(grant: &DocPreviewGrant, relative_path: &str) -> Option<PathBuf> {
     let path = if relative_path.is_empty() {
         grant.entry_relative_path.as_str()
@@ -672,10 +698,7 @@ pub fn poc_doc_preview_authorize_directory(
         if !ssh_path_is_under(&directory, base) || !ssh_path_is_under(&directory, root) {
             return Ok(false);
         }
-        let already_authorized = grant
-            .authorized_roots
-            .iter()
-            .any(|authorized| authorized.to_string_lossy() == directory);
+        let already_authorized = ssh_directory_already_authorized(grant, &directory);
         if !already_authorized {
             grant.authorized_roots.push(PathBuf::from(directory));
         }
@@ -699,9 +722,7 @@ pub fn poc_doc_preview_authorize_directory(
     {
         return Ok(false);
     }
-    let already_authorized = grant.root == grant.request_base
-        && grant.authorized_roots.iter().any(|root| root == &directory)
-        || grant.root != grant.request_base && directory.starts_with(&grant.root);
+    let already_authorized = runtime_directory_already_authorized(grant, &directory);
     if !already_authorized {
         grant.authorized_roots.push(directory);
     }
@@ -860,7 +881,12 @@ pub fn guest_script(grant_id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_preview_url, safe_relative_path};
+    use super::{
+        build_preview_url, runtime_directory_already_authorized, safe_relative_path,
+        ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
+    };
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[test]
     fn preview_urls_encode_segments_and_reject_traversal() {
@@ -872,5 +898,80 @@ mod tests {
         assert!(safe_relative_path("assets/logo.png").is_some());
         assert!(safe_relative_path("../secret.txt").is_none());
         assert!(safe_relative_path("assets\\secret.txt").is_none());
+    }
+
+    fn runtime_grant(request_base: &str, root: &str, authorized: &[&str]) -> DocPreviewGrant {
+        DocPreviewGrant {
+            owner: DocPreviewOwner::Runtime {
+                environment_id: String::from("env-1"),
+                worktree_selector: String::from("sel"),
+                worktree_root: String::from(request_base),
+            },
+            request_base: PathBuf::from(request_base),
+            root: PathBuf::from(root),
+            entry_relative_path: String::from("index.html"),
+            entry_path: None,
+            worktree_root: None,
+            authorized_roots: authorized
+                .iter()
+                .map(|entry| PathBuf::from(*entry))
+                .collect(),
+            browser_page_id: String::from("page-1"),
+            ssh_request_base: None,
+            ssh_root: None,
+            ssh_entry_path: None,
+            ssh_cached_files: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn authorize_reuses_parent_directory_authorization() {
+        let grant = runtime_grant("/base", "/base", &["/base/assets"]);
+        assert!(runtime_directory_already_authorized(
+            &grant,
+            &PathBuf::from("/base/assets/sub")
+        ));
+        assert!(!runtime_directory_already_authorized(
+            &grant,
+            &PathBuf::from("/base/other")
+        ));
+    }
+
+    #[test]
+    fn authorize_honors_implicit_root_when_it_differs_from_base() {
+        let grant = runtime_grant("/base", "/base/docs", &[]);
+        assert!(runtime_directory_already_authorized(
+            &grant,
+            &PathBuf::from("/base/docs/sub")
+        ));
+    }
+
+    fn ssh_grant(request_base: &str, root: &str, authorized: &[&str]) -> DocPreviewGrant {
+        DocPreviewGrant {
+            owner: DocPreviewOwner::Ssh {
+                connection_id: String::from("conn-1"),
+            },
+            request_base: PathBuf::new(),
+            root: PathBuf::new(),
+            entry_relative_path: String::from("index.html"),
+            entry_path: None,
+            worktree_root: None,
+            authorized_roots: authorized
+                .iter()
+                .map(|entry| PathBuf::from(*entry))
+                .collect(),
+            browser_page_id: String::from("page-1"),
+            ssh_request_base: Some(String::from(request_base)),
+            ssh_root: Some(String::from(root)),
+            ssh_entry_path: None,
+            ssh_cached_files: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn ssh_authorize_reuses_parent_directory_authorization() {
+        let grant = ssh_grant("/docs", "/docs", &["/docs/assets"]);
+        assert!(ssh_directory_already_authorized(&grant, "/docs/assets/sub"));
+        assert!(!ssh_directory_already_authorized(&grant, "/docs/other"));
     }
 }
