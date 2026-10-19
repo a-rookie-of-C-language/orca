@@ -414,8 +414,7 @@ Not migrated yet:
   `context-menu` handler, neither of which exists on Tauri — shortcut routing
   already runs in the renderer keydown path, and a WebView2 right-click cannot
   be intercepted into a native menu. The rich-markdown editor closes its part of that gap
-  with a renderer-owned DOM menu (see the slice list above); other editable surfaces still
-  have no context menu on Tauri or the paired web client.
+  with a renderer-owned DOM menu (see the slice list above); plain inputs and textareas close the rest of that gap with a second renderer-owned DOM menu that mirrors the native edit template (Cut/Copy/Paste/Paste-as-plain-text/Select all), proven live by `tauri-poc/scripts/check-plain-editable-dom-menu.mjs`, while spellcheck suggestions stay Electron-only.
 - Remote SSH external-editor launching now resolves the host-owned VS Code Remote authority;
   configured compound commands in the argv-expressible subset (`code --new-window`, quoted
   launcher paths) parse into direct-exec argv without a shell, while shell-only constructs
