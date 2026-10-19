@@ -198,8 +198,8 @@ first native slice covers the low-risk operations that the renderer already expe
   default/isolated session profiles, the annotation viewport bridge used by grab mode, and
   grant-scoped local document previews with CSP, directory authorization, failure events, and
   external-link interception. On Windows, local development hosts also expose the certificate
-  failure overlay and a page-scoped, certificate-fingerprint-bound Proceed Anyway flow; its
-  end-to-end coverage and production policy remain to be completed.
+  failure overlay and a page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
+  by ``tauri-poc/scripts/check-browser-certificate-exception.mjs`` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
 - the Workspace Space secondary window: native Tauri window creation/reuse/close, state and
   worktree-reveal event routing between the main renderer and the Space renderer, background
   launch behavior that never activates the window, local directory size analysis with progress,
@@ -272,7 +272,7 @@ Not migrated yet:
 - Session History deletion now uses the Tauri-safe OS-trash boundary exposed by the paired runtime;
   end-to-end verification across packaged profiles is still part of release validation.
 - Packaged runtime staging/update supervision, tray menu-click routing plus the full dock attention
-  behavior, certificate exception end-to-end verification and non-Windows support,
+  behavior, certificate exception production policy and non-Windows support,
   SSH/remote document-preview transfer, and
   release packaging.
 - Browser guest-shortcut forwarding now suppresses handled chords in the guest: the main
