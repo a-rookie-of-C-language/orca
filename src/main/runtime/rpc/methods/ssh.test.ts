@@ -9,19 +9,28 @@ const {
   connectRegisteredSshTargetMock,
   getRegisteredSshStateMock,
   listRegisteredSshTargetsMock,
-  listRegisteredRemovedSshTargetLabelsMock
+  listRegisteredRemovedSshTargetLabelsMock,
+  getSshConnectionManagerMock,
+  markSshTestProbeMock,
+  unmarkSshTestProbeMock
 } = vi.hoisted(() => ({
   connectRegisteredSshTargetMock: vi.fn(),
   getRegisteredSshStateMock: vi.fn(),
   listRegisteredSshTargetsMock: vi.fn(),
-  listRegisteredRemovedSshTargetLabelsMock: vi.fn()
+  listRegisteredRemovedSshTargetLabelsMock: vi.fn(),
+  getSshConnectionManagerMock: vi.fn(),
+  markSshTestProbeMock: vi.fn(),
+  unmarkSshTestProbeMock: vi.fn()
 }))
 
 vi.mock('../../../ssh/ssh-target-registry', () => ({
   connectRegisteredSshTarget: connectRegisteredSshTargetMock,
   getRegisteredSshState: getRegisteredSshStateMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
-  listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock
+  listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock,
+  getSshConnectionManager: getSshConnectionManagerMock,
+  markSshTestProbe: markSshTestProbeMock,
+  unmarkSshTestProbe: unmarkSshTestProbeMock
 }))
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -219,5 +228,59 @@ describe('ssh RPC methods', () => {
     const response = await dispatcher.dispatch(makeRequest('ssh.listRemovedTargetLabels'))
 
     expect(response).toMatchObject({ ok: true, result: { labels } })
+  })
+
+  it('probes through a borrowed transport and reports success', async () => {
+    const target = { id: 'ssh-1', label: 'Dev box' }
+    const state = { targetId: 'ssh-1', status: 'connected', error: null, reconnectAttempt: 0 }
+    const connection = { getState: vi.fn().mockReturnValue(state) }
+    const manager = { connect: vi.fn().mockResolvedValue(connection), disconnect: vi.fn() }
+    listRegisteredSshTargetsMock.mockReturnValueOnce([target])
+    getSshConnectionManagerMock.mockReturnValueOnce(manager)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.testConnection', { targetId: 'ssh-1' })
+    )
+
+    expect(markSshTestProbeMock).toHaveBeenCalledWith('ssh-1')
+    expect(manager.connect).toHaveBeenCalledWith(target)
+    expect(manager.disconnect).toHaveBeenCalledWith('ssh-1')
+    expect(unmarkSshTestProbeMock).toHaveBeenCalledWith('ssh-1')
+    expect(response).toMatchObject({ ok: true, result: { success: true, state } })
+  })
+
+  it('reports probe failure without throwing', async () => {
+    const target = { id: 'ssh-1', label: 'Dev box' }
+    const manager = {
+      connect: vi.fn().mockRejectedValue(new Error('refused')),
+      disconnect: vi.fn()
+    }
+    listRegisteredSshTargetsMock.mockReturnValueOnce([target])
+    getSshConnectionManagerMock.mockReturnValueOnce(manager)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.testConnection', { targetId: 'ssh-1' })
+    )
+
+    expect(manager.disconnect).not.toHaveBeenCalled()
+    expect(unmarkSshTestProbeMock).toHaveBeenCalledWith('ssh-1')
+    expect(response).toMatchObject({ ok: true, result: { success: false, error: 'refused' } })
+  })
+
+  it('throws for a probe against an unknown target', async () => {
+    listRegisteredSshTargetsMock.mockReturnValueOnce([])
+    getSshConnectionManagerMock.mockReturnValueOnce({ connect: vi.fn(), disconnect: vi.fn() })
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.testConnection', { targetId: 'ssh-9' })
+    )
+
+    expect(response).toMatchObject({ ok: false })
   })
 })

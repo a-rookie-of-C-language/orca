@@ -76,8 +76,20 @@ try {
     terminal.some((status) => status !== undefined && status !== 'connecting' && status !== 'connected'),
     'No terminal sshStateChanged event reached the renderer for the failed connect.',
   );
-  const tested = await page.evaluate((id) => window.api.ssh.testConnection({ targetId: id }), targetId);
-  assert.equal(typeof tested?.success, 'boolean', 'ssh.testConnection lost its shape.');
+  const tested = await withTimeout(
+    page.evaluate((id) => window.api.ssh.testConnection({ targetId: id }), targetId),
+    90000,
+    'ssh.testConnection',
+  );
+  assert.equal(tested?.success, false, 'ssh.testConnection reported success for a dead port.');
+  assert.ok(
+    typeof tested?.error === 'string' && tested.error.length > 0,
+    'ssh.testConnection reported no error for a dead port.',
+  );
+  assert.ok(
+    !/unavailable in the web client|在网络客户端中不可用/i.test(tested.error ?? ''),
+    'ssh.testConnection answered from the retired web-client stub instead of orcad.',
+  );
   await page.evaluate(() => window.__sshProbeUnsubscribe?.());
   await page.evaluate((id) => window.api.ssh.disconnect({ targetId: id }), targetId);
   await page.evaluate((id) => window.api.ssh.removeTarget({ id }), targetId);

@@ -15,6 +15,7 @@ import {
   requestSshRuntimeCredential
 } from '../ssh/ssh-runtime-credential-bridge'
 import {
+  isSshTestProbe,
   setSshConnectionManagerResolver,
   setSshTargetMutations,
   setSshTargetRegistryHandlers,
@@ -163,6 +164,11 @@ export function startOrcadSsh(input: {
   })
   const manager = new SshConnectionManager({
     onStateChange: (targetId, state) => {
+      // Why: a testConnection probe borrows the transport; swallowing its
+      // chatter keeps cards steady, matching the main side's testingTargets.
+      if (isSshTestProbe(targetId)) {
+        return
+      }
       if (decisionTargets.has(targetId) && state.status === 'connected') {
         notifySshState(runtime, setupState(manager, targetId, 'connecting'))
       } else {

@@ -9,7 +9,6 @@ import type {
   SshTarget,
   SshTargetAddResult
 } from '../../../../shared/ssh-types'
-import { translate } from '@/i18n/i18n'
 import { callRuntimeResult } from './web-runtime-calls'
 import { requireActiveEnvironmentOrNull } from './web-runtime-session'
 import { noopUnsubscribe } from './web-storage'
@@ -100,11 +99,11 @@ export function createSshApi(): NonNullable<Partial<PreloadApi>['ssh']> {
       return state
     },
     needsPassphrasePrompt: () => Promise.resolve(false),
-    testConnection: () =>
-      Promise.resolve({
-        success: false,
-        error: translate('auto.web.web.preload.api.31bfe8ae1a', 'Unavailable in the web client.')
-      }),
+    testConnection: (args: { targetId: string }) =>
+      callRuntimeResult<{ success: boolean; error?: string; state?: SshConnectionState | null }>(
+        'ssh.testConnection',
+        { targetId: args.targetId }
+      ),
     // Why: match Electron's ssh:state-changed fan-out; orcad already publishes
     // sshStateChanged for the paired host, the web client just dropped it.
     onStateChanged: (callback) =>

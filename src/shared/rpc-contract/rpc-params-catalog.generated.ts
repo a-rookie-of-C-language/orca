@@ -1404,6 +1404,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'ssh.resolveConfigHost': SshResolveConfigHost,
   'ssh.resolveExternalEditorAuthority': SshResolveExternalEditorAuthority,
   'ssh.submitCredential': SshSubmitCredential,
+  'ssh.testConnection': SshTarget,
   'ssh.updatePortForward': SshPortForwardUpdate,
   'ssh.updateTarget': SshTargetUpdate,
   'stats.summary': null,

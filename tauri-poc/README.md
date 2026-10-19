@@ -157,8 +157,10 @@ first native slice covers the low-risk operations that the renderer already expe
   prompts are bridged through runtime client events. Connection-state fan-out is live too:
   `window.api.ssh.onStateChanged` forwards orcad `sshStateChanged`, proven with a refused-loopback
   connect in `tauri-poc/scripts/check-ssh-direct.mjs` (which also pins the shared failure contract:
-  connect rejects like Electron main and no state is retained). Still stubbed on the web client:
-  `testConnection` and `needsPassphrasePrompt`; the managed-server relay ladder still
+  connect rejects like Electron main and no state is retained). `ssh.testConnection` now probes through orcad (borrowed transport, suppressed fan-out),
+  proven live by the refused-loopback run in `check-ssh-direct.mjs` which reports the real
+  `ECONNREFUSED` instead of the retired stub. Still stubbed on the web client:
+  `needsPassphrasePrompt`; the managed-server relay ladder still
   remains on the Electron path.
 - WSL distro hosts when the existing internal WSL gate is enabled: distro discovery, add/remove,
   connect/reconnect, visible-work liveness, account environment propagation, status snapshots and

@@ -53,6 +53,23 @@ export function setSshTargetRegistryHandlers(handlers: {
   registeredDisconnectSshTarget = handlers.disconnect ?? null
 }
 
+// Why: orcad's testConnection probe borrows the live transport; its
+// connecting/error chatter must not flash worktree cards (mirrors the
+// Electron main side's testingTargets suppression).
+const sshTestProbeTargets = new Set<string>()
+
+export function markSshTestProbe(targetId: string): void {
+  sshTestProbeTargets.add(targetId)
+}
+
+export function unmarkSshTestProbe(targetId: string): void {
+  sshTestProbeTargets.delete(targetId)
+}
+
+export function isSshTestProbe(targetId: string): boolean {
+  return sshTestProbeTargets.has(targetId)
+}
+
 /** `automatic`: no user asked for this connect, so a cancelled sign-in stays cancelled. */
 export async function connectRegisteredSshTarget(
   targetId: string,
