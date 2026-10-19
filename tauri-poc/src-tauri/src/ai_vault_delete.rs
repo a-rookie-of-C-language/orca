@@ -54,10 +54,14 @@ fn validate_plan(plan: &AiVaultDeletePlan) -> Result<(), String> {
         if removal.roots.is_empty() {
             return Err("The session delete plan contains no approved roots.".to_string());
         }
+        // Why: canonicalize both sides so `..` segments and symlinks cannot
+        // escape containment, and so `\\?\`-prefixed canonical targets still
+        // match their roots on Windows. A missing root can never contain an
+        // existing target, so it falls back to its absolute path.
         let roots = removal
             .roots
             .iter()
-            .map(|root| absolute_path(root))
+            .map(|root| canonical_or_absolute(root))
             .collect::<Result<Vec<_>, _>>()?;
         if target.exists() {
             let metadata = fs::symlink_metadata(&target).map_err(format_io_error)?;
@@ -105,19 +109,34 @@ fn absolute_path(value: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn canonical_or_absolute(value: &str) -> Result<PathBuf, String> {
+    let path = absolute_path(value)?;
+    Ok(fs::canonicalize(&path).unwrap_or(path))
+}
+
+/// A path as compared for containment: no `\\?\` prefix, and case-folded on
+/// Windows. Mirrors the `comparable_path` helper in `clipboard_files.rs`.
+fn comparable_path(value: &Path) -> String {
+    let raw = value.to_string_lossy();
+    let unprefixed = if let Some(rest) = raw.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{rest}")
+    } else {
+        raw.strip_prefix("\\\\?\\").unwrap_or(&raw).to_string()
+    };
+    if cfg!(windows) {
+        unprefixed.to_lowercase()
+    } else {
+        unprefixed
+    }
+}
+
 fn path_inside(root: &Path, target: &Path) -> bool {
     if cfg!(windows) {
-        let root = root
-            .to_string_lossy()
-            .replace('/', "\\")
-            .to_ascii_lowercase();
-        let target = target
-            .to_string_lossy()
-            .replace('/', "\\")
-            .to_ascii_lowercase();
-        target == root
-            || target
-                .strip_prefix(&root)
+        let root_cmp = comparable_path(root).replace('/', "\\");
+        let target_cmp = comparable_path(target).replace('/', "\\");
+        target_cmp == root_cmp
+            || target_cmp
+                .strip_prefix(&root_cmp)
                 .is_some_and(|suffix| suffix.starts_with('\\'))
     } else {
         target.starts_with(root)
@@ -126,4 +145,62 @@ fn path_inside(root: &Path, target: &Path) -> bool {
 
 fn format_io_error(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_plans_missing_their_transcript_path() {
+        let plan = AiVaultDeletePlan {
+            allowed: true,
+            agent: "codex".to_string(),
+            resolved_path: "C:\\sessions\\a.jsonl".to_string(),
+            removals: vec![AiVaultDeleteRemoval {
+                path: "C:\\sessions\\b.jsonl".to_string(),
+                kind: "file".to_string(),
+                roots: vec!["C:\\sessions".to_string()],
+            }],
+        };
+        let error = validate_plan(&plan).expect_err("plan without transcript must fail");
+        assert!(
+            error.contains("transcript path"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn rejects_disallowed_plans_before_touching_disk() {
+        let plan = AiVaultDeletePlan {
+            allowed: false,
+            agent: "codex".to_string(),
+            resolved_path: "C:\\sessions\\a.jsonl".to_string(),
+            removals: vec![AiVaultDeleteRemoval {
+                path: "C:\\sessions\\a.jsonl".to_string(),
+                kind: "file".to_string(),
+                roots: vec!["C:\\sessions".to_string()],
+            }],
+        };
+        let error = validate_plan(&plan).expect_err("disallowed plan must fail");
+        assert!(error.contains("not approved"), "unexpected error: {error}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_canonical_targets_still_match_their_roots() {
+        let root = PathBuf::from("C:\\sessions");
+        let verbatim = PathBuf::from("\\\\?\\C:\\sessions\\a.jsonl");
+        assert!(path_inside(&root, &verbatim));
+        let sibling = PathBuf::from("\\\\?\\C:\\sessions-other\\a.jsonl");
+        assert!(!path_inside(&root, &sibling));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn verbatim_unc_targets_keep_their_host_share() {
+        let root = PathBuf::from("\\\\server\\share\\sessions");
+        let verbatim = PathBuf::from("\\\\?\\UNC\\server\\share\\sessions\\a.jsonl");
+        assert!(path_inside(&root, &verbatim));
+    }
 }

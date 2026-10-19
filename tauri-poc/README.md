@@ -326,7 +326,10 @@ Not migrated yet:
 - Local filesystem workspace ownership and the remaining mutation authorization surface (the
   paired runtime remains the authority for workspace files; document-folder imports are native).
 - Session History deletion now uses the Tauri-safe OS-trash boundary exposed by the paired runtime;
-  end-to-end verification across packaged profiles is still part of release validation.
+  proven live by `tauri-poc/scripts/check-ai-vault-delete.mjs` (a real file is trashed through the
+  native OS boundary while disallowed, pathless, transcript-less, and out-of-roots plans are
+  refused; the Windows `\\?\`-prefixed canonical paths the first probe run exposed now match
+  their roots). End-to-end verification across packaged profiles is still part of release validation.
 - Packaged runtime staging/update supervision, tray menu-click routing plus the full dock attention
   behavior, certificate exception production policy and non-Windows support,
   SSH/remote document-preview transfer, and
