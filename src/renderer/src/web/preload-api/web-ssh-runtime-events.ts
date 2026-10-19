@@ -8,10 +8,12 @@ import { getClientForEnvironment, requireActiveEnvironmentOrNull } from './web-r
 type SshCredentialRequest = Extract<RuntimeClientEvent, { type: 'sshCredentialRequest' }>
 type SshCredentialResolved = Extract<RuntimeClientEvent, { type: 'sshCredentialResolved' }>
 type SshPortForwardsChanged = Extract<RuntimeClientEvent, { type: 'sshPortForwardsChanged' }>
+type SshStateChanged = Extract<RuntimeClientEvent, { type: 'sshStateChanged' }>
 
 const sshCredentialRequestListeners = new Set<(request: SshCredentialRequest) => void>()
 const sshCredentialResolvedListeners = new Set<(resolved: SshCredentialResolved) => void>()
 const sshPortForwardsChangedListeners = new Set<(change: SshPortForwardsChanged) => void>()
+const sshStateChangedListeners = new Set<(change: SshStateChanged) => void>()
 let sshRuntimeEventSubscription: { unsubscribe: () => void; abort: AbortController } | null = null
 let sshRuntimeEventSubscriptionPromise: Promise<void> | null = null
 let sshRuntimeEventRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -20,7 +22,8 @@ function hasSshRuntimeEventListeners(): boolean {
   return (
     sshCredentialRequestListeners.size > 0 ||
     sshCredentialResolvedListeners.size > 0 ||
-    sshPortForwardsChangedListeners.size > 0
+    sshPortForwardsChangedListeners.size > 0 ||
+    sshStateChangedListeners.size > 0
   )
 }
 
@@ -40,6 +43,10 @@ function deliverSshRuntimeEvent(response: RuntimeRpcResponse<unknown>): void {
     }
   } else if (message.type === 'sshPortForwardsChanged') {
     for (const listener of sshPortForwardsChangedListeners) {
+      listener(message)
+    }
+  } else if (message.type === 'sshStateChanged') {
+    for (const listener of sshStateChangedListeners) {
       listener(message)
     }
   }
@@ -138,6 +145,15 @@ export function onSshPortForwardsChanged(
   ensureSshRuntimeEventSubscription()
   return () => {
     sshPortForwardsChangedListeners.delete(listener)
+    releaseSshRuntimeEventSubscriptionIfUnused()
+  }
+}
+
+export function onSshStateChanged(listener: (change: SshStateChanged) => void): () => void {
+  sshStateChangedListeners.add(listener)
+  ensureSshRuntimeEventSubscription()
+  return () => {
+    sshStateChangedListeners.delete(listener)
     releaseSshRuntimeEventSubscriptionIfUnused()
   }
 }

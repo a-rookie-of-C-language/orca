@@ -154,7 +154,11 @@ first native slice covers the low-risk operations that the renderer already expe
 - host-owned SSH target storage, `~/.ssh/config` import and picker resolution, direct ssh2
   connect/disconnect, remote directory browsing, and direct port forwards through the runtime
   RPC boundary, including persistence across reconnects and app restarts. Password/passphrase
-  prompts are bridged through runtime client events; the managed-server relay ladder still
+  prompts are bridged through runtime client events. Connection-state fan-out is live too:
+  `window.api.ssh.onStateChanged` forwards orcad `sshStateChanged`, proven with a refused-loopback
+  connect in `tauri-poc/scripts/check-ssh-direct.mjs` (which also pins the shared failure contract:
+  connect rejects like Electron main and no state is retained). Still stubbed on the web client:
+  `testConnection` and `needsPassphrasePrompt`; the managed-server relay ladder still
   remains on the Electron path.
 - WSL distro hosts when the existing internal WSL gate is enabled: distro discovery, add/remove,
   connect/reconnect, visible-work liveness, account environment propagation, status snapshots and

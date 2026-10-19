@@ -16,8 +16,10 @@ import { noopUnsubscribe } from './web-storage'
 import {
   onSshCredentialRequest,
   onSshCredentialResolved,
-  onSshPortForwardsChanged
+  onSshPortForwardsChanged,
+  onSshStateChanged
 } from './web-ssh-runtime-events'
+import { admitSshConnectionStateForAuthorityReconciliation } from '../../../../shared/ssh-retained-payload-admission'
 
 export function createSshApi(): NonNullable<Partial<PreloadApi>['ssh']> {
   return {
@@ -103,7 +105,18 @@ export function createSshApi(): NonNullable<Partial<PreloadApi>['ssh']> {
         success: false,
         error: translate('auto.web.web.preload.api.31bfe8ae1a', 'Unavailable in the web client.')
       }),
-    onStateChanged: () => noopUnsubscribe,
+    // Why: match Electron's ssh:state-changed fan-out; orcad already publishes
+    // sshStateChanged for the paired host, the web client just dropped it.
+    onStateChanged: (callback) =>
+      onSshStateChanged((change) => {
+        const state = admitSshConnectionStateForAuthorityReconciliation(
+          change.state,
+          change.targetId
+        )
+        if (state) {
+          callback({ targetId: change.targetId, state })
+        }
+      }),
     addPortForward: async (args) => {
       if (!requireActiveEnvironmentOrNull()) {
         throw new Error('SSH port forwarding requires an active runtime.')
