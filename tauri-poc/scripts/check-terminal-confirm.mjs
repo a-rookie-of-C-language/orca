@@ -6,10 +6,9 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { assertReadyHidden, connectDevelopmentRenderer } from './hidden-renderer-connection.mjs'
 
-// Live Windows proof of the fresh foreground-confirm gap on Tauri: the cached
-// inspection read answers (powershell.exe) while window.api.pty.confirmForegroundProcess
-// is a paired-client stub that always resolves null, so parked/mounted panes on the
-// local orcad can never force the fresh uncached scan Electron performs.
+// Live Windows proof of Tauri/Electron foreground-confirm parity: the cached
+// inspection read and the fresh confirm scan must agree on the shell, exactly
+// like Electron's pty:confirmForegroundProcess IPC backing the same panes.
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const endpoint = process.env.ORCA_TAURI_CDP_ENDPOINT ?? 'http://127.0.0.1:9224'
 const connections = new Set()
@@ -42,18 +41,20 @@ try {
     }
     await delay(100)
   }
-  const fresh = await page.evaluate((pid) => window.api.pty.confirmForegroundProcess(pid), terminalId)
-  console.log(`CONFIRM-GAP cached=${cached} fresh=${fresh}`)
-  assert.ok(cached, 'The cached inspection read answered nothing; cannot prove the gap.')
-  assert.equal(
-    fresh,
-    null,
-    'confirmForegroundProcess answered; the gap is already closed.'
+  const fresh = await page.evaluate(
+    (pid) => window.api.pty.confirmForegroundProcess(pid),
+    terminalId
   )
+  console.log(`CONFIRM-PARITY cached=${cached} fresh=${fresh}`)
+  assert.ok(cached, 'The cached inspection read answered nothing; cannot prove parity.')
+  assert.ok(fresh, 'The fresh confirm scan answered nothing; the gap is still open.')
+  assert.equal(fresh, cached, 'The fresh confirm scan disagrees with the cached read.')
 } finally {
   try {
     if (terminalId && page && !page.isClosed()) {
-      await page.evaluate((pid) => window.api.pty.kill(pid).catch(() => {}), terminalId).catch(() => {})
+      await page
+        .evaluate((pid) => window.api.pty.kill(pid).catch(() => {}), terminalId)
+        .catch(() => {})
     }
   } finally {
     await Promise.all([...connections].map((browser) => browser.close().catch(() => {})))

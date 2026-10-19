@@ -14,11 +14,14 @@ import { unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
 import { noopUnsubscribe } from './web-storage'
 import { isTauriNativeHost } from '../tauri-native-host'
 import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type {
   TerminalLeafMoveRequest,
   TerminalLeafMoveResult
 } from '../../../../shared/terminal-leaf-move'
 import { requireActiveEnvironment } from './web-runtime-session'
+import { confirmRuntimeTerminalForegroundProcess } from '../../runtime/runtime-terminal-inspection'
+import { getRemoteRuntimePtyOwner } from '../../runtime/runtime-terminal-stream'
 import { createTauriPtyDeliveryDiagnostics } from '../tauri-pty-delivery-diagnostics'
 import { createTauriPtyApi } from './web-tauri-pty-api'
 import { createRuntimePtyQueryApi } from './web-terminal-runtime-queries'
@@ -72,8 +75,16 @@ export function createPtyApi(): NonNullable<Partial<PreloadApi>['pty']> {
     setPtyDeliveryInterest: (id, interested) => deliveryDiagnostics?.setInterested(id, interested),
     // Why: remote-runtime PTYs are never hidden-gate markable, so there's no main-side responder to feed.
     publishTerminalViewAttributes: () => {},
-    // Why: paired web panes cannot provide a local post-boundary process scan.
-    confirmForegroundProcess: () => Promise.resolve(null),
+    // Why fail-closed like the parked/mounted panes: SSH panes hold no remote incarnation
+    // to confirm against, and ownerless ids name no server to dial; callers read null as
+    // "no new evidence". The helper's preload fallback is Electron's real IPC, which this
+    // object replaces on web, so unreachable ids stop here instead of recursing into it.
+    confirmForegroundProcess: (id) => {
+      if (parseAppSshPtyId(id) !== null || getRemoteRuntimePtyOwner(id) === null) {
+        return Promise.resolve(null)
+      }
+      return confirmRuntimeTerminalForegroundProcess(id)
+    },
     // Why: a paired client's terminals belong to the host, whose Codex settings this client does not own.
     isCodexOnSharedServer: () => Promise.resolve({ joined: false }),
     disableCodexSharedServerAutoStart: () => Promise.resolve(false),

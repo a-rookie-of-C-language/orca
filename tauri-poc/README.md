@@ -208,6 +208,11 @@ first native slice covers the low-risk operations that the renderer already expe
   IPC. Hosts that predate the controller method answer `signaled: false` and the renderer
   falls back to the legacy interrupt write. Covered live by
   `tauri-poc/scripts/check-terminal-ops.mjs`.
+- fresh foreground-process confirmation on Windows: `window.api.pty.confirmForegroundProcess`
+  now travels `terminal.confirmForegroundProcess` to the daemon provider instead of resolving
+  null, so the fresh uncached scan agrees with the cached read exactly like Electron's
+  `pty:confirmForegroundProcess` IPC. SSH panes and ownerless ids stay fail-closed (null reads
+  as "no new evidence"). Covered live by `tauri-poc/scripts/check-terminal-confirm.mjs`.
 - host-owned PTY buffer snapshots for Tauri remounts, including grid geometry, output sequence,
   scrollback and provider-backed authoritative recovery through `terminal.bufferSnapshot`.
 - live terminal directories through the execution-host-owned `terminal.cwd` RPC, fenced against

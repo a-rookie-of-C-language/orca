@@ -6,13 +6,15 @@ const {
   callEnvironmentEnvelope,
   isTauriNativeHost,
   requireActiveEnvironment,
-  requireActiveEnvironmentOrNull
+  requireActiveEnvironmentOrNull,
+  confirmRuntimeTerminalForegroundProcess
 } = vi.hoisted(() => ({
   callRuntimeResult: vi.fn(),
   callEnvironmentEnvelope: vi.fn(),
   isTauriNativeHost: vi.fn(() => false),
   requireActiveEnvironment: vi.fn(() => ({ id: 'env-1' })),
-  requireActiveEnvironmentOrNull: vi.fn(() => ({ id: 'env-1' }))
+  requireActiveEnvironmentOrNull: vi.fn(() => ({ id: 'env-1' })),
+  confirmRuntimeTerminalForegroundProcess: vi.fn()
 }))
 
 vi.mock('./web-runtime-calls', () => ({ callRuntimeResult, callEnvironmentEnvelope }))
@@ -21,11 +23,15 @@ vi.mock('./web-runtime-session', () => ({
   requireActiveEnvironment,
   requireActiveEnvironmentOrNull
 }))
+vi.mock('../../runtime/runtime-terminal-inspection', () => ({
+  confirmRuntimeTerminalForegroundProcess
+}))
 
 describe('Tauri terminal and SSH preload APIs', () => {
   beforeEach(() => {
     callRuntimeResult.mockReset()
     callEnvironmentEnvelope.mockReset()
+    confirmRuntimeTerminalForegroundProcess.mockReset()
     isTauriNativeHost.mockReturnValue(false)
     requireActiveEnvironment.mockReturnValue({ id: 'env-1' })
     requireActiveEnvironmentOrNull.mockReturnValue({ id: 'env-1' })
@@ -302,5 +308,23 @@ describe('Tauri terminal and SSH preload APIs', () => {
       ['ssh.browseDir', { targetId: 'ssh-1', dirPath: '~' }],
       ['ssh.disconnect', { targetId: 'ssh-1' }]
     ])
+  })
+
+  it('confirms remote-runtime panes through the fresh-scan helper', async () => {
+    confirmRuntimeTerminalForegroundProcess.mockResolvedValue('powershell.exe')
+    await expect(
+      createPtyApi().confirmForegroundProcess?.('remote:env-1@@terminal-9')
+    ).resolves.toBe('powershell.exe')
+    expect(confirmRuntimeTerminalForegroundProcess).toHaveBeenCalledWith('remote:env-1@@terminal-9')
+  })
+
+  it('fails closed for SSH panes without touching the confirm RPC', async () => {
+    await expect(createPtyApi().confirmForegroundProcess?.('ssh:build@@pty-1')).resolves.toBeNull()
+    expect(confirmRuntimeTerminalForegroundProcess).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for ownerless ids instead of recursing into the preload', async () => {
+    await expect(createPtyApi().confirmForegroundProcess?.('pty-1')).resolves.toBeNull()
+    expect(confirmRuntimeTerminalForegroundProcess).not.toHaveBeenCalled()
   })
 })
