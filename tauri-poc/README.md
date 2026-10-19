@@ -399,8 +399,8 @@ Not migrated yet:
   download error (mirroring Electron's own pinned-dev-channel behavior on
   signed builds). Dismissing an un-acted channel card abandons the pinned session
   and returns status to idle like Electron, while plain signed-feed cards keep
-  dismissing renderer-locally (resolver unit tests; live proof awaits a fresh
-  GitHub rate-limit window).
+  dismissing renderer-locally (resolver unit tests; proven live by
+  `tauri-poc/scripts/check-updater-dismiss.mjs`: pinned check, dismiss, idle, pin cleared).
   The Window menu gains the macOS-only `Zoom` entry (Electron `role: 'zoom'`),
   routed to the same maximize/restore pair the renderer uses, and the Quit item
   keeps Electron's platform convention: `Cmd+Q` on macOS, `Ctrl+Q` on Linux,
