@@ -71,6 +71,7 @@ export type RuntimeStore = {
   persistPtyBinding?: Store['persistPtyBinding']
   admitTerminalPane?: Store['admitTerminalPane']
   withdrawTerminalPane?: Store['withdrawTerminalPane']
+  moveTerminalLeafToNewTab?: Store['moveTerminalLeafToNewTab']
   applyLayoutCommand?: Store['applyLayoutCommand']
   getSshRemotePtyLeases?: Store['getSshRemotePtyLeases']
   getUI?: Store['getUI']
@@ -89,6 +90,7 @@ export type RuntimeStore = {
   deleteAutomation?: Store['deleteAutomation']
   getSparsePresets?: Store['getSparsePresets']
   saveSparsePreset?: Store['saveSparsePreset']
+  removeSparsePreset?: Store['removeSparsePreset']
   getMobileClientTabSelections?: Store['getMobileClientTabSelections']
   setMobileClientTabSelections?: Store['setMobileClientTabSelections']
   getSettings(): {
@@ -150,6 +152,8 @@ export type RuntimeStore = {
     mobileEmulatorEnabled?: boolean
     mobileEmulatorDefaultDeviceUdid?: string | null
     machineName?: GlobalSettings['machineName']
+    computerAwakeMode?: GlobalSettings['computerAwakeMode']
+    keepComputerAwakeWhileAgentsRun?: GlobalSettings['keepComputerAwakeWhileAgentsRun']
     voice?: VoiceSettings
     claudeAgentTeamsMode?: GlobalSettings['claudeAgentTeamsMode']
     // Why: Phase-5 query responder kill switches — read per chunk in

@@ -44,20 +44,22 @@ export function resolveAiVaultSessionTitlesInBackground(
 }
 
 export function listAiVaultSubagentSessionsInBackground(
-  request: AiVaultServiceSubagentRequest
+  request: AiVaultServiceSubagentRequest,
+  signal?: AbortSignal
 ): Promise<AiVaultSubagentListResult> {
-  return listAiVaultSubagentSessionsInService(request)
+  return listAiVaultSubagentSessionsInService(request, signal)
 }
 
 export async function readAiVaultFirstUserPromptInBackground(
-  request: ReadAiVaultFirstUserPromptArgs
+  request: ReadAiVaultFirstUserPromptArgs,
+  signal?: AbortSignal
 ): Promise<ReadAiVaultFirstUserPromptResult> {
   if (process.platform === 'win32' && isWslUncPath(request.filePath)) {
     const { localAiVaultScanRoots } = await import('./cached-session-list')
     const roots = await localAiVaultScanRoots()
     request = { ...request, wslOpenCodeReaders: roots.wslOpenCodeReaders ?? [] }
   }
-  return readAiVaultFirstUserPromptInService(request)
+  return readAiVaultFirstUserPromptInService(request, signal)
 }
 
 export function invalidateAiVaultBackgroundCache(paths: string[]): Promise<void> {

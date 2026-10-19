@@ -16,13 +16,12 @@ import {
 import { applyPluginConsent, applyPluginEnablement } from '../plugins/plugin-enablement'
 import type { PluginService } from '../plugins/plugin-service'
 import { bindPluginPanelOwnerLifecycle } from '../plugins/plugin-panel-owner-lifecycle'
+export { canRemoveInstalledPlugin } from '../plugins/plugin-runtime-management'
+import { canRemoveInstalledPlugin } from '../plugins/plugin-runtime-management'
 import { isQualifiedPluginKey } from '../../shared/plugins/plugin-manifest'
 import { pluginConsentRequestSchema } from '../../shared/plugins/plugin-consent-request'
 import { normalizePluginIdList } from '../../shared/plugins/plugin-consent-state'
-import {
-  isAllowedPluginGitUrl,
-  type PluginLockfile
-} from '../../shared/plugins/plugin-install-lockfile'
+import { isAllowedPluginGitUrl } from '../../shared/plugins/plugin-install-lockfile'
 import {
   registerPluginMarketplaceHandlers,
   type PluginMarketplaceHandlerServices
@@ -71,17 +70,6 @@ const logsArgsSchema = z.object({ pluginKey: z.string().min(1) })
 // it without ipcMain. Existing importers of this path keep working.
 export { listPluginsForClients } from '../plugins/plugin-client-list'
 import { listPluginsForClients } from '../plugins/plugin-client-list'
-
-export function canRemoveInstalledPlugin(
-  pluginService: PluginService,
-  pluginKey: string,
-  lock?: PluginLockfile
-): boolean {
-  return (
-    lock?.plugins[pluginKey]?.source.kind !== 'bundled' &&
-    pluginService.getDiscovered().some((plugin) => plugin.pluginKey === pluginKey && !plugin.isDev)
-  )
-}
 
 function rendererPanelOwner(webContentsId: number): string {
   return `renderer:${webContentsId}`

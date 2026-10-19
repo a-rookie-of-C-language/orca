@@ -99,6 +99,25 @@ const ClaudeSignInTarget = {
   wslDistro: z.string().nullish()
 }
 
+export const AddClaudeAccountParams = z
+  .object({
+    ...ClaudeSignInTarget,
+    copyLink: z.boolean().optional()
+  })
+  .strict()
+
+export const ReauthenticateClaudeAccountParams = z
+  .object({ accountId: z.string().min(1), copyLink: z.boolean().optional() })
+  .strict()
+
+export const AddCodexAccountParams = z
+  .object({ runtime: z.enum(['host', 'wsl']).optional(), wslDistro: z.string().nullish() })
+  .strict()
+
+export const ReauthenticateCodexAccountParams = z
+  .object({ accountId: z.string().min(1), activateIfSelectionWasEmpty: z.boolean().optional() })
+  .strict()
+
 export const BeginClaudeSignInParams = z
   .object({ accountId: z.string().min(1).optional(), ...ClaudeSignInTarget })
   .strict()

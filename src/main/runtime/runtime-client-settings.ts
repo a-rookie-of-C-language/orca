@@ -86,6 +86,11 @@ export class RuntimeClientSettingsController {
       worktreeVisibilityDefaults: settings.worktreeVisibilityDefaults ?? { external: 'hide' },
       agentSkillSharingEnabled: isAgentSkillSharingEnabled(settings),
       machineName: settings.machineName ?? '',
+      // Why projected: the paired Tauri shell keeps this machine awake through
+      // the runtime-owned awake verdict, so it must read and write the same
+      // host setting the desktop's AgentAwakeService gates on.
+      ...(settings.computerAwakeMode ? { computerAwakeMode: settings.computerAwakeMode } : {}),
+      keepComputerAwakeWhileAgentsRun: settings.keepComputerAwakeWhileAgentsRun === true,
       // Why projected: a web client's Settings → Chat edits this host's new-chat default.
       ...(settings.nativeChatPermissionMode
         ? { nativeChatPermissionMode: settings.nativeChatPermissionMode }

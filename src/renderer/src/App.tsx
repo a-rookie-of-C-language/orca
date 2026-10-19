@@ -28,6 +28,8 @@ import { startNativeChatDraftLoad } from './app-shell/native-chat-draft-startup'
 import { useDocumentAppearance } from './app-shell/use-document-appearance'
 import { useFloatingWorkspacePanel } from './app-shell/use-floating-workspace-panel'
 import { useGlobalKeybindings } from './app-shell/use-global-keybindings'
+import { useTauriGuestHandledShortcuts } from './web/tauri-guest-handled-shortcuts'
+import { useTauriMenuText } from './web/tauri-native-menu-hints'
 import { useOnboardingAndFeatureTips } from './app-shell/use-onboarding-and-feature-tips'
 import { usePersistedUIWriter } from './app-shell/use-persisted-ui-writer'
 import { useRuntimeGraphSync } from './app-shell/use-runtime-graph-sync'
@@ -50,6 +52,10 @@ function App(): React.JSX.Element {
   useDocumentAppearance()
   useWindowVisibilityEffects()
   useGlobalKeybindings({ layout, floatingWorkspace })
+  // Why: guest WebViews suppress only published chords, so keep the set in sync with the registry.
+  useTauriGuestHandledShortcuts()
+  // Why: the Tauri menu is built once, so rebindable hints ride a separate channel.
+  useTauriMenuText()
 
   // Why: the same vars are set inline on .app-layout below, but portaled surfaces
   // (sheets, dialogs) mount outside it and would otherwise fall back to 0px and

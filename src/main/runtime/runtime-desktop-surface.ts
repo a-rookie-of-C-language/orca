@@ -1,4 +1,6 @@
 import type { BrowserWindow, IpcMainEvent } from 'electron'
+import type { RemoteRuntimeSharedConnectionDiagnostics } from '../../shared/remote-runtime-shared-control-types'
+import type { RuntimeHostStatusSnapshot } from '../../shared/runtime-host-status'
 
 /**
  * The desktop facilities `OrcaRuntimeService` uses, which a Node host does not have.
@@ -25,6 +27,14 @@ export type RuntimeDesktopSurface = {
   findWindowById(id: number): BrowserWindow | null
   onIpc(channel: string, listener: (event: IpcMainEvent, ...args: never[]) => void): void
   removeIpcListener(channel: string, listener: (...args: never[]) => void): void
+  /** Publishes host status to the native desktop renderer, when one exists. */
+  publishRuntimeHostStatus?(snapshot: RuntimeHostStatusSnapshot): void
+  /** Publishes shared-control diagnostics to the native desktop renderer, when one exists. */
+  publishRuntimeEnvironmentDiagnostics?(event: {
+    environmentId: string
+    transportGeneration: number
+    diagnostics: RemoteRuntimeSharedConnectionDiagnostics
+  }): void
 }
 
 const inertDesktopSurface: RuntimeDesktopSurface = {

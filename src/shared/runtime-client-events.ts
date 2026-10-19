@@ -4,11 +4,13 @@ import type {
   WorktreeSetupLaunch,
   WorktreeStartupLaunch
 } from './worktree/launch-types'
-import type { SshConnectionState } from './ssh-types'
+import type { PortForwardEntry, SshConnectionState } from './ssh-types'
 import type { TerminalSideEffectBatch } from './terminal-side-effect-facts'
 import type { RuntimeNativeChatLaunchDraftResolution } from './runtime-types'
 import type { RuntimeNavigationTarget } from './runtime-navigation'
 import type { WorktreeSortOrderUpdate } from './worktree/sort-order-update'
+import type { WslHostStatus } from './wsl-host-types'
+import type { AiVaultScanProgressUpdate } from './ai-vault-scan-progress'
 
 export type RuntimeClientEvent =
   | { type: 'reposChanged' }
@@ -27,6 +29,23 @@ export type RuntimeClientEvent =
   // channel for ssh:state-changed, so without this event their reconnect
   // overlays never learn the host connected (STA-1468).
   | { type: 'sshStateChanged'; targetId: string; state: SshConnectionState }
+  | {
+      type: 'sshPortForwardsChanged'
+      targetId: string
+      forwards: PortForwardEntry[]
+    }
+  | {
+      type: 'sshCredentialRequest'
+      requestId: string
+      targetId: string
+      kind: 'passphrase' | 'password' | 'keyboard-interactive'
+      detail: string
+      echo?: boolean
+    }
+  | { type: 'sshCredentialResolved'; requestId: string }
+  | { type: 'wslHostStatusChanged'; status: WslHostStatus }
+  /** Live local Agent Session History scan progress for paired desktop clients. */
+  | ({ type: 'aiVaultScanProgress' } & AiVaultScanProgressUpdate)
   | {
       type: 'worktreeTerminalSleepState'
       worktreeId: string

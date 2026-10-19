@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-updater-dismiss-available-update"
+description = "Enables the poc_updater_dismiss_available_update command without any pre-configured scope."
+commands.allow = ["poc_updater_dismiss_available_update"]
+
+[[permission]]
+identifier = "deny-poc-updater-dismiss-available-update"
+description = "Denies the poc_updater_dismiss_available_update command without any pre-configured scope."
+commands.deny = ["poc_updater_dismiss_available_update"]

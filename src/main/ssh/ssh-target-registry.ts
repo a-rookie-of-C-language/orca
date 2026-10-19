@@ -1,8 +1,10 @@
 import type { SshConnectionStore } from './ssh-connection-store'
 import type { SshConnectionManager } from './ssh-connection-manager'
+import type { SshPortForwardManager } from './ssh-port-forward'
 import type {
   SshConnectionState,
   SshTarget,
+  SshConfigImportResult,
   SshTargetAddResult,
   SshTargetCreateInput,
   SshTargetUpdateInput
@@ -31,6 +33,7 @@ type ConnectSshTarget = (
 
 let registeredConnectSshTarget: ConnectSshTarget | null = null
 let registeredGetSshState: ((targetId: string) => SshConnectionState | undefined) | null = null
+let registeredDisconnectSshTarget: ((targetId: string) => Promise<void>) | null = null
 
 export function setSshTargetRegistryStore(store: SshConnectionStore | null): void {
   sshStore = store
@@ -43,9 +46,11 @@ export function getSshTargetRegistryStore(): SshConnectionStore | null {
 export function setSshTargetRegistryHandlers(handlers: {
   connect: ConnectSshTarget | null
   getState: ((targetId: string) => SshConnectionState | undefined) | null
+  disconnect?: ((targetId: string) => Promise<void>) | null
 }): void {
   registeredConnectSshTarget = handlers.connect
   registeredGetSshState = handlers.getState
+  registeredDisconnectSshTarget = handlers.disconnect ?? null
 }
 
 /** `automatic`: no user asked for this connect, so a cancelled sign-in stays cancelled. */
@@ -65,6 +70,13 @@ export function getRegisteredSshState(targetId: string): SshConnectionState | un
   return registeredGetSshState?.(targetId)
 }
 
+export async function disconnectRegisteredSshTarget(targetId: string): Promise<void> {
+  if (!registeredDisconnectSshTarget) {
+    throw new Error('ssh_handlers_not_registered')
+  }
+  await registeredDisconnectSshTarget(targetId)
+}
+
 /** Public targets for runtime RPC clients — same list the desktop renderer gets. */
 export function listRegisteredSshTargets(): SshTarget[] {
   return sshStore?.listTargets() ?? []
@@ -73,6 +85,11 @@ export function listRegisteredSshTargets(): SshTarget[] {
 /** Removed-target id → last known label, for ghost-host display on paired clients. */
 export function listRegisteredRemovedSshTargetLabels(): Record<string, string> {
   return sshStore?.listRemovedTargetLabels() ?? {}
+}
+
+/** SSH config aliases explicitly removed by the user; passive imports must keep them suppressed. */
+export function listRegisteredSuppressedSshConfigAliases(): string[] {
+  return sshStore?.listSuppressedSshConfigAliases() ?? []
 }
 
 /** Add/update/remove with the same rules the desktop's SSH settings use. */
@@ -95,7 +112,19 @@ export function getRegisteredSshTargetMutations(): SshTargetMutations {
   return registeredSshTargetMutations
 }
 
+/** Import the host-owned OpenSSH config without exposing the profile store to RPC code. */
+export function importRegisteredSshConfig(options?: { reAdopt?: boolean }): SshConfigImportResult {
+  if (!sshStore) {
+    throw new Error('ssh_handlers_not_registered')
+  }
+  const targets = sshStore.importFromSshConfig(options)
+  const repoReadoptions = sshStore.lastRepoReadoptions
+  sshStore.lastRepoReadoptions = []
+  return { targets, repoReadoptions }
+}
+
 let registeredGetSshConnectionManager: (() => SshConnectionManager | null) | null = null
+let registeredGetSshPortForwardManager: (() => SshPortForwardManager | null) | null = null
 
 export function setSshConnectionManagerResolver(
   resolve: (() => SshConnectionManager | null) | null
@@ -113,4 +142,14 @@ export function setSshConnectionManagerResolver(
  */
 export function getSshConnectionManager(): SshConnectionManager | null {
   return registeredGetSshConnectionManager?.() ?? null
+}
+
+export function setSshPortForwardManagerResolver(
+  resolve: (() => SshPortForwardManager | null) | null
+): void {
+  registeredGetSshPortForwardManager = resolve
+}
+
+export function getSshPortForwardManager(): SshPortForwardManager | null {
+  return registeredGetSshPortForwardManager?.() ?? null
 }

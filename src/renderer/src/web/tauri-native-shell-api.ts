@@ -4,7 +4,10 @@ import type {
   ShellOpenExternalEditorResult,
   ShellOpenLocalPathResult
 } from '../../../shared/shell-open-types'
+import { toSshExecutionHostId } from '../../../shared/execution-host'
+import type { SshExternalEditorAuthorityResult } from '../../../shared/ssh-types'
 import { createShellApi } from './preload-api/web-shell-api'
+import { callRuntimeResult } from './preload-api/web-runtime-calls'
 import { getBrowserPlatform } from './preload-api/web-storage'
 import { invokeNative, invokePlugin, isTauriNativeHost } from './tauri-native-host'
 
@@ -50,12 +53,26 @@ export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['sh
     openInExternalEditor: async (
       request: ShellOpenExternalEditorRequest
     ): Promise<ShellOpenExternalEditorResult> => {
-      if (request.command) {
-        return { ok: false, reason: 'remote-editor-unsupported' }
-      }
       try {
-        await openPath(request.path)
-        return { ok: true }
+        const connectionId = request.connectionId?.trim()
+        if (connectionId) {
+          if (request.ownerHostId !== toSshExecutionHostId(connectionId)) {
+            return { ok: false, reason: 'remote-runtime-unsupported' }
+          }
+          const authority = await callRuntimeResult<SshExternalEditorAuthorityResult>(
+            'ssh.resolveExternalEditorAuthority',
+            { targetId: connectionId }
+          )
+          if (!authority.ok) {
+            return authority
+          }
+          return await invokeNative<ShellOpenExternalEditorResult>('poc_open_external_editor', {
+            args: { ...request, sshAuthority: authority.authority }
+          })
+        }
+        return await invokeNative<ShellOpenExternalEditorResult>('poc_open_external_editor', {
+          args: request
+        })
       } catch {
         return { ok: false, reason: 'launch-failed' }
       }

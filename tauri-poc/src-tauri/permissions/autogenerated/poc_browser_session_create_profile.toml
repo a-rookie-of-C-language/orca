@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-session-create-profile"
+description = "Enables the poc_browser_session_create_profile command without any pre-configured scope."
+commands.allow = ["poc_browser_session_create_profile"]
+
+[[permission]]
+identifier = "deny-poc-browser-session-create-profile"
+description = "Denies the poc_browser_session_create_profile command without any pre-configured scope."
+commands.deny = ["poc_browser_session_create_profile"]

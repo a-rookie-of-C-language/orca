@@ -22,6 +22,7 @@ describe('web preload API composition', () => {
       'starNag',
       'platform',
       'workspacePorts',
+      'workspaceSpace',
       'orcaProfiles',
       'e2e',
       'settings',
@@ -35,8 +36,13 @@ describe('web preload API composition', () => {
       'cache',
       'runtime',
       'nativeChat',
+      'docPreview',
       'runtimeEnvironments',
       'repos',
+      'projects',
+      'projectGroups',
+      'sparsePresets',
+      'folderWorkspaces',
       'worktrees',
       'fs',
       'git',
@@ -54,6 +60,10 @@ describe('web preload API composition', () => {
       'preflight',
       'notifications',
       'rateLimits',
+      'claudeUsage',
+      'codexUsage',
+      'openCodeUsage',
+      'museUsage',
       'opencodeGoCredentials',
       'minimaxCredentials',
       'zcodePlanCredentials',
@@ -67,8 +77,11 @@ describe('web preload API composition', () => {
       'developerPermissions',
       'computerUsePermissions',
       'updater',
+      'speech',
       'shell',
       'skills',
+      'plugins',
+      'automations',
       'pty',
       'ssh',
       'wsl',
@@ -83,9 +96,32 @@ describe('web preload API composition', () => {
       'telemetryAcknowledgeBanner'
     ])
     expect('onFileDrop' in globals.window.api.ui).toBe(false)
-    expect(Object.keys(globals.window.api.projects)).toEqual([])
-    const projects: Record<string, unknown> = globals.window.api.projects
-    expect(projects.then).toBeUndefined()
+    expect(Object.keys(globals.window.api.projects)).toEqual([
+      'list',
+      'update',
+      'listHostSetups',
+      'createHostSetup',
+      'setupExistingFolder',
+      'updateHostSetup',
+      'deleteHostSetup'
+    ])
+    expect(Object.keys(globals.window.api.projectGroups)).toEqual([
+      'list',
+      'create',
+      'update',
+      'delete',
+      'moveProject',
+      'scanNested',
+      'cancelNestedScan',
+      'onNestedScanProgress',
+      'importNested'
+    ])
+    expect(Object.keys(globals.window.api.sparsePresets)).toEqual([
+      'list',
+      'save',
+      'remove',
+      'onChanged'
+    ])
   })
 
   it('snapshots E2E config before runtime storage initialization', async () => {

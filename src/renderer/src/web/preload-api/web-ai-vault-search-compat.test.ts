@@ -79,4 +79,33 @@ describe('web session search preload compatibility', () => {
     })
     expect(callRuntimeResult).not.toHaveBeenCalled()
   })
+
+  it('routes runtime-backed history controls through the paired host', async () => {
+    const api = createWebAiVaultApi()
+    const status = unavailableSessionSearchStatus()
+    callRuntimeResult
+      .mockResolvedValueOnce(status)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(status)
+
+    await expect(api.setSearchEnabled('runtime:owning-host', true)).resolves.toEqual(status)
+    await expect(api.clearSearchIndex()).resolves.toBeUndefined()
+    await expect(api.getScanProgress('scan-key')).resolves.toBe(status)
+
+    expect(callRuntimeResult).toHaveBeenNthCalledWith(1, 'aiVault.setSearchEnabled', {
+      enabled: true
+    })
+    expect(callRuntimeResult).toHaveBeenNthCalledWith(2, 'aiVault.clearSearchIndex')
+    expect(callRuntimeResult).toHaveBeenNthCalledWith(3, 'aiVault.getScanProgress', {
+      scanKey: 'scan-key'
+    })
+  })
+
+  it('does not let history consent target a different runtime', async () => {
+    const api = createWebAiVaultApi()
+    await expect(api.setSearchEnabled('runtime:other-host', true)).rejects.toThrow(
+      'not available for this host'
+    )
+    expect(callRuntimeResult).not.toHaveBeenCalled()
+  })
 })

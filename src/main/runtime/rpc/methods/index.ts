@@ -46,6 +46,7 @@ import { PLUGIN_METHODS } from './plugins'
 import { SKILL_METHODS } from './skills'
 import { CLIPBOARD_METHODS } from './clipboard'
 import { HOST_CAPABILITY_METHODS } from './host-capabilities'
+import { WSL_HOST_METHODS } from './wsl-hosts'
 import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
 import { RUNTIME_CLIENT_CAPABILITY_METHODS } from './runtime-client-capabilities'
 import { EMULATOR_METHODS } from './emulator'
@@ -54,6 +55,9 @@ import { MOBILE_RELAY_HOSTS_METHODS } from './mobile-relay-hosts'
 import { MOBILE_PROJECT_SECTIONS_METHODS } from './mobile-project-sections'
 import { UPDATER_METHODS } from './updater'
 import { AUTOMATIC_WORK_METHODS } from './automatic-work'
+import { CLI_METHODS } from './cli'
+import { CREDENTIAL_METHODS } from './credentials'
+import { USAGE_METHODS } from './usage'
 import { AGENT_SESSION_METHODS } from './agent-session'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
 import { STRUCTURED_AGENT_SESSION_ATTACHMENT_METHODS } from './structured-agent-session-attachments'
@@ -61,6 +65,7 @@ import { STRUCTURED_AGENT_SESSION_VISUAL_METHODS } from './structured-agent-sess
 import { STRUCTURED_AGENT_SESSION_AGENTS_METHODS } from './structured-agent-session-agents'
 import { ARTIFACT_METHODS } from './artifacts'
 import { AGENT_HOOK_METHODS } from './agent-hooks'
+import { AGENT_AWAKE_METHODS } from './agent-awake'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { LAYOUT_APPLY_METHODS, WORKSPACE_LAYOUT_METHODS } from './workspace-layout'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -73,6 +78,7 @@ export const ALL_RPC_METHODS = [
   ...ORCAD_TERMINAL_CENSUS_METHODS,
   ...ORCAD_MIGRATION_METHODS,
   ...AGENT_HOOK_METHODS,
+  ...AGENT_AWAKE_METHODS,
   ...AI_VAULT_METHODS,
   ...ARTIFACT_METHODS,
   ...AUTOMATION_METHODS,
@@ -126,6 +132,7 @@ export const ALL_RPC_METHODS = [
   ...SKILL_METHODS,
   ...CLIPBOARD_METHODS,
   ...HOST_CAPABILITY_METHODS,
+  ...WSL_HOST_METHODS,
   ...MOBILE_WEB_BUNDLE_METHODS,
   ...RUNTIME_CLIENT_CAPABILITY_METHODS,
   ...CLIENT_EVENT_METHODS,
@@ -135,5 +142,8 @@ export const ALL_RPC_METHODS = [
   ...MOBILE_RELAY_HOSTS_METHODS,
   ...MOBILE_PROJECT_SECTIONS_METHODS,
   ...UPDATER_METHODS,
-  ...AUTOMATIC_WORK_METHODS
+  ...AUTOMATIC_WORK_METHODS,
+  ...CLI_METHODS,
+  ...CREDENTIAL_METHODS,
+  ...USAGE_METHODS
 ]

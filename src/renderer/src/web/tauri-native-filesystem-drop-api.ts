@@ -8,13 +8,11 @@ import { invokeNative, isTauriNativeHost } from './tauri-native-host'
 
 type FilesystemDropApi = Pick<FilesystemApi['fs'], 'getPathForFile' | 'prepareDroppedPaths'>
 
-export function createTauriNativeFilesystemDropApi(): FilesystemDropApi {
+export function createTauriNativeFilesystemDropApi(): Partial<FilesystemDropApi> {
   if (!isTauriNativeHost()) {
-    return {
-      prepareDroppedPaths: async () => {
-        throw new Error('Tauri native file drops are unavailable.')
-      }
-    }
+    // Keep the web implementation's explicit unsupported error. Returning a
+    // native stub here would shadow it even when the bridge is not present.
+    return {}
   }
   return {
     getPathForFile: (file: File) => {

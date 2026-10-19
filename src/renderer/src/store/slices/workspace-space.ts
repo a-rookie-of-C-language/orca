@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type {
   WorkspaceSpaceAnalysis,
+  WorkspaceSpaceAnalyzeInput,
   WorkspaceSpaceScanProgress,
   WorkspaceSpaceWorktreeMeasurement
 } from '../../../../shared/workspace-space-types'
@@ -91,6 +92,45 @@ function isWorkspaceSpaceScanCancelled(error: unknown): boolean {
   return message.includes('workspace space scan cancelled') || message.includes('was cancelled')
 }
 
+function buildWorkspaceSpaceAnalyzeInput(
+  state: Pick<AppState, 'repos' | 'worktreesByRepo' | 'detectedWorktreesByRepo'>
+): WorkspaceSpaceAnalyzeInput {
+  const worktrees = [
+    ...Object.values(state.worktreesByRepo).flat(),
+    ...Object.values(state.detectedWorktreesByRepo).flatMap((result) => result.worktrees)
+  ]
+  const seen = new Set<string>()
+  return {
+    repos: state.repos.map((repo) => ({
+      id: repo.id,
+      path: repo.path,
+      displayName: repo.displayName,
+      connectionId: repo.connectionId,
+      executionHostId: repo.executionHostId
+    })),
+    worktrees: worktrees.flatMap((worktree) => {
+      const identity = `${worktree.hostId ?? 'local'}|${worktree.id}`
+      if (seen.has(identity)) {
+        return []
+      }
+      seen.add(identity)
+      return [
+        {
+          id: worktree.id,
+          repoId: worktree.repoId,
+          displayName: worktree.displayName,
+          path: worktree.path,
+          branch: worktree.branch,
+          isMainWorktree: worktree.isMainWorktree,
+          isSparse: worktree.isSparse,
+          lastActivityAt: worktree.lastActivityAt,
+          hostId: worktree.hostId
+        }
+      ]
+    })
+  }
+}
+
 export const createWorkspaceSpaceSlice: StateCreator<AppState, [], [], WorkspaceSpaceSlice> = (
   set,
   get
@@ -171,7 +211,7 @@ export const createWorkspaceSpaceSlice: StateCreator<AppState, [], [], Workspace
     // Why: the compact Resource Manager card and the full Space page share
     // one manual scan result; duplicate button presses should join the same IO.
     inFlightScan = window.api.workspaceSpace
-      .analyze()
+      .analyze(buildWorkspaceSpaceAnalyzeInput(get()))
       .then((result) => {
         if (!result.ok) {
           throw new Error('Workspace space scan cancelled')

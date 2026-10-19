@@ -3,8 +3,10 @@ import type { AutomationOwnerPrecondition } from '../../../../shared/automation-
 import { defineMethod, type RpcContext } from '../core'
 import {
   AutomationCreate,
+  AutomationDispatchResult,
   AutomationId,
   AutomationList,
+  AutomationPrecheckRequest,
   AutomationRuns,
   AutomationUpdate
 } from '../../../../shared/rpc-contract/automation-params'
@@ -84,6 +86,22 @@ export const AUTOMATION_METHODS = [
         params.id,
         mutationOwner(params.id, params.expectedOwner, context)
       )
+    })
+  }),
+  defineMethod({
+    name: 'automation.runPrecheck',
+    permission: 'workspace',
+    params: AutomationPrecheckRequest,
+    handler: async (params, { runtime }) => ({
+      result: await runtime.runAutomationPrecheck(params.automationId, params.runId)
+    })
+  }),
+  defineMethod({
+    name: 'automation.markDispatchResult',
+    permission: 'workspace',
+    params: AutomationDispatchResult,
+    handler: async (params, { runtime }) => ({
+      run: await runtime.markAutomationDispatchResult(params)
     })
   }),
   defineMethod({

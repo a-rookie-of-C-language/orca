@@ -18,6 +18,8 @@ import {
   writeFileViaSystemSsh,
   type SystemSshBuildArgsOptions
 } from './ssh-system-fallback'
+import { downloadFolderViaSftp } from './ssh-remote-folder-download'
+export { readSshFileChunk, type SshRemoteFileReadChunkResult } from './ssh-remote-file-read'
 
 export type SshRemoteFileOptions = {
   hostPlatform?: RemoteHostPlatform
@@ -75,6 +77,18 @@ export async function downloadSshFile(
     hostPlatform: options?.hostPlatform,
     ...host.systemSshBuildArgsOptions()
   })
+}
+
+export async function downloadSshFolder(
+  host: SshFileTransferHost,
+  remotePath: string,
+  localPath: string,
+  options?: SshRemoteFileOptions & { signal?: AbortSignal }
+): Promise<void> {
+  if (host.usesSystemSshTransport()) {
+    throw new Error('Remote folder download is unavailable over system SSH.')
+  }
+  await downloadFolderViaSftp((signal) => host.sftp(signal), remotePath, localPath, options)
 }
 
 export async function createSshFileUploadSession(

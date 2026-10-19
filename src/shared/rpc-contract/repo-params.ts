@@ -98,3 +98,7 @@ export const RepoSparsePresetSave = RepoSelector.extend({
   name: requiredString('Missing preset name'),
   directories: z.array(z.string())
 })
+
+export const RepoSparsePresetRemove = RepoSelector.extend({
+  presetId: requiredString('Missing preset id')
+})

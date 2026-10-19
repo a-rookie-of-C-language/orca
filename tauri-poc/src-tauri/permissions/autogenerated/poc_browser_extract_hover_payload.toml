@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-extract-hover-payload"
+description = "Enables the poc_browser_extract_hover_payload command without any pre-configured scope."
+commands.allow = ["poc_browser_extract_hover_payload"]
+
+[[permission]]
+identifier = "deny-poc-browser-extract-hover-payload"
+description = "Denies the poc_browser_extract_hover_payload command without any pre-configured scope."
+commands.deny = ["poc_browser_extract_hover_payload"]

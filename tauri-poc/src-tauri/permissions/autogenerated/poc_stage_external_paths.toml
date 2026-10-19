@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-stage-external-paths"
+description = "Enables the poc_stage_external_paths command without any pre-configured scope."
+commands.allow = ["poc_stage_external_paths"]
+
+[[permission]]
+identifier = "deny-poc-stage-external-paths"
+description = "Denies the poc_stage_external_paths command without any pre-configured scope."
+commands.deny = ["poc_stage_external_paths"]

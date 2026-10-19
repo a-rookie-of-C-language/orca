@@ -1,6 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import type { AiVaultScanProgress } from '../../../../shared/ai-vault-scan-progress'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostScope } from '../../../../shared/execution-host'
+import { isTauriNativeHost } from '../../web/tauri-native-host'
 
 const MAX_PROGRESS_ENTRIES = 8
 const progressByKey = new Map<string, AiVaultScanProgress>()
@@ -79,7 +80,11 @@ export function useAiVaultScanProgress(
   scanKey: string,
   appliedScanId: string | undefined
 ): AiVaultScanProgress | null {
-  const local = executionHostScope === LOCAL_EXECUTION_HOST_ID
+  // Electron's main process only broadcasts the local scan. Tauri's paired
+  // runtime broadcasts its own host scan through runtime.clientEvents.
+  const local =
+    executionHostScope === LOCAL_EXECUTION_HOST_ID ||
+    (isTauriNativeHost() && executionHostScope.startsWith('runtime:'))
   const subscribe = useCallback(
     (listener: () => void) => {
       if (local) {

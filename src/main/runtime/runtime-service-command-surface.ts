@@ -9,11 +9,19 @@ import type { RuntimeMobileSpeechCatalog } from './runtime-mobile-speech-catalog
 import type { RuntimeNativeChatDraftResolutions } from './runtime-native-chat-draft-resolutions'
 import type { RuntimeSessionSearchSettingsController } from './runtime-session-search-settings'
 import type { RuntimeSubscriptionRegistry } from './runtime-subscription-registry'
+import type { RuntimeCredentialController } from './runtime-credential-controller'
+import type { RuntimeUsageController } from './runtime-usage-controller'
 
 export type RuntimeServiceCommandSurface = {
   listAiVaultSessions: RuntimeAiVaultCommands['list']
   resolveAiVaultSessionTitles: RuntimeAiVaultCommands['resolveTitles']
+  listAiVaultSubagentSessions: RuntimeAiVaultCommands['listSubagentSessions']
+  getAiVaultFirstUserPrompt: RuntimeAiVaultCommands['getFirstUserPrompt']
+  clearAiVaultSearchIndex: RuntimeAiVaultCommands['clearSearchIndex']
+  getAiVaultScanProgress: RuntimeAiVaultCommands['getScanProgress']
   prepareAiVaultSessionResume: RuntimeAiVaultCommands['prepare']
+  prepareAiVaultSessionDelete: RuntimeAiVaultCommands['prepareDelete']
+  deleteAiVaultSession: RuntimeAiVaultCommands['deleteSession']
   setSessionSearchEnabled: RuntimeSessionSearchSettingsController['setEnabled']
   onClientEvent: RuntimeClientEventBus['on']
   notifyNativeChatLaunchDraftResolved: RuntimeNativeChatDraftResolutions['notify']
@@ -48,6 +56,27 @@ export type RuntimeServiceCommandSurface = {
   setCommitMessageAgentEnvironmentResolvers: RuntimeAccountController['setCommitMessageAgentEnvironment']
   getCommitMessageAgentEnvironmentResolvers: RuntimeAccountController['getCommitMessageAgentEnvironment']
   getAccountsSnapshot: RuntimeAccountController['getSnapshot']
+  getMiniMaxCredentialsStatus: RuntimeCredentialController['getMiniMaxStatus']
+  saveMiniMaxCookie: RuntimeCredentialController['saveMiniMaxCookie']
+  clearMiniMaxCookie: RuntimeCredentialController['clearMiniMaxCookie']
+  saveMiniMaxApiKey: RuntimeCredentialController['saveMiniMaxApiKey']
+  clearMiniMaxApiKey: RuntimeCredentialController['clearMiniMaxApiKey']
+  getZcodePlanCredentialsStatus: RuntimeCredentialController['getZcodePlanStatus']
+  saveZcodePlanApiKey: RuntimeCredentialController['saveZcodePlanApiKey']
+  clearZcodePlanApiKey: RuntimeCredentialController['clearZcodePlanApiKey']
+  getOpenCodeGoCredentialsStatus: RuntimeCredentialController['getOpenCodeGoStatus']
+  saveOpenCodeGoApiKey: RuntimeCredentialController['saveOpenCodeGoApiKey']
+  clearOpenCodeGoApiKey: RuntimeCredentialController['clearOpenCodeGoApiKey']
+  getCursorAccountStatus: RuntimeCredentialController['getCursorStatus']
+  getGrokAccountStatus: RuntimeCredentialController['getGrokStatus']
+  getUsageScanState: RuntimeUsageController['getScanState']
+  setUsageEnabled: RuntimeUsageController['setEnabled']
+  refreshUsage: RuntimeUsageController['refresh']
+  getUsageSnapshot: RuntimeUsageController['getSnapshot']
+  getUsageSummary: RuntimeUsageController['getSummary']
+  getUsageDaily: RuntimeUsageController['getDaily']
+  getUsageBreakdown: RuntimeUsageController['getBreakdown']
+  getUsageRecentSessions: RuntimeUsageController['getRecentSessions']
   refreshAccountsForMobile: RuntimeAccountController['refreshForMobile']
   refreshAccountsForMobileSubscriber: RuntimeAccountController['refreshForMobileSubscriber']
   selectClaudeAccount: RuntimeAccountController['selectClaude']
@@ -55,10 +84,18 @@ export type RuntimeServiceCommandSurface = {
   selectCodexAccountForTarget: RuntimeAccountController['selectCodexForTarget']
   consumeCodexRateLimitResetCredit: RuntimeAccountController['consumeCodexResetCredit']
   removeClaudeAccount: RuntimeAccountController['removeClaude']
+  addClaudeAccount: RuntimeAccountController['addClaude']
+  reauthenticateClaudeAccount: RuntimeAccountController['reauthenticateClaude']
+  cancelClaudePendingLogin: RuntimeAccountController['cancelClaudePendingLogin']
+  waitForClaudeSignInLink: RuntimeAccountController['waitForClaudeSignInLink']
   beginClaudeSignIn: RuntimeAccountController['beginClaudeSignIn']
   finishClaudeSignIn: RuntimeAccountController['finishClaudeSignIn']
   cancelClaudeSignIn: RuntimeAccountController['cancelClaudeSignIn']
   removeCodexAccount: RuntimeAccountController['removeCodex']
+  addCodexAccount: RuntimeAccountController['addCodex']
+  reauthenticateCodexAccount: RuntimeAccountController['reauthenticateCodex']
+  cancelCodexPendingLogin: RuntimeAccountController['cancelCodexPendingLogin']
+  getCodexPendingLoginUrl: RuntimeAccountController['getCodexPendingLoginUrl']
   addCodexAccountFromHome: RuntimeAccountController['addCodexFromHome']
   addDataAccountFromHome: RuntimeAccountController['addDataFromHome']
   selectDataAccount: RuntimeAccountController['selectData']
@@ -90,6 +127,8 @@ type RuntimeServiceCommandOwners = {
   subscriptions: RuntimeSubscriptionRegistry
   mobileNotifications: RuntimeMobileNotificationController
   accounts: RuntimeAccountController
+  credentials: RuntimeCredentialController
+  usage: RuntimeUsageController
   mobileSpeech: RuntimeMobileSpeechCatalog
   mobileDictation: RuntimeMobileDictationController
   browserDrivers: RuntimeBrowserDriverController
@@ -107,6 +146,8 @@ export function installRuntimeServiceCommandSurface(
   const subscriptions = owners.subscriptions
   const notifications = owners.mobileNotifications
   const accounts = owners.accounts
+  const credentials = owners.credentials
+  const usage = owners.usage
   const speech = owners.mobileSpeech
   const dictation = owners.mobileDictation
   const browsers = owners.browserDrivers
@@ -114,7 +155,13 @@ export function installRuntimeServiceCommandSurface(
   Object.assign(target, {
     listAiVaultSessions: vault.list.bind(vault),
     resolveAiVaultSessionTitles: vault.resolveTitles.bind(vault),
+    listAiVaultSubagentSessions: vault.listSubagentSessions.bind(vault),
+    getAiVaultFirstUserPrompt: vault.getFirstUserPrompt.bind(vault),
+    clearAiVaultSearchIndex: vault.clearSearchIndex.bind(vault),
+    getAiVaultScanProgress: vault.getScanProgress.bind(vault),
     prepareAiVaultSessionResume: vault.prepare.bind(vault),
+    prepareAiVaultSessionDelete: vault.prepareDelete.bind(vault),
+    deleteAiVaultSession: vault.deleteSession.bind(vault),
     setSessionSearchEnabled: sessionSearchSettings.setEnabled.bind(sessionSearchSettings),
     onClientEvent: events.on.bind(events),
     notifyNativeChatLaunchDraftResolved: drafts.notify.bind(drafts),
@@ -153,6 +200,27 @@ export function installRuntimeServiceCommandSurface(
     getCommitMessageAgentEnvironmentResolvers:
       accounts.getCommitMessageAgentEnvironment.bind(accounts),
     getAccountsSnapshot: accounts.getSnapshot.bind(accounts),
+    getMiniMaxCredentialsStatus: credentials.getMiniMaxStatus.bind(credentials),
+    saveMiniMaxCookie: credentials.saveMiniMaxCookie.bind(credentials),
+    clearMiniMaxCookie: credentials.clearMiniMaxCookie.bind(credentials),
+    saveMiniMaxApiKey: credentials.saveMiniMaxApiKey.bind(credentials),
+    clearMiniMaxApiKey: credentials.clearMiniMaxApiKey.bind(credentials),
+    getZcodePlanCredentialsStatus: credentials.getZcodePlanStatus.bind(credentials),
+    saveZcodePlanApiKey: credentials.saveZcodePlanApiKey.bind(credentials),
+    clearZcodePlanApiKey: credentials.clearZcodePlanApiKey.bind(credentials),
+    getOpenCodeGoCredentialsStatus: credentials.getOpenCodeGoStatus.bind(credentials),
+    saveOpenCodeGoApiKey: credentials.saveOpenCodeGoApiKey.bind(credentials),
+    clearOpenCodeGoApiKey: credentials.clearOpenCodeGoApiKey.bind(credentials),
+    getCursorAccountStatus: credentials.getCursorStatus.bind(credentials),
+    getGrokAccountStatus: credentials.getGrokStatus.bind(credentials),
+    getUsageScanState: usage.getScanState.bind(usage),
+    setUsageEnabled: usage.setEnabled.bind(usage),
+    refreshUsage: usage.refresh.bind(usage),
+    getUsageSnapshot: usage.getSnapshot.bind(usage),
+    getUsageSummary: usage.getSummary.bind(usage),
+    getUsageDaily: usage.getDaily.bind(usage),
+    getUsageBreakdown: usage.getBreakdown.bind(usage),
+    getUsageRecentSessions: usage.getRecentSessions.bind(usage),
     refreshAccountsForMobile: accounts.refreshForMobile.bind(accounts),
     refreshAccountsForMobileSubscriber: accounts.refreshForMobileSubscriber.bind(accounts),
     selectClaudeAccount: accounts.selectClaude.bind(accounts),
@@ -160,10 +228,18 @@ export function installRuntimeServiceCommandSurface(
     selectCodexAccountForTarget: accounts.selectCodexForTarget.bind(accounts),
     consumeCodexRateLimitResetCredit: accounts.consumeCodexResetCredit.bind(accounts),
     removeClaudeAccount: accounts.removeClaude.bind(accounts),
+    addClaudeAccount: accounts.addClaude.bind(accounts),
+    reauthenticateClaudeAccount: accounts.reauthenticateClaude.bind(accounts),
+    cancelClaudePendingLogin: accounts.cancelClaudePendingLogin.bind(accounts),
+    waitForClaudeSignInLink: accounts.waitForClaudeSignInLink.bind(accounts),
     beginClaudeSignIn: accounts.beginClaudeSignIn.bind(accounts),
     finishClaudeSignIn: accounts.finishClaudeSignIn.bind(accounts),
     cancelClaudeSignIn: accounts.cancelClaudeSignIn.bind(accounts),
     removeCodexAccount: accounts.removeCodex.bind(accounts),
+    addCodexAccount: accounts.addCodex.bind(accounts),
+    reauthenticateCodexAccount: accounts.reauthenticateCodex.bind(accounts),
+    cancelCodexPendingLogin: accounts.cancelCodexPendingLogin.bind(accounts),
+    getCodexPendingLoginUrl: accounts.getCodexPendingLoginUrl.bind(accounts),
     addCodexAccountFromHome: accounts.addCodexFromHome.bind(accounts),
     addDataAccountFromHome: accounts.addDataFromHome.bind(accounts),
     selectDataAccount: accounts.selectData.bind(accounts),

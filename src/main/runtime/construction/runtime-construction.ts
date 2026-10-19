@@ -40,6 +40,8 @@ import { createEphemeralAgentSessionClaimSigner } from '../agent-session-claim-i
 import { registerConptyDa1OverrideInstaller } from '../terminal-model-query-authority'
 import { registerTerminalViewAttributesApplier } from '../terminal-view-attribute-store'
 import { RuntimeMachineName } from '../runtime-machine-name'
+import { RuntimeCredentialController } from '../runtime-credential-controller'
+import { RuntimeUsageController } from '../runtime-usage-controller'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The constructor installs every checked canonical surface.
 export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
@@ -141,6 +143,8 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       subscriptions: this.subscriptions,
       mobileNotifications: this.mobileNotifications,
       accounts: this.accounts,
+      credentials: new RuntimeCredentialController(() => this.accounts.getRateLimits()),
+      usage: new RuntimeUsageController(deps?.usageStores),
       mobileSpeech: this.mobileSpeech,
       mobileDictation: this.mobileDictation,
       browserDrivers: this.browserDrivers,

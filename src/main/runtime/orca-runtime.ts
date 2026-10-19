@@ -31,6 +31,11 @@ import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-l
 import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
+import type { WslHostStatus } from '../../shared/wsl-host-types'
+import type {
+  TerminalLeafMoveRequest,
+  TerminalLeafMoveResult
+} from '../../shared/terminal-leaf-move'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
@@ -150,6 +155,26 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   /** Whether a running process holds this pane now: such a pane is attached to, never launched into. */
   hasLiveTerminalForPaneKey(paneKey: string): boolean {
     return this.getPtyRecordForPaneKey(paneKey)?.connected === true
+  }
+
+  notifyWslHostStatusChanged(status: WslHostStatus): void {
+    this.emitClientEvent({ type: 'wslHostStatusChanged', status })
+  }
+
+  /** Commits a pane move on the runtime before the renderer creates its target tab. */
+  async moveTerminalLeafToNewTab(
+    request: TerminalLeafMoveRequest
+  ): Promise<TerminalLeafMoveResult> {
+    const store = this.requireStore()
+    const move = store.moveTerminalLeafToNewTab
+    if (!move) {
+      return { status: 'not_held' }
+    }
+    const result = await move.call(store, request)
+    if (result.status === 'moved') {
+      rekeyMovedPaneOwners(this, { ...request, ptyId: result.ptyId })
+    }
+    return result
   }
 
   private readonly workspaceLayoutStream = new WorkspaceLayoutStream({

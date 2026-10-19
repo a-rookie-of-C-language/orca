@@ -10,17 +10,12 @@
  * the runtime factory, but only when an Electron serve sidecar or an operator-supplied
  * Chromium proves available at startup.
  */
-import { join } from 'node:path'
 import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
-import {
-  installOrcadHostAdapters,
-  prepareOrcadSecretStore,
-  runOrcadQuitHandlers
-} from './orcad-host-adapters'
+import { installOrcadHostAdapters, runOrcadQuitHandlers } from './orcad-host-adapters'
 import { describeOrcadBindExposure, resolveOrcadBindHost } from './orcad-bind-address'
 import {
   flushOrcadProfileStoreForShutdown,
@@ -43,6 +38,7 @@ import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
 import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
 import { orcadWsPortOptions } from './orcad-ws-port-policy'
+import { prepareOrcadSecretStoreAndMigrate } from './orcad-secret-store-startup'
 
 export { parseArgs }
 
@@ -78,6 +74,10 @@ export type OrcadHandle = {
  */
 export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandle> {
   installOrcadHostAdapters()
+  // The desktop installs Electron-backed speech services during preflight. orcad owns the same
+  // runtime without Electron, so install the Node transport before any speech RPC can resolve.
+  const { installOrcadSpeechServices } = await import('./orcad-speech')
+  installOrcadSpeechServices()
   // Why: an orcad started from an Orca terminal must not fence its own CLI children to that Orca.
   stampRuntimeSourceEnv(process.env, null)
   const userDataPath = resolveUserDataPath()
@@ -98,18 +98,6 @@ export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandl
   )
   const version = getAppEnvironment().getVersion()
   return { readiness, managedStop: { version, runtimeId: readiness.runtimeId, instance }, stop }
-}
-
-async function prepareOrcadSecretStoreAndMigrate(userDataPath: string): Promise<void> {
-  const { getSecretStore } = await import('../../shared/secret-store')
-  const { reportSecretProtectionGap } = await import('../host/secret-protection-report')
-  const { migratePlaintextCredentials, orcadCredentialRoot } =
-    await import('./orcad-plaintext-credential-migration')
-  // Why the credential root, not userData: a disposable ORCA_USER_DATA would take the key with it.
-  if (await prepareOrcadSecretStore(orcadCredentialRoot(), userDataPath)) {
-    migratePlaintextCredentials(getSecretStore())
-  }
-  reportSecretProtectionGap({ dataFile: join(userDataPath, 'orca-data.json') })
 }
 
 async function startOrcadRuntime(
@@ -186,6 +174,30 @@ async function startOrcadRuntime(
   await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
   const { store: profileStore, authority: profileStateAuthority } =
     await createOrcadProfileStateStartup(runtimeUserDataPath)
+  // Usage stores are runtime-owned in Tauri. Keep their cache paths explicit so this
+  // process never needs Electron's app.userData fallback.
+  const [{ ClaudeUsageStore }, { CodexUsageStore }, { OpenCodeUsageStore }, { MuseUsageStore }] =
+    await Promise.all([
+      import('../claude-usage/store'),
+      import('../codex-usage/store'),
+      import('../opencode-usage/store'),
+      import('../muse-usage/store')
+    ])
+  const usageStores = {
+    claude: new ClaudeUsageStore(profileStore, runtimeUserDataPath),
+    codex: new CodexUsageStore(profileStore, runtimeUserDataPath),
+    opencode: new OpenCodeUsageStore(profileStore, runtimeUserDataPath),
+    muse: new MuseUsageStore(profileStore, runtimeUserDataPath)
+  }
+  // Register after the profile flush so reverse teardown flushes usage caches first.
+  registerCleanup(async () => {
+    await Promise.all([
+      usageStores.claude.flush(),
+      usageStores.codex.flush(),
+      usageStores.opencode.flush(),
+      usageStores.muse.flush()
+    ])
+  })
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
   const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
@@ -254,6 +266,7 @@ async function startOrcadRuntime(
     // what powers serve→desktop promotion. A Node host can never do that, and the
     // constructor's default would advertise it.
     getDesktopWindowStatus: () => 'blocked',
+    usageStores,
     // Why the dedupe here and not in the instance: `apply` closes and reconstructs
     // unconditionally, so an unchanged value would restart a healthy index.
     applySessionSearchSettings: (before, after) => {
@@ -264,7 +277,25 @@ async function startOrcadRuntime(
     }
   })
 
+  const { startOrcadSshAndWslHosts } = await import('./orcad-ssh-and-wsl-hosts')
+  startOrcadSshAndWslHosts({
+    runtime,
+    store: profileStore,
+    userDataPath: runtimeUserDataPath,
+    registerCleanup
+  })
+
   accountLaunch?.attachToRuntime(runtime)
+
+  // Tauri owns this Node runtime instead of Electron's main process, so install
+  // the same plugin and marketplace composition root before RPC accepts clients.
+  const { startOrcadPlugins } = await import('./orcad-plugins')
+  await startOrcadPlugins({
+    runtime,
+    store: profileStore,
+    userDataPath: runtimeUserDataPath,
+    registerCleanup
+  })
 
   // Why before any launch: a desktop that owns this host's accounts pushed them on an earlier run.
   const { restoreOrcadHostAccountLaunchEnv } = await import('./orcad-host-account-launch-env-store')
@@ -289,6 +320,12 @@ async function startOrcadRuntime(
   uninstallHookStatusRepublish = installHookStatusSessionTabsRepublish(
     agentHookServer,
     () => runtime
+  )
+
+  ;(await import('./orcad-agent-awake-startup')).startOrcadAgentAwakeService(
+    profileStore,
+    agentHookServer,
+    registerCleanup
   )
 
   // Why the headless entry point rather than registerPtyHandlers directly: this is the
@@ -346,7 +383,10 @@ async function startOrcadRuntime(
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
   await rpc.start()
-  startOrcadAutomations(runtime, profileStore, registerCleanup)
+  startOrcadAutomations(runtime, profileStore, registerCleanup, {
+    claudeUsage: usageStores.claude,
+    codexUsage: usageStores.codex
+  })
   const pushService = DesktopPushService.create({
     runtime,
     runtimeRpc: rpc,

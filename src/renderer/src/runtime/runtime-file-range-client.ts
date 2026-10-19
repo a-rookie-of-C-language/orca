@@ -6,6 +6,11 @@ import { assertExternalSshReadOwnership, canReadRelativeRuntimeFile } from './ru
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import {
+  isDirectSshFileContext,
+  readDirectSshFileChunk,
+  statDirectSshFile
+} from './runtime-direct-ssh-file-read'
 
 /** A file on a paired runtime, addressed the way its host's `files.*` methods expect. */
 export type RuntimeRemoteFileAddress = {
@@ -75,6 +80,9 @@ export function readRemoteRuntimeFileChunk(
 export async function statRuntimeReadTarget(
   args: RuntimeFileReadArgs
 ): Promise<RuntimeFileSnapshot> {
+  if (isDirectSshFileContext(args)) {
+    return statDirectSshFile(args, args.filePath)
+  }
   const remote = rangeReadTarget(args)
   if (!remote) {
     return window.api.fs.stat({
@@ -92,6 +100,10 @@ export async function readRuntimeFileRange(
   length: number
 ): Promise<Uint8Array<ArrayBuffer>> {
   validateFileRangeRequest(offset, length)
+  if (isDirectSshFileContext(args)) {
+    const result = await readDirectSshFileChunk(args, args.filePath, offset, length)
+    return decodeRangeChunk(result.contentBase64, result.bytesRead, length)
+  }
   const remote = rangeReadTarget(args)
   let result: RuntimeFileReadChunkResult
   try {
@@ -112,8 +124,16 @@ export async function readRuntimeFileRange(
     }
     throw error
   }
-  const bytes = Uint8Array.from(atob(result.contentBase64), (character) => character.charCodeAt(0))
-  if (bytes.length !== result.bytesRead || bytes.length > length || bytes.length === 0) {
+  return decodeRangeChunk(result.contentBase64, result.bytesRead, length)
+}
+
+function decodeRangeChunk(
+  contentBase64: string,
+  bytesRead: number,
+  length: number
+): Uint8Array<ArrayBuffer> {
+  const bytes = Uint8Array.from(atob(contentBase64), (character) => character.charCodeAt(0))
+  if (bytes.length !== bytesRead || bytes.length > length || bytes.length === 0) {
     throw new Error('File changed or returned an invalid CSV chunk. Reload the preview.')
   }
   return bytes

@@ -30,6 +30,7 @@ import {
   ModifierDoubleTapDetector,
   toModifierDoubleTapEvent
 } from '../../../shared/modifier-double-tap-detector'
+import { invokeNative, isTauriNativeHost } from '../web/tauri-native-host'
 import { shortcutPlatform } from './app-window-chrome'
 import {
   createAppCommandHandlers,
@@ -184,6 +185,19 @@ export function useGlobalKeybindings(args: {
       ) {
         input.preventDefault()
         openFloatingWorkspaceMaximized()
+        return
+      }
+
+      // Why Tauri-gated: Electron serves this chord from the main process
+      // (reloadIgnoringCache), so the renderer must stay out of its way there.
+      // The Tauri menu has no real accelerator for it, so claim the chord here
+      // and drive the native cache-bypassing reload; plain reload is the fallback.
+      if (isTauriNativeHost() && matchShortcut('app.forceReload')) {
+        input.preventDefault()
+        notifyTerminalCapture('app.forceReload')
+        void invokeNative('poc_main_force_reload').catch(() => {
+          window.location.reload()
+        })
         return
       }
 

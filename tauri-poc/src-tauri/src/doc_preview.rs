@@ -1,0 +1,876 @@
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, Manager, State, Url};
+
+const PREVIEW_SCHEME: &str = "orca-preview";
+const INTERNAL_SCHEME: &str = "orca-internal";
+const MAX_TEXT_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_BINARY_BYTES: u64 = 50 * 1024 * 1024;
+const UNSERVABLE_ASSET_MESSAGE: &str = "This workspace cannot send this file type to a preview.";
+const AUTHORIZATION_REQUIRED_MESSAGE: &str =
+    "This file needs permission before the preview can read it.";
+const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'";
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DocPreviewOwner {
+    Ssh {
+        connection_id: String,
+    },
+    Runtime {
+        environment_id: String,
+        worktree_selector: String,
+        worktree_root: String,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocPreviewGrantRequest {
+    pub owner: DocPreviewOwner,
+    pub request_base: String,
+    pub root: String,
+    pub entry_relative_path: String,
+    pub browser_page_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocPreviewGrantResult {
+    pub grant_id: String,
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocPreviewCacheFileRequest {
+    pub grant_id: String,
+    pub relative_path: String,
+    pub file_path: String,
+    pub content_base64: String,
+    pub content_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocPreviewResourceRequest {
+    grant_id: String,
+    browser_page_id: String,
+    relative_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocPreviewFailure {
+    grant_id: String,
+    relative_path: String,
+    reason: &'static str,
+}
+
+#[derive(Debug)]
+struct DocPreviewGrant {
+    owner: DocPreviewOwner,
+    request_base: PathBuf,
+    root: PathBuf,
+    entry_relative_path: String,
+    entry_path: Option<PathBuf>,
+    worktree_root: Option<PathBuf>,
+    authorized_roots: Vec<PathBuf>,
+    browser_page_id: String,
+    ssh_request_base: Option<String>,
+    ssh_root: Option<String>,
+    ssh_entry_path: Option<String>,
+    ssh_cached_files: HashMap<String, CachedDocPreviewFile>,
+}
+
+#[derive(Debug)]
+struct CachedDocPreviewFile {
+    content_type: &'static str,
+    bytes: Vec<u8>,
+}
+
+#[derive(Default)]
+pub struct DocPreviewState {
+    grants: Mutex<HashMap<String, DocPreviewGrant>>,
+}
+
+fn random_grant_id() -> Result<String, String> {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes)
+        .map_err(|error| format!("Could not create preview grant: {error}"))?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn valid_nonempty(value: &str) -> bool {
+    !value.trim().is_empty()
+}
+
+fn canonical_directory(path: &str) -> Result<PathBuf, String> {
+    let candidate = Path::new(path);
+    if !candidate.is_absolute() {
+        return Err("Document preview paths must be absolute.".to_string());
+    }
+    let canonical = fs::canonicalize(candidate).map_err(|error| error.to_string())?;
+    if !canonical.is_dir() {
+        return Err("Document preview path is not a directory.".to_string());
+    }
+    Ok(canonical)
+}
+
+fn safe_relative_path(relative_path: &str) -> Option<Vec<String>> {
+    let segments = relative_path
+        .split('/')
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let segments = segments
+        .into_iter()
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.is_empty()
+        || segments.iter().any(|segment| {
+            segment == "." || segment == ".." || segment.contains('\\') || segment.contains('\0')
+        })
+    {
+        return None;
+    }
+    Some(segments)
+}
+
+fn normalize_ssh_path(path: &str) -> Option<String> {
+    if path.trim().is_empty() || path.contains('\\') || path.contains('\0') {
+        return None;
+    }
+    let path = path.to_string();
+    let (prefix, rest) = if path.starts_with('/') {
+        ("/", path.as_str())
+    } else if path.len() >= 3
+        && path.as_bytes()[0].is_ascii_alphabetic()
+        && path.as_bytes()[1] == b':'
+        && path.as_bytes()[2] == b'/'
+    {
+        (&path[..3], &path[3..])
+    } else {
+        return None;
+    };
+    let mut segments = Vec::new();
+    for segment in rest.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            return None;
+        }
+        segments.push(segment);
+    }
+    if prefix == "/" {
+        if segments.is_empty() {
+            Some("/".to_string())
+        } else {
+            Some(format!("/{}", segments.join("/")))
+        }
+    } else if segments.is_empty() {
+        Some(prefix.trim_end_matches('/').to_string())
+    } else {
+        Some(format!("{}{}", prefix, segments.join("/")))
+    }
+}
+
+fn join_ssh_path(base: &str, relative_path: &str) -> Option<String> {
+    let segments = safe_relative_path(relative_path)?;
+    let base = normalize_ssh_path(base)?;
+    if segments.is_empty() {
+        return Some(base);
+    }
+    let separator = if base.ends_with('/') { "" } else { "/" };
+    Some(format!("{}{}{}", base, separator, segments.join("/")))
+}
+
+fn ssh_path_is_under(path: &str, root: &str) -> bool {
+    path == root
+        || path
+            .strip_prefix(root)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn ssh_parent(path: &str) -> Option<String> {
+    let path = path.trim_end_matches('/');
+    let separator = path.rfind('/')?;
+    if separator == 0 {
+        Some("/".to_string())
+    } else {
+        Some(path[..separator].to_string())
+    }
+}
+
+fn is_ssh_authorized(grant: &DocPreviewGrant, target: &str) -> bool {
+    if grant.ssh_entry_path.as_deref() == Some(target) {
+        return true;
+    }
+    if let Some(root) = grant.ssh_root.as_deref() {
+        if grant.ssh_request_base.as_deref() != Some(root) && ssh_path_is_under(target, root) {
+            return true;
+        }
+    }
+    grant.authorized_roots.iter().any(|root| {
+        let root = root.to_string_lossy();
+        ssh_path_is_under(target, &root)
+    })
+}
+
+fn candidate_path(grant: &DocPreviewGrant, relative_path: &str) -> Option<PathBuf> {
+    let path = if relative_path.is_empty() {
+        grant.entry_relative_path.as_str()
+    } else {
+        relative_path
+    };
+    let segments = safe_relative_path(path)?;
+    let candidate = segments
+        .iter()
+        .fold(grant.request_base.clone(), |path, segment| {
+            path.join(segment)
+        });
+    candidate
+        .starts_with(&grant.request_base)
+        .then_some(candidate)
+}
+
+fn is_authorized(grant: &DocPreviewGrant, target: &Path) -> bool {
+    if grant.entry_path.as_deref() == Some(target) {
+        return true;
+    }
+    let roots = grant
+        .authorized_roots
+        .iter()
+        .chain((grant.root != grant.request_base).then_some(&grant.root));
+    roots.into_iter().any(|root| target.starts_with(root))
+}
+
+fn is_preview_url(url: &Url) -> bool {
+    url.scheme() == PREVIEW_SCHEME
+        || (url.scheme() == "https" && url.host_str() == Some("orca-preview.localhost"))
+}
+
+fn decode_segment(value: &str) -> Option<String> {
+    percent_decode_str(value)
+        .decode_utf8()
+        .ok()
+        .map(|value| value.into_owned())
+}
+
+fn parse_preview_url(url: &Url) -> Option<(String, String)> {
+    if !is_preview_url(url) {
+        return None;
+    }
+    let mut segments = url.path_segments()?.filter(|segment| !segment.is_empty());
+    let grant_id = if url.scheme() == PREVIEW_SCHEME {
+        url.host_str()?.to_string()
+    } else {
+        decode_segment(segments.next()?)?
+    };
+    if grant_id.len() != 32 || !grant_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let relative = segments
+        .map(decode_segment)
+        .collect::<Option<Vec<_>>>()?
+        .join("/");
+    Some((grant_id, relative))
+}
+
+fn build_preview_url(grant_id: &str, relative_path: &str) -> String {
+    let encoded = relative_path
+        .replace('\\', "/")
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string())
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("{PREVIEW_SCHEME}://{grant_id}/{encoded}")
+}
+
+fn content_type(path: &Path) -> Option<(&'static str, bool)> {
+    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+    let value = match extension.as_str() {
+        "html" | "htm" => ("text/html; charset=utf-8", false),
+        "css" => ("text/css; charset=utf-8", false),
+        "js" | "mjs" => ("text/javascript; charset=utf-8", false),
+        "json" => ("application/json; charset=utf-8", false),
+        "txt" | "md" | "csv" => ("text/plain; charset=utf-8", false),
+        "pdf" => ("application/pdf", true),
+        "svg" => ("image/svg+xml", true),
+        "png" => ("image/png", true),
+        "jpg" | "jpeg" => ("image/jpeg", true),
+        "gif" => ("image/gif", true),
+        "webp" => ("image/webp", true),
+        "bmp" => ("image/bmp", true),
+        "ico" => ("image/x-icon", true),
+        "woff" => ("font/woff", true),
+        "woff2" => ("font/woff2", true),
+        "ttf" => ("font/ttf", true),
+        "otf" => ("font/otf", true),
+        _ => return None,
+    };
+    Some(value)
+}
+
+fn response(status: u16, content_type: &str, body: Vec<u8>) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(status)
+        .header("Content-Type", content_type)
+        .header("Content-Security-Policy", CSP)
+        .header("Cache-Control", "no-store")
+        .body(body)
+        .unwrap_or_else(|_| tauri::http::Response::new(Vec::new()))
+}
+
+fn failure_response(
+    app: &AppHandle,
+    grant_id: &str,
+    relative_path: &str,
+    reason: &'static str,
+    status: u16,
+    message: &str,
+) -> tauri::http::Response<Vec<u8>> {
+    let _ = app.emit(
+        "doc-preview:load-failure",
+        DocPreviewFailure {
+            grant_id: grant_id.to_string(),
+            relative_path: relative_path.to_string(),
+            reason,
+        },
+    );
+    response(
+        status,
+        "text/plain; charset=utf-8",
+        message.as_bytes().to_vec(),
+    )
+}
+
+pub fn handle_protocol_request(app: &AppHandle, uri: &str) -> tauri::http::Response<Vec<u8>> {
+    let Ok(url) = Url::parse(uri) else {
+        return response(404, "text/plain; charset=utf-8", b"Not found".to_vec());
+    };
+    let Some((grant_id, relative_path)) = parse_preview_url(&url) else {
+        return response(404, "text/plain; charset=utf-8", b"Not found".to_vec());
+    };
+    let state = app.state::<DocPreviewState>();
+    let Ok(grants) = state.grants.lock() else {
+        return response(
+            500,
+            "text/plain; charset=utf-8",
+            b"Preview unavailable".to_vec(),
+        );
+    };
+    let Some(grant) = grants.get(&grant_id) else {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        );
+    };
+    if matches!(grant.owner, DocPreviewOwner::Ssh { .. }) {
+        let Some(candidate) = grant
+            .ssh_request_base
+            .as_deref()
+            .and_then(|base| join_ssh_path(base, &relative_path))
+        else {
+            return failure_response(
+                app,
+                &grant_id,
+                &relative_path,
+                "unreadable",
+                404,
+                "Not found",
+            );
+        };
+        if !is_ssh_authorized(grant, &candidate) {
+            return failure_response(
+                app,
+                &grant_id,
+                &relative_path,
+                "authorization-required",
+                403,
+                AUTHORIZATION_REQUIRED_MESSAGE,
+            );
+        }
+        if let Some(file) = grant.ssh_cached_files.get(&relative_path) {
+            return response(200, file.content_type, file.bytes.clone());
+        }
+        let _ = app.emit(
+            "doc-preview:resource-requested",
+            DocPreviewResourceRequest {
+                grant_id: grant_id.clone(),
+                browser_page_id: grant.browser_page_id.clone(),
+                relative_path: relative_path.clone(),
+            },
+        );
+        return response(404, "text/plain; charset=utf-8", b"Loading".to_vec());
+    }
+    let Some(candidate) = candidate_path(grant, &relative_path) else {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        );
+    };
+    let Ok(canonical_target) = fs::canonicalize(&candidate) else {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        );
+    };
+    if !canonical_target.starts_with(&grant.request_base)
+        || !grant
+            .worktree_root
+            .as_ref()
+            .is_some_and(|root| canonical_target.starts_with(root))
+    {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        );
+    }
+    if !is_authorized(grant, &canonical_target) {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "authorization-required",
+            403,
+            AUTHORIZATION_REQUIRED_MESSAGE,
+        );
+    }
+    let Some((mime, binary)) = content_type(&canonical_target) else {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unsupported-asset",
+            415,
+            UNSERVABLE_ASSET_MESSAGE,
+        );
+    };
+    let Ok(metadata) = fs::metadata(&canonical_target) else {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        );
+    };
+    let limit = if binary {
+        MAX_BINARY_BYTES
+    } else {
+        MAX_TEXT_BYTES
+    };
+    if metadata.len() > limit {
+        return failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "too-large",
+            413,
+            "This document is too large for the server to send in full.",
+        );
+    }
+    match fs::read(&canonical_target) {
+        Ok(bytes) => response(200, mime, bytes),
+        Err(_) => failure_response(
+            app,
+            &grant_id,
+            &relative_path,
+            "unreadable",
+            404,
+            "Not found",
+        ),
+    }
+}
+
+fn validate_request(request: &DocPreviewGrantRequest) -> Result<(), String> {
+    if !valid_nonempty(&request.request_base)
+        || !valid_nonempty(&request.root)
+        || !valid_nonempty(&request.entry_relative_path)
+        || !valid_nonempty(&request.browser_page_id)
+    {
+        return Err("Invalid document preview grant request.".to_string());
+    }
+    match &request.owner {
+        DocPreviewOwner::Ssh { connection_id } => {
+            if !valid_nonempty(connection_id) {
+                return Err("Invalid SSH document preview owner.".to_string());
+            }
+        }
+        DocPreviewOwner::Runtime {
+            environment_id,
+            worktree_selector,
+            worktree_root,
+        } => {
+            if !valid_nonempty(environment_id)
+                || !valid_nonempty(worktree_selector)
+                || !valid_nonempty(worktree_root)
+            {
+                return Err("Invalid runtime document preview owner.".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn poc_doc_preview_mint_grant(
+    state: State<DocPreviewState>,
+    request: DocPreviewGrantRequest,
+) -> Result<DocPreviewGrantResult, String> {
+    validate_request(&request)?;
+    let entry_relative_path = request.entry_relative_path.replace('\\', "/");
+    let (request_base, root, entry_path, worktree_root) = match &request.owner {
+        DocPreviewOwner::Ssh { .. } => (PathBuf::new(), PathBuf::new(), None, None),
+        DocPreviewOwner::Runtime { worktree_root, .. } => {
+            let request_base = canonical_directory(&request.request_base)?;
+            let root = canonical_directory(&request.root)?;
+            if !root.starts_with(&request_base) {
+                return Err("Document preview root is outside its request base.".to_string());
+            }
+            let worktree_root = canonical_directory(worktree_root)?;
+            let entry_path = candidate_path(
+                &DocPreviewGrant {
+                    owner: request.owner.clone(),
+                    request_base: request_base.clone(),
+                    root: root.clone(),
+                    entry_relative_path: entry_relative_path.clone(),
+                    entry_path: None,
+                    worktree_root: Some(worktree_root.clone()),
+                    authorized_roots: Vec::new(),
+                    browser_page_id: request.browser_page_id.clone(),
+                    ssh_request_base: None,
+                    ssh_root: None,
+                    ssh_entry_path: None,
+                    ssh_cached_files: HashMap::new(),
+                },
+                &entry_relative_path,
+            )
+            .ok_or_else(|| "Invalid document preview entry path.".to_string())?;
+            let entry_path = fs::canonicalize(entry_path)
+                .map_err(|error| format!("Document preview entry is unreadable: {error}"))?;
+            if !entry_path.starts_with(&request_base) || !entry_path.is_file() {
+                return Err("Document preview entry is outside its request base.".to_string());
+            }
+            (request_base, root, Some(entry_path), Some(worktree_root))
+        }
+    };
+    let grant_id = random_grant_id()?;
+    let url = build_preview_url(&grant_id, &entry_relative_path);
+    let ssh_request_base = match &request.owner {
+        DocPreviewOwner::Ssh { .. } => Some(
+            normalize_ssh_path(&request.request_base)
+                .ok_or_else(|| "Invalid SSH document preview request base.".to_string())?,
+        ),
+        DocPreviewOwner::Runtime { .. } => None,
+    };
+    let ssh_root = match &request.owner {
+        DocPreviewOwner::Ssh { .. } => Some(
+            normalize_ssh_path(&request.root)
+                .ok_or_else(|| "Invalid SSH document preview root.".to_string())?,
+        ),
+        DocPreviewOwner::Runtime { .. } => None,
+    };
+    let ssh_entry_path = match &request.owner {
+        DocPreviewOwner::Ssh { .. } => Some(
+            join_ssh_path(&request.request_base, &entry_relative_path)
+                .ok_or_else(|| "Invalid SSH document preview entry path.".to_string())?,
+        ),
+        DocPreviewOwner::Runtime { .. } => None,
+    };
+    let grant = DocPreviewGrant {
+        owner: request.owner,
+        request_base,
+        root,
+        entry_relative_path,
+        entry_path,
+        worktree_root,
+        authorized_roots: Vec::new(),
+        browser_page_id: request.browser_page_id,
+        ssh_request_base,
+        ssh_root,
+        ssh_entry_path,
+        ssh_cached_files: HashMap::new(),
+    };
+    let mut grants = state
+        .grants
+        .lock()
+        .map_err(|_| "Document preview state is poisoned.".to_string())?;
+    grants.retain(|_, existing| existing.browser_page_id != grant.browser_page_id);
+    grants.insert(grant_id.clone(), grant);
+    Ok(DocPreviewGrantResult { grant_id, url })
+}
+
+pub fn revoke_grants_for_page(state: &DocPreviewState, browser_page_id: &str) {
+    if let Ok(mut grants) = state.grants.lock() {
+        grants.retain(|_, grant| grant.browser_page_id != browser_page_id);
+    }
+}
+
+#[tauri::command]
+pub fn poc_doc_preview_revoke_grant(
+    state: State<DocPreviewState>,
+    grant_id: String,
+) -> Result<bool, String> {
+    Ok(state
+        .grants
+        .lock()
+        .map_err(|_| "Document preview state is poisoned.".to_string())?
+        .remove(&grant_id)
+        .is_some())
+}
+
+#[tauri::command]
+pub fn poc_doc_preview_authorize_directory(
+    state: State<DocPreviewState>,
+    grant_id: String,
+    relative_path: String,
+) -> Result<bool, String> {
+    let mut grants = state
+        .grants
+        .lock()
+        .map_err(|_| "Document preview state is poisoned.".to_string())?;
+    let Some(grant) = grants.get_mut(&grant_id) else {
+        return Ok(false);
+    };
+    if matches!(grant.owner, DocPreviewOwner::Ssh { .. }) {
+        let Some(base) = grant.ssh_request_base.as_deref() else {
+            return Ok(false);
+        };
+        let Some(candidate) = join_ssh_path(base, &relative_path) else {
+            return Ok(false);
+        };
+        let Some(directory) = ssh_parent(&candidate) else {
+            return Ok(false);
+        };
+        let Some(root) = grant.ssh_root.as_deref() else {
+            return Ok(false);
+        };
+        if !ssh_path_is_under(&directory, base) || !ssh_path_is_under(&directory, root) {
+            return Ok(false);
+        }
+        let already_authorized = grant
+            .authorized_roots
+            .iter()
+            .any(|authorized| authorized.to_string_lossy() == directory);
+        if !already_authorized {
+            grant.authorized_roots.push(PathBuf::from(directory));
+        }
+        return Ok(true);
+    }
+    let Some(candidate) = candidate_path(grant, &relative_path) else {
+        return Ok(false);
+    };
+    let Ok(canonical_candidate) = fs::canonicalize(candidate) else {
+        return Ok(false);
+    };
+    let Some(directory) = canonical_candidate.parent() else {
+        return Ok(false);
+    };
+    let directory = directory.to_path_buf();
+    if !directory.starts_with(&grant.request_base)
+        || !grant
+            .worktree_root
+            .as_ref()
+            .is_some_and(|root| directory.starts_with(root))
+    {
+        return Ok(false);
+    }
+    let already_authorized = grant.root == grant.request_base
+        && grant.authorized_roots.iter().any(|root| root == &directory)
+        || grant.root != grant.request_base && directory.starts_with(&grant.root);
+    if !already_authorized {
+        grant.authorized_roots.push(directory);
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn poc_doc_preview_cache_file(
+    state: State<DocPreviewState>,
+    request: DocPreviewCacheFileRequest,
+) -> Result<bool, String> {
+    let mut grants = state
+        .grants
+        .lock()
+        .map_err(|_| "Document preview state is poisoned.".to_string())?;
+    let Some(grant) = grants.get_mut(&request.grant_id) else {
+        return Ok(false);
+    };
+    if !matches!(grant.owner, DocPreviewOwner::Ssh { .. }) {
+        return Ok(false);
+    }
+    let Some(base) = grant.ssh_request_base.as_deref() else {
+        return Ok(false);
+    };
+    let Some(candidate) = join_ssh_path(base, &request.relative_path) else {
+        return Ok(false);
+    };
+    let Some(file_path) = normalize_ssh_path(&request.file_path) else {
+        return Ok(false);
+    };
+    if file_path != candidate || !is_ssh_authorized(grant, &candidate) {
+        return Ok(false);
+    }
+    let Some((inferred_type, binary)) = content_type(Path::new(&request.file_path)) else {
+        return Ok(false);
+    };
+    if let Some(content_type) = request.content_type.as_deref() {
+        let allowed = [
+            "application/pdf",
+            "image/bmp",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/svg+xml",
+            "image/webp",
+            "font/otf",
+            "font/ttf",
+            "font/woff",
+            "font/woff2",
+        ];
+        if content_type != inferred_type && !allowed.contains(&content_type) {
+            return Ok(false);
+        }
+    }
+    let bytes = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        request.content_base64.as_bytes(),
+    )
+    .map_err(|_| "Invalid document preview content.".to_string())?;
+    let limit = if binary {
+        MAX_BINARY_BYTES
+    } else {
+        MAX_TEXT_BYTES
+    };
+    if bytes.len() as u64 > limit {
+        return Ok(false);
+    }
+    grant.ssh_cached_files.insert(
+        request.relative_path,
+        CachedDocPreviewFile {
+            content_type: inferred_type,
+            bytes,
+        },
+    );
+    Ok(true)
+}
+
+pub fn grant_id_for_page(state: &DocPreviewState, browser_page_id: &str) -> Option<String> {
+    state
+        .grants
+        .lock()
+        .ok()?
+        .iter()
+        .find_map(|(grant_id, grant)| {
+            (grant.browser_page_id == browser_page_id).then(|| grant_id.clone())
+        })
+}
+
+pub fn handle_preview_navigation(
+    app: &AppHandle,
+    state: &DocPreviewState,
+    browser_page_id: &str,
+    url: &Url,
+) -> Option<bool> {
+    let grant_id = grant_id_for_page(state, browser_page_id)?;
+    if is_preview_url(url) {
+        return Some(parse_preview_url(url).is_some_and(|(candidate, _)| candidate == grant_id));
+    }
+    if url.scheme() == INTERNAL_SCHEME && url.host_str() == Some("doc-preview-external-link") {
+        let reported_grant = url
+            .query_pairs()
+            .find_map(|(key, value)| (key == "grantId").then(|| value.into_owned()));
+        let target = url
+            .query_pairs()
+            .find_map(|(key, value)| (key == "url").then(|| value.into_owned()));
+        if reported_grant.as_deref() == Some(grant_id.as_str())
+            && target.as_deref().is_some_and(|target| {
+                Url::parse(target)
+                    .map(|url| matches!(url.scheme(), "http" | "https"))
+                    .unwrap_or(false)
+            })
+        {
+            let _ = app.emit(
+                "doc-preview:external-link",
+                serde_json::json!({
+                    "browserPageId": browser_page_id,
+                    "url": target.unwrap_or_default(),
+                }),
+            );
+        }
+        return Some(false);
+    }
+    if matches!(url.scheme(), "data" | "blob" | "devtools") {
+        return Some(true);
+    }
+    if matches!(url.scheme(), "http" | "https" | "file") {
+        return Some(false);
+    }
+    Some(false)
+}
+
+pub fn guest_script(grant_id: &str) -> String {
+    let grant_id = serde_json::to_string(grant_id).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        r#"(() => {{
+  const grantId = {grant_id};
+  const signal = (url) => {{
+    try {{ location.href = 'orca-internal://doc-preview-external-link?grantId=' + encodeURIComponent(grantId) + '&url=' + encodeURIComponent(url); }} catch {{}}
+  }};
+  if (globalThis.__orcaDocPreviewLinkBridge) return;
+  globalThis.__orcaDocPreviewLinkBridge = true;
+  document.addEventListener('click', (event) => {{
+    if (event.defaultPrevented || event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!target) return;
+    let url;
+    try {{ url = new URL(target.href, location.href); }} catch {{ return; }}
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    event.preventDefault();
+    event.stopPropagation();
+    signal(url.href);
+  }}, true);
+}})();"#
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_preview_url, safe_relative_path};
+
+    #[test]
+    fn preview_urls_encode_segments_and_reject_traversal() {
+        let url = build_preview_url("0123456789abcdef0123456789abcdef", "a b/index.html");
+        assert_eq!(
+            url,
+            "orca-preview://0123456789abcdef0123456789abcdef/a%20b/index%2Ehtml"
+        );
+        assert!(safe_relative_path("assets/logo.png").is_some());
+        assert!(safe_relative_path("../secret.txt").is_none());
+        assert!(safe_relative_path("assets\\secret.txt").is_none());
+    }
+}

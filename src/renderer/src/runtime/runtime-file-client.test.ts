@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   deleteRuntimePath,
   readRuntimeDirectory,
@@ -14,6 +14,7 @@ import {
   fsRename,
   fsDeletePath,
   runtimeEnvironmentCall,
+  runtimeCall,
   installRuntimeFileClientEnvironment
 } from './runtime-file-client-test-harness'
 
@@ -36,6 +37,62 @@ describe('runtime file client', () => {
 
     expect(fsReadFile).toHaveBeenCalledWith({ filePath: '/repo/readme.md', connectionId: 'ssh-1' })
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+  })
+
+  it('keeps direct SSH reads on the Electron preload transport', async () => {
+    const localResult: RuntimeReadableFileContent = { content: 'remote', isBinary: false }
+    fsReadFile.mockResolvedValue(localResult)
+
+    await expect(
+      readRuntimeFileContent({
+        target: { kind: 'local' as const },
+        filePath: '/remote/readme.md',
+        connectionId: 'ssh-1'
+      })
+    ).resolves.toBe(localResult)
+
+    expect(fsReadFile).toHaveBeenCalledWith({
+      filePath: '/remote/readme.md',
+      connectionId: 'ssh-1'
+    })
+    expect(runtimeCall).not.toHaveBeenCalled()
+  })
+
+  it('routes direct SSH reads through the Tauri-owned runtime with the connection generation', async () => {
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke: vi.fn() } })
+    runtimeCall.mockImplementation((args: { params?: { length?: number } }) =>
+      Promise.resolve({
+        id: 'ssh-read',
+        ok: true,
+        result:
+          args.params?.length === 1
+            ? { contentBase64: '', bytesRead: 0, eof: true, size: 5, mtime: 10 }
+            : { contentBase64: 'aGVsbG8=', bytesRead: 5, eof: true, size: 5, mtime: 10 },
+        _meta: { runtimeId: 'local-runtime' }
+      })
+    )
+
+    await expect(
+      readRuntimeFileContent({
+        target: { kind: 'local' as const },
+        filePath: '/srv/readme.md',
+        connectionId: 'ssh-1',
+        expectedSshConnectionGeneration: 7
+      })
+    ).resolves.toEqual({ content: 'hello', isBinary: false })
+
+    expect(runtimeCall).toHaveBeenCalledTimes(3)
+    expect(runtimeCall).toHaveBeenCalledWith({
+      method: 'ssh.readFileChunk',
+      params: {
+        targetId: 'ssh-1',
+        filePath: '/srv/readme.md',
+        offset: 0,
+        length: expect.any(Number),
+        expectedGeneration: 7
+      }
+    })
+    expect(fsReadFile).not.toHaveBeenCalled()
   })
 
   it('reads an external SSH file only from its owning target', async () => {

@@ -15,6 +15,7 @@ import { assertTerminalQuickCommandsStorable } from '../../../../shared/terminal
 import { normalizeTerminalCustomThemes } from '../../../../shared/terminal-custom-themes'
 import { normalizeTaskProviderSettings } from '../../../../shared/task-providers'
 import { normalizeOpenInApplications } from '../../../../shared/open-in-applications'
+import { syncTauriMinimizeToTray } from '../../web/tauri-native-tray-close'
 import { createSettingsSearchState, type SettingsSearchState } from './settings-search-state'
 import { isRuntimeCatalogListingStale } from './runtime-status-hydration'
 import { normalizeDisabledTuiAgents } from '../../../../shared/tui-agent-selection'
@@ -201,6 +202,9 @@ export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> 
     ) {
       void get().hydrateRuntimeEnvironmentStatuses()
     }
+    // Why: the Tauri native close path cannot read this store on Alt+F4, so
+    // push the loaded flag once after every fetch.
+    void syncTauriMinimizeToTray(get().settings?.minimizeToTrayOnClose === true).catch(() => {})
   },
 
   awaitOwnerWorktreeVisibilityDefaultsHydration: () =>

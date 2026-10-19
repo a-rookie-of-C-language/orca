@@ -67,6 +67,10 @@ function addWorkspaceSessionKeyForOwnerMap(ids: Set<string>, value: unknown): vo
 
 function collectWorkspaceSessionKeysFromHostSession(session: WorkspaceSessionState): string[] {
   const ids = new Set<string>()
+  // A runtime can persist only the active workspace while its renderer-owned tab maps are empty.
+  // Keep that workspace attributed to its host so reload does not treat it as local.
+  addWorkspaceSessionKeyForOwnerMap(ids, session.activeWorkspaceKey)
+  addWorkspaceSessionKeyForOwnerMap(ids, session.activeWorktreeId)
   for (const field of WORKSPACE_SESSION_KEYED_FIELDS) {
     const value = session[field]
     if (isPlainRecord(value)) {

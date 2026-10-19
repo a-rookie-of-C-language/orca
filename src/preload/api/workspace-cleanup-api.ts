@@ -8,6 +8,7 @@ import type {
 } from '../../shared/workspace-cleanup'
 import type {
   WorkspaceSpaceAnalysis,
+  WorkspaceSpaceAnalyzeInput,
   WorkspaceSpaceAnalyzeResult,
   WorkspaceSpaceScanProgress
 } from '../../shared/workspace-space-types'
@@ -29,7 +30,7 @@ export type WorkspaceCleanupApi = {
 }
 
 export type WorkspaceSpaceApi = {
-  analyze: () => Promise<WorkspaceSpaceAnalyzeResult>
+  analyze: (input?: WorkspaceSpaceAnalyzeInput) => Promise<WorkspaceSpaceAnalyzeResult>
   /** Last persisted analysis (topLevelItems pruned to bound the payload); null until one completes. */
   getCachedAnalysis: () => Promise<WorkspaceSpaceAnalysis | null>
   cancel: () => Promise<boolean>

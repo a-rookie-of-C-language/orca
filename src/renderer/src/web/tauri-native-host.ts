@@ -7,7 +7,17 @@ declare global {
       invoke: TauriInvoke
     }
     __TAURI__?: {
+      core?: {
+        addPluginListener: <T>(
+          plugin: string,
+          event: string,
+          handler: (payload: T) => void
+        ) => Promise<{ unregister: () => Promise<void> }>
+      }
       event?: TauriEventApi
+      notification?: {
+        onAction: <T>(handler: (payload: T) => void) => Promise<{ unregister: () => Promise<void> }>
+      }
     }
   }
 }
@@ -22,10 +32,7 @@ export function isTauriNativeHost(): boolean {
   return getInvoke() !== null
 }
 
-export function invokeNative<T>(
-  command: string,
-  args?: Record<string, unknown>
-): Promise<T> {
+export function invokeNative<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const invoke = getInvoke()
   if (!invoke) {
     return Promise.reject(new Error(TAURI_UNAVAILABLE_ERROR))
@@ -45,6 +52,7 @@ type TauriUnlisten = () => void
 
 type TauriEventApi = {
   listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<TauriUnlisten>
+  emit?: <T>(event: string, payload?: T) => Promise<void>
 }
 
 function getTauriEventApi(): TauriEventApi | null {
@@ -77,4 +85,18 @@ export function listenNative<T>(event: string, callback: (payload: T) => void): 
     unlisten?.()
     unlisten = null
   }
+}
+
+// Why: guest WebViews pull the handled-shortcut set on init but also need
+// live updates; emitting a Tauri event reaches every WebView without a
+// per-guest invoke round-trip.
+export function emitNative<T>(event: string, payload?: T): Promise<void> {
+  if (!isTauriNativeHost()) {
+    return Promise.resolve()
+  }
+  const eventApi = getTauriEventApi()
+  if (!eventApi || typeof eventApi.emit !== 'function') {
+    return Promise.resolve()
+  }
+  return eventApi.emit<T>(event, payload).catch(() => {})
 }

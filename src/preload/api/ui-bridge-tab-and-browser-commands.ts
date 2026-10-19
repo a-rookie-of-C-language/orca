@@ -180,6 +180,14 @@ export const uiTabAndBrowserCommandsApi = {
     ipcRenderer.on('ui:appMenuSelectionAction', listener)
     return () => ipcRenderer.removeListener('ui:appMenuSelectionAction', listener)
   },
+  onAppMenuEditAction: (callback: (action: 'undo' | 'redo') => void): (() => void) => {
+    // Why: Electron serves menu undo/redo from native roles, so main never
+    // sends this; the subscription only keeps the shared ui contract whole.
+    const listener = (_event: Electron.IpcRendererEvent, action: 'undo' | 'redo'): void =>
+      callback(action)
+    ipcRenderer.on('ui:appMenuEditAction', listener)
+    return () => ipcRenderer.removeListener('ui:appMenuEditAction', listener)
+  },
   onEditableContextPaste: (callback: (data: { plainTextOnly: boolean }) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: { plainTextOnly: boolean }): void =>
       callback({ plainTextOnly: data?.plainTextOnly === true })

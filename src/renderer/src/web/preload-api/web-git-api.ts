@@ -9,8 +9,19 @@ import {
   resolveRuntimeFilePath,
   resolveRuntimeWorktreeByPath
 } from './web-runtime-worktree-catalog'
+import { isTauriNativeHost } from '../tauri-native-host'
 
 export const webGitStatusAbortControllers = new Map<string, AbortController>()
+
+type GitGenerateCommitMessageResult = Awaited<
+  ReturnType<PreloadApi['git']['generateCommitMessage']>
+>
+type GitDiscoverCommitMessageModelsResult = Awaited<
+  ReturnType<PreloadApi['git']['discoverCommitMessageModels']>
+>
+type GitGeneratePullRequestFieldsResult = Awaited<
+  ReturnType<PreloadApi['git']['generatePullRequestFields']>
+>
 
 export async function callAbortableRuntimeStatus<TResult>(
   requestToken: string,
@@ -218,29 +229,90 @@ export function createGitApi(): NonNullable<Partial<PreloadApi>['git']> {
         message
       })
     },
-    generateCommitMessage: async () => ({
-      success: false,
-      error: translate(
-        'auto.web.web.preload.api.9fc90740b6',
-        'Commit message generation is unavailable in the web client.'
-      )
-    }),
-    discoverCommitMessageModels: async () => ({
-      success: false,
-      error: translate(
-        'auto.web.web.preload.api.e57c82d276',
-        'Commit message model discovery is unavailable in the web client.'
-      )
-    }),
-    cancelGenerateCommitMessage: () => Promise.resolve(),
-    generatePullRequestFields: async () => ({
-      success: false,
-      error: translate(
-        'auto.web.web.preload.api.b8a1618172',
-        'Pull request detail generation is unavailable in the web client.'
-      )
-    }),
-    cancelGeneratePullRequestFields: () => Promise.resolve(),
+    generateCommitMessage: async (args) => {
+      if (isTauriNativeHost()) {
+        const worktree = await resolveRuntimeWorktreeByPath(args.worktreePath)
+        return callRuntimeResult<GitGenerateCommitMessageResult>('git.generateCommitMessage', {
+          worktree: toRuntimeWorktreeSelector(worktree.id),
+          ...(args.sourceControlAiResolvedParams
+            ? { sourceControlAiResolvedParams: args.sourceControlAiResolvedParams }
+            : {}),
+          ...(args.sourceControlAi ? { sourceControlAi: args.sourceControlAi } : {}),
+          ...(args.agentCmdOverrides ? { agentCmdOverrides: args.agentCmdOverrides } : {})
+        })
+      }
+      return {
+        success: false,
+        error: translate(
+          'auto.web.web.preload.api.9fc90740b6',
+          'Commit message generation is unavailable in the web client.'
+        )
+      }
+    },
+    discoverCommitMessageModels: async (args) => {
+      if (isTauriNativeHost() && args.worktreePath) {
+        const worktree = await resolveRuntimeWorktreeByPath(args.worktreePath)
+        return callRuntimeResult<GitDiscoverCommitMessageModelsResult>(
+          'git.discoverCommitMessageModels',
+          {
+            worktree: toRuntimeWorktreeSelector(worktree.id),
+            agentId: args.agentId
+          }
+        )
+      }
+      return {
+        success: false,
+        error: translate(
+          'auto.web.web.preload.api.e57c82d276',
+          'Commit message model discovery is unavailable in the web client.'
+        )
+      }
+    },
+    cancelGenerateCommitMessage: async (args) => {
+      if (isTauriNativeHost()) {
+        const worktree = await resolveRuntimeWorktreeByPath(args.worktreePath)
+        await callRuntimeResult('git.cancelGenerateCommitMessage', {
+          worktree: toRuntimeWorktreeSelector(worktree.id)
+        })
+      }
+    },
+    generatePullRequestFields: async (args) => {
+      if (isTauriNativeHost()) {
+        const worktree = await resolveRuntimeWorktreeByPath(args.worktreePath)
+        return callRuntimeResult<GitGeneratePullRequestFieldsResult>(
+          'git.generatePullRequestFields',
+          {
+            worktree: toRuntimeWorktreeSelector(worktree.id),
+            base: args.base,
+            title: args.title,
+            body: args.body,
+            draft: args.draft,
+            ...(args.provider ? { provider: args.provider } : {}),
+            ...(args.useTemplate !== undefined ? { useTemplate: args.useTemplate } : {}),
+            ...(args.sourceControlAiResolvedParams
+              ? { sourceControlAiResolvedParams: args.sourceControlAiResolvedParams }
+              : {}),
+            ...(args.sourceControlAi ? { sourceControlAi: args.sourceControlAi } : {}),
+            ...(args.agentCmdOverrides ? { agentCmdOverrides: args.agentCmdOverrides } : {})
+          }
+        )
+      }
+      return {
+        success: false,
+        error: translate(
+          'auto.web.web.preload.api.b8a1618172',
+          'Pull request detail generation is unavailable in the web client.'
+        )
+      }
+    },
+    cancelGeneratePullRequestFields: async (args) => {
+      if (isTauriNativeHost()) {
+        const worktree = await resolveRuntimeWorktreeByPath(args.worktreePath)
+        await callRuntimeResult('git.cancelGeneratePullRequestFields', {
+          worktree: toRuntimeWorktreeSelector(worktree.id)
+        })
+      }
+    },
     stage: async ({ worktreePath, filePath }) => mutateGitPath('git.stage', worktreePath, filePath),
     bulkStage: async ({ worktreePath, filePaths, scope }) => {
       if (!scope) {

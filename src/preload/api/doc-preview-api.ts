@@ -20,14 +20,32 @@ export type DocPreviewGrantRequest = {
   browserPageId: string
 }
 
+export type DocPreviewCacheFileRequest = {
+  grantId: string
+  relativePath: string
+  filePath: string
+  contentBase64: string
+  contentType?: string
+}
+
+export type DocPreviewResourceRequest = {
+  grantId: string
+  browserPageId: string
+  relativePath: string
+}
+
 export type DocPreviewApi = {
   docPreview: {
     mintGrant: (request: DocPreviewGrantRequest) => Promise<{ grantId: string; url: string }>
     revokeGrant: (grantId: string) => Promise<boolean>
     authorizeDirectory: (grantId: string, relativePath: string) => Promise<boolean>
+    /** Cache an already-authorized remote file for the Tauri protocol handler. */
+    cacheFile: (request: DocPreviewCacheFileRequest) => Promise<boolean>
     /** External link the preview guest tried to open; the renderer turns it into a browser tab. */
     onExternalLink: (callback: (payload: { url: string }) => void) => () => void
     /** Why the guest is showing an error body instead of the document. */
     onLoadFailure: (callback: (payload: DocPreviewFailure) => void) => () => void
+    /** A Tauri preview requested an authorized remote resource that is not cached yet. */
+    onResourceRequested: (callback: (payload: DocPreviewResourceRequest) => void) => () => void
   }
 }

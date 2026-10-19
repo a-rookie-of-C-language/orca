@@ -15,6 +15,12 @@ export const SshConnect = SshTarget.extend({
   automatic: z.boolean().optional()
 })
 
+export const SshSubmitCredential = z.object({
+  requestId: z.string().trim().min(1).max(200),
+  // Do not trim: keyboard-interactive answers and passphrases may contain whitespace.
+  value: z.string().max(65_536).nullable()
+})
+
 const boundedText = (max: number) => z.string().trim().min(1).max(max)
 
 // Why strict: an unknown key (a password, a passphrase, or a main-owned field such as a
@@ -58,6 +64,58 @@ export const SshTargetUpdate = SshTarget.extend({ target: SshEditableTargetInput
 export const SshBrowseDir = SshTarget.extend({
   dirPath: z.string().min(1).max(4096)
 })
+
+export const SshFileReadChunk = SshTarget.extend({
+  filePath: z.string().min(1).max(4096),
+  offset: z.number().int().nonnegative(),
+  length: z
+    .number()
+    .int()
+    .positive()
+    .max(512 * 1024),
+  expectedGeneration: z.number().int().positive().optional()
+})
+
+export const SshFolderDownload = SshTarget.extend({
+  dirPath: z.string().min(1).max(4096),
+  destinationPath: z.string().min(1).max(32_768),
+  expectedGeneration: z.number().int().positive().optional()
+})
+
+export const SshImportConfig = z.object({
+  reAdopt: z.boolean().optional()
+})
+
+export const SshConfigHostList = z.object({
+  query: z.string().max(4096).optional(),
+  refresh: z.boolean().optional()
+})
+
+export const SshResolveConfigHost = z.object({
+  alias: z.string().trim().min(1).max(512)
+})
+
+export const SshResolveExternalEditorAuthority = z.object({
+  targetId: z.string().min(1)
+})
+
+const portNumber = z.number().int().min(1).max(65_535)
+export const SshPortForwardAdd = SshTarget.extend({
+  localPort: portNumber,
+  remoteHost: boundedText(4096),
+  remotePort: portNumber,
+  label: z.string().trim().max(200).optional()
+})
+export const SshPortForwardUpdate = z.object({
+  id: boundedText(200),
+  targetId: boundedText(200),
+  localPort: portNumber,
+  remoteHost: boundedText(4096),
+  remotePort: portNumber,
+  label: z.string().trim().max(200).optional()
+})
+export const SshPortForwardRemove = z.object({ id: boundedText(200) })
+export const SshPortForwardList = z.object({ targetId: boundedText(200).optional() })
 
 export const RepoAddRemote = z.object({
   connectionId: requiredString('Missing SSH target'),

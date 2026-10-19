@@ -1,3 +1,7 @@
 dist/
 src-tauri/target/
 src-tauri/gen/
+resources/orcad/*
+!resources/orcad/.gitkeep
+resources/runtimes/*
+!resources/runtimes/.gitkeep

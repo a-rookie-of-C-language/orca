@@ -8,6 +8,7 @@ import { isWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-
 import {
   GLOBAL_WORKSPACE_SESSION_FIELDS,
   hostPartitionSliceTemplate,
+  SESSION_FOCUS_FIELDS,
   WORKSPACE_SESSION_FIELD_OWNERSHIP
 } from '../../../shared/workspace-session-host-field-ownership'
 import {
@@ -316,15 +317,27 @@ export function mergeWorkspaceSessionsFromHosts(slices: HostSessionSlices): Work
   // standalone non-local slice still yields sane active pointers.
   for (const field of GLOBAL_WORKSPACE_SESSION_FIELDS) {
     const fromLocal = local?.[field]
-    if (fromLocal !== undefined) {
+    if (fromLocal !== undefined && !isMissingFocusField(field, fromLocal)) {
       ;(out as WorkspaceSessionRecord)[field] = fromLocal
       continue
     }
+    let fallback: unknown = fromLocal
+    let hasFallback = fromLocal !== undefined
     for (const slice of Object.values(slices)) {
-      if (slice && slice[field] !== undefined) {
+      if (!slice || slice[field] === undefined) {
+        continue
+      }
+      if (!hasFallback) {
+        fallback = slice[field]
+        hasFallback = true
+      }
+      if (!isMissingFocusField(field, slice[field])) {
         ;(out as WorkspaceSessionRecord)[field] = slice[field]
         break
       }
+    }
+    if (!(field in out) && hasFallback) {
+      Object.assign(out, { [field]: fallback })
     }
   }
 
@@ -348,4 +361,8 @@ export function mergeWorkspaceSessionsFromHosts(slices: HostSessionSlices): Work
   }
 
   return out
+}
+
+function isMissingFocusField(field: keyof WorkspaceSessionState, value: unknown): boolean {
+  return value === null && SESSION_FOCUS_FIELDS.some((focusField) => focusField === field)
 }

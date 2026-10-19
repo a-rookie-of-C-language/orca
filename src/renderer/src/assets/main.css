@@ -192,7 +192,8 @@
   --cds-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 8px rgb(0 0 0 / 0.08);
   --cds-shadow-md: 0 2px 4px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.08);
   --cds-shadow-composer: 0 4px 20px rgb(0 0 0 / 0.035), inset 0 0 0 1px var(--cds-border);
-  --cds-shadow-composer-hover: 0 4px 24px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--cds-border-strong);
+  --cds-shadow-composer-hover:
+    0 4px 24px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--cds-border-strong);
   --cds-radius-panel: 10px;
   --cds-radius-bubble: 18px;
   --cds-radius-composer: 20px;
@@ -329,7 +330,8 @@
   --cds-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.4);
   --cds-shadow-md: 0 2px 4px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.4);
   --cds-shadow-composer: 0 4px 20px rgb(0 0 0 / 0.4), inset 0 0 0 1px var(--cds-border);
-  --cds-shadow-composer-hover: 0 4px 24px rgb(0 0 0 / 0.55), inset 0 0 0 1px var(--cds-border-strong);
+  --cds-shadow-composer-hover:
+    0 4px 24px rgb(0 0 0 / 0.55), inset 0 0 0 1px var(--cds-border-strong);
   --orca-security-background: #0a0a0a;
   --orca-security-foreground: #fafafa;
   --orca-security-card: #171717;
@@ -974,7 +976,11 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
    reserved for the one affirmative entry point. */
 .landing-screen {
   background:
-    radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--cds-clay) 7%, transparent), transparent 36%),
+    radial-gradient(
+      circle at 50% 34%,
+      color-mix(in srgb, var(--cds-clay) 7%, transparent),
+      transparent 36%
+    ),
     var(--cds-surface-0);
 }
 
@@ -1026,7 +1032,9 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
   box-shadow: var(--cds-shadow-sm);
 }
 
-.orca-workspace-sidebar [data-contextual-tour-target='sidebar-navigation'] > button:first-child:hover {
+.orca-workspace-sidebar
+  [data-contextual-tour-target='sidebar-navigation']
+  > button:first-child:hover {
   border-color: var(--cds-border-strong);
   background: var(--cds-surface-2);
 }

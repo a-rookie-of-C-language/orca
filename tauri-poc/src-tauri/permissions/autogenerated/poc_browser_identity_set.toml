@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-identity-set"
+description = "Enables the poc_browser_identity_set command without any pre-configured scope."
+commands.allow = ["poc_browser_identity_set"]
+
+[[permission]]
+identifier = "deny-poc-browser-identity-set"
+description = "Denies the poc_browser_identity_set command without any pre-configured scope."
+commands.deny = ["poc_browser_identity_set"]

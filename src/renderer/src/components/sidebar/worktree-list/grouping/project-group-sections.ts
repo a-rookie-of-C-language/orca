@@ -5,6 +5,7 @@ import {
 } from './folder-workspace-lanes'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { ProjectOrderBy } from '../../../../../../shared/ui-chrome-types'
+import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
 import { getEffectiveProjectGroupManualRank } from '../../../../../../shared/project-groups'
 import { PROJECT_GROUP_META, getProjectGroupHeaderKey } from './group-keys'
 import { appendOrderedGroups } from './group-sections'
@@ -110,6 +111,7 @@ export function appendProjectGroupSections(
       tone: PROJECT_GROUP_META.tone,
       icon: PROJECT_GROUP_META.icon,
       projectGroup,
+      hostId: getRepoExecutionHostId(projectGroup),
       projectGroupDepth: depth
     })
     if (!collapsedGroups.has(key)) {

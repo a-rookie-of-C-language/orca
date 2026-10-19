@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import { sendRemoteRuntimeRequest } from '../../shared/remote-runtime-client'
 import { REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY } from '../../shared/protocol-version'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../shared/electron-remote-runtime-client-capabilities'
@@ -9,10 +8,7 @@ import {
 import { recordRuntimeEnvironmentUsage } from './runtime-environment-usage-record'
 import { RuntimeHostStatusOwner } from '../../shared/runtime-host-status-owner'
 import type { RuntimeStatus } from '../../shared/runtime-types'
-import {
-  RUNTIME_HOST_STATUS_CHANNEL,
-  type RuntimeHostStatusResponse
-} from '../../shared/runtime-host-status'
+import { type RuntimeHostStatusResponse } from '../../shared/runtime-host-status'
 import {
   applyRuntimeEnvironmentCapabilityVerdict,
   getAcceptedRuntimeEnvironmentCapabilityOutcome,
@@ -22,6 +18,7 @@ import {
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { runtimeEnvironmentChangedFailure } from './runtime-environment-revision-guard'
 import { resolveManagedRuntimeEnvironment } from './runtime-environment-managed-tunnel'
+import { getRuntimeDesktopSurface } from '../runtime/runtime-desktop-surface'
 
 export function createRuntimeEnvironmentStatusOwner(
   userDataPath: string,
@@ -87,17 +84,6 @@ export function createRuntimeEnvironmentStatusOwner(
       }
       return capable && active
     },
-    publish: (snapshot) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        if (window.isDestroyed()) {
-          continue
-        }
-        try {
-          window.webContents.send(RUNTIME_HOST_STATUS_CHANNEL, snapshot)
-        } catch {
-          /* A renderer can close during publication. */
-        }
-      }
-    }
+    publish: (snapshot) => getRuntimeDesktopSurface().publishRuntimeHostStatus?.(snapshot)
   })
 }

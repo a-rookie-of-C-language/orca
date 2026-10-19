@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 
 const storageMocks = vi.hoisted(() => ({
   available: true,
@@ -13,14 +14,6 @@ const storageMocks = vi.hoisted(() => ({
     }
     return text.slice('encrypted:'.length)
   })
-}))
-
-vi.mock('electron', () => ({
-  safeStorage: {
-    isEncryptionAvailable: () => storageMocks.available,
-    encryptString: storageMocks.encryptString,
-    decryptString: storageMocks.decryptString
-  }
 }))
 
 import { PluginSecretsStore } from './plugin-secrets-store'
@@ -45,9 +38,16 @@ beforeEach(() => {
     }
     return text.slice('encrypted:'.length)
   })
+  setSecretStore({
+    isEncryptionAvailable: () => storageMocks.available,
+    encryptString: storageMocks.encryptString,
+    decryptString: storageMocks.decryptString,
+    describeProtectionGap: () => null
+  })
 })
 
 afterEach(async () => {
+  _resetSecretStoreForTests()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 

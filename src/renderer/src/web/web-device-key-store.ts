@@ -31,9 +31,13 @@ export function createIndexedDbWebDeviceKeyStore(factory: IDBFactory): WebDevice
   let opened: Promise<IDBDatabase> | null = null
   const database = (): Promise<IDBDatabase> => {
     opened ??= new Promise((resolve, reject) => {
-      const request = factory.open(DB_NAME, 1)
+      // Version 2 repairs databases created by early clients that opened the name without the
+      // keys store, which otherwise makes every device-key probe fail with NotFoundError.
+      const request = factory.open(DB_NAME, 2)
       request.onupgradeneeded = () => {
-        request.result.createObjectStore(STORE_NAME, { keyPath: 'id' })
+        if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+          request.result.createObjectStore(STORE_NAME, { keyPath: 'id' })
+        }
       }
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => {

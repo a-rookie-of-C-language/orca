@@ -33,6 +33,8 @@ export type RuntimeClientSettings = Pick<
   | 'agentSkillSharingEnabled'
   | 'machineName'
   | 'nativeChatPermissionMode'
+  | 'computerAwakeMode'
+  | 'keepComputerAwakeWhileAgentsRun'
 > & {
   /** Older clients still read these; neither is persisted or accepted as an update. */
   openAgentTabsInChatByDefault?: boolean
@@ -72,4 +74,6 @@ export type RuntimeClientSettingsUpdate = Pick<
   | 'worktreeVisibilityDefaults'
   | 'machineName'
   | 'nativeChatPermissionMode'
+  | 'computerAwakeMode'
+  | 'keepComputerAwakeWhileAgentsRun'
 >

@@ -15,6 +15,7 @@ const METHOD_CASES: readonly (readonly [string, unknown, boolean])[] = [
   ['terminal.show', { terminal: 'term' }, false],
   ['terminal.resolveIdentity', { terminal: 'term' }, false],
   ['terminal.read', { terminal: 'term' }, false],
+  ['terminal.bufferSnapshot', { terminal: 'term' }, false],
   ['terminal.inspectProcess', { terminal: 'term' }, false],
   ['terminal.isRunningAgent', { terminal: 'term' }, false],
   ['terminal.agentStatus', { terminal: 'term' }, false],
@@ -50,7 +51,19 @@ const METHOD_CASES: readonly (readonly [string, unknown, boolean])[] = [
   ['terminal.unsubscribe', { subscriptionId: 'term' }, false],
   ['terminal.getAutoRestoreFit', {}, false],
   ['terminal.setAutoRestoreFit', { ms: null }, false],
-  ['terminal.setViewerColors', { colors: { foreground: '#ffffff', background: '#000000' } }, false]
+  ['terminal.setViewerColors', { colors: { foreground: '#ffffff', background: '#000000' } }, false],
+  ['terminal.cwd', { terminal: 'term' }, false],
+  [
+    'terminal.moveLeafToNewTab',
+    {
+      worktreeId: 'w',
+      sourceTabId: 's',
+      targetTabId: 't',
+      leafId: '11111111-1111-4111-8111-111111111111',
+      ptyId: null
+    },
+    false
+  ]
 ]
 
 function schemaFor(name: string) {
@@ -65,19 +78,39 @@ async function invoke(name: string, params: unknown, runtime: Partial<OrcaRuntim
   if (!method?.params || 'stream' in method) {
     throw new Error(`Missing unary terminal method: ${name}`)
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: each caller supplies every runtime operation reached by its selected handler.
   return method.handler(method.params.parse(params), { runtime: runtime as OrcaRuntimeService })
 }
 
 describe('terminal RPC manifest characterization', () => {
   it('preserves all method names, order, streaming flags, and parseable minimum inputs', () => {
-    expect(TERMINAL_METHODS).toHaveLength(39)
+    expect(TERMINAL_METHODS).toHaveLength(42)
     expect(TERMINAL_METHODS.map((method) => [method.name, 'stream' in method])).toEqual(
       METHOD_CASES.map(([name, _params, stream]) => [name, stream])
     )
-    expect(new Set(TERMINAL_METHODS.map((method) => method.name)).size).toBe(39)
+    expect(new Set(TERMINAL_METHODS.map((method) => method.name)).size).toBe(42)
     for (const [name, params] of METHOD_CASES) {
       expect(() => schemaFor(name).parse(params), name).not.toThrow()
     }
+  })
+
+  it('serializes a host-owned buffer without changing terminal visibility', async () => {
+    const snapshot = { data: 'screen', cols: 120, rows: 40, seq: 9, source: 'headless' as const }
+    const showTerminal = vi.fn(async () => ({ ptyId: 'pty-1' }))
+    const serializeAuthoritativeTerminalBuffer = vi.fn(async () => snapshot)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: bufferSnapshot only reads ptyId from showTerminal and invokes the supplied serializer.
+    const runtime = {
+      showTerminal,
+      serializeAuthoritativeTerminalBuffer
+    } as unknown as Partial<OrcaRuntimeService>
+
+    await expect(
+      invoke('terminal.bufferSnapshot', { terminal: 'term', scrollbackRows: 25 }, runtime)
+    ).resolves.toEqual({ snapshot })
+    expect(showTerminal).toHaveBeenCalledWith('term')
+    expect(serializeAuthoritativeTerminalBuffer).toHaveBeenCalledWith('pty-1', {
+      scrollbackRows: 25
+    })
   })
 
   it('keeps legacy coercion and viewport-boundary differences', () => {

@@ -1,12 +1,56 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::menu::{ContextMenu, Menu, PredefinedMenuItem};
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::Duration;
+use tauri::menu::ContextMenu;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
+
+mod agent_awake;
+mod ai_vault_delete;
+mod application_menu_spec;
+mod authorized_roots;
+mod browser_cdp_events;
+mod browser_client_route_authority;
+mod browser_client_route_partitions;
+mod browser_client_route_sources;
+mod browser_cookie_import;
+mod browser_cookie_source_import;
+mod browser_identity;
+mod browser_session;
+mod browser_session_detection;
+mod browser_upload_staging;
+mod browser_webview;
+mod clipboard_files;
+mod crash_reports;
+mod diagnostics;
+mod doc_preview;
+mod external_editor;
+mod filesystem_download;
+mod filesystem_import;
+mod filesystem_upload;
+mod local_log_tail;
+mod menu_appearance;
+mod menu_hints;
+mod runtime_process;
+mod runtime_readiness;
+mod second_instance;
+mod system_tray;
+mod updater;
+mod workspace_space;
+
+use application_menu_spec::{application_menu_bar, ids, MenuEntry, MenuPlatform};
+use runtime_process::OrcadRuntime;
+use second_instance::{
+    resolve_opened_documents, OpenedDocument, SecondInstancePayload, SecondInstanceState,
+};
 
 const MAX_SOUND_BYTES: u64 = 16 * 1024 * 1024;
 const NOTIFICATION_SOUND_EXTENSIONS: [&str; 6] = ["ogg", "mp3", "wav", "m4a", "aac", "flac"];
@@ -18,11 +62,93 @@ const EVENT_FULLSCREEN_CHANGED: &str = "window:fullscreen-changed";
 const EVENT_WINDOW_CLOSE_REQUESTED: &str = "window:close-requested";
 const EVENT_TERMINAL_ZOOM: &str = "terminal:zoom";
 
+/// UI zoom level bookkeeping for non-main windows (Workspace Space, dashboard
+/// popout). The main renderer persists its own level through `window.api.ui`,
+/// but secondary windows have no settings store, so the menu handler keeps a
+/// per-window log-scale level here and pushes `1.2^level` through `set_zoom`.
+/// Mirrors `src/shared/ui-zoom-level.ts`.
+const UI_ZOOM_BASE: f64 = 1.2;
+const UI_ZOOM_STEP: f64 = 0.5;
+const UI_ZOOM_MIN: f64 = -3.0;
+const UI_ZOOM_MAX: f64 = 5.0;
+
+fn window_zoom_levels() -> &'static Mutex<HashMap<String, f64>> {
+    static MAP: LazyLock<Mutex<HashMap<String, f64>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    &MAP
+}
+
+fn step_ui_zoom_level(current: f64, direction: &str) -> f64 {
+    if direction == "reset" {
+        return 0.0;
+    }
+    let next = if direction == "in" {
+        current + UI_ZOOM_STEP
+    } else {
+        current - UI_ZOOM_STEP
+    };
+    next.clamp(UI_ZOOM_MIN, UI_ZOOM_MAX)
+}
+
+/// Apply a menu zoom step to whichever window currently has focus, matching
+/// Electron's `zoomDashboardPopoutIfFocused`/`zoomWorkspaceSpaceWindowIfFocused`
+/// chain. Secondary windows zoom their own webview; the main window routes the
+/// step to the shared `terminal:zoom` listener so it can pick UI zoom vs
+/// editor font zoom vs PDF zoom itself.
+fn route_menu_zoom(app: &AppHandle, direction: &str) {
+    let secondary_labels = ["workspace-space", "dashboard-popout"];
+    for label in secondary_labels {
+        if let Some(window) = app.get_webview_window(label) {
+            if window.is_focused().unwrap_or(false) {
+                let levels = window_zoom_levels();
+                let mut map = levels.lock().unwrap_or_else(|p| p.into_inner());
+                let current = *map.get(label).unwrap_or(&0.0);
+                let next = step_ui_zoom_level(current, direction);
+                map.insert(label.to_string(), next);
+                drop(map);
+                let _ = window.set_zoom(UI_ZOOM_BASE.powf(next));
+                return;
+            }
+        }
+    }
+    emit_menu_event(app, EVENT_TERMINAL_ZOOM, direction);
+}
+
+/// The zoom level the main window most recently reported through
+/// `poc_set_zoom`, used to seed a newly opened secondary window so it matches
+/// the app-wide zoom the moment it mounts (Electron's `dom-ready` handler).
+fn main_window_zoom_level() -> f64 {
+    let map = window_zoom_levels();
+    map.lock()
+        .ok()
+        .and_then(|levels| levels.get("main").copied())
+        .unwrap_or(0.0)
+}
+
+/// Seed the label's zoom map slot from the main window's latest level and
+/// apply it through `set_zoom`. Called by `poc_workspace_space_open` (and any
+/// future secondary-window opener) so the new window honors the app-wide zoom.
+pub(crate) fn seed_secondary_window_zoom(app: &AppHandle, label: &str) {
+    let level = main_window_zoom_level();
+    {
+        let map = window_zoom_levels();
+        if let Ok(mut levels) = map.lock() {
+            levels.insert(label.to_string(), level);
+        }
+    }
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.set_zoom(UI_ZOOM_BASE.powf(level));
+    }
+}
+
 struct NativeWindowState {
     close_confirmed: AtomicBool,
     close_request_sequence: AtomicU64,
     last_maximized: AtomicBool,
     last_fullscreen: AtomicBool,
+    /// Renderer pushes the persisted `minimizeToTrayOnClose` setting here so
+    /// the native close path can apply it without calling back into JS.
+    minimize_to_tray: AtomicBool,
 }
 
 impl Default for NativeWindowState {
@@ -32,6 +158,7 @@ impl Default for NativeWindowState {
             close_request_sequence: AtomicU64::new(0),
             last_maximized: AtomicBool::new(false),
             last_fullscreen: AtomicBool::new(false),
+            minimize_to_tray: AtomicBool::new(false),
         }
     }
 }
@@ -238,9 +365,24 @@ fn poc_set_fullscreen(window: WebviewWindow, fullscreen: bool) -> Result<(), Str
 }
 
 #[tauri::command]
-fn poc_set_zoom(window: WebviewWindow, scale_factor: f64) -> Result<(), String> {
+fn poc_set_zoom(
+    window: WebviewWindow,
+    scale_factor: f64,
+    zoom_level: Option<f64>,
+) -> Result<(), String> {
     if !scale_factor.is_finite() || !(0.1..=10.0).contains(&scale_factor) {
         return Err("Zoom scale factor is outside the supported range.".to_string());
+    }
+    // Why: the renderer knows the log-scale level it just applied; tracking it
+    // here keeps `route_menu_zoom`'s per-window map in step with explicit
+    // `window.api.ui.setZoomLevel` calls from secondary windows.
+    if let Some(level) = zoom_level {
+        if level.is_finite() {
+            let map = window_zoom_levels();
+            if let Ok(mut levels) = map.lock() {
+                levels.insert(window.label().to_string(), level);
+            }
+        }
     }
     window
         .set_zoom(scale_factor)
@@ -266,6 +408,15 @@ fn poc_request_close(window: WebviewWindow, state: State<Arc<NativeWindowState>>
     emit_close_request(&window, &state, false);
 }
 
+/// Keep the native close path's minimize-to-tray flag in step with the
+/// persisted renderer setting. The renderer pushes the value on startup and
+/// every settings change so the OS X button and the renderer-drawn X follow
+/// the same rule without a synchronous store read.
+#[tauri::command]
+fn poc_set_minimize_to_tray(state: State<Arc<NativeWindowState>>, enabled: bool) {
+    state.minimize_to_tray.store(enabled, Ordering::SeqCst);
+}
+
 #[tauri::command]
 fn poc_confirm_close(window: WebviewWindow, state: State<Arc<NativeWindowState>>) {
     state.inner().confirm_close();
@@ -285,26 +436,14 @@ fn emit_close_request(window: &WebviewWindow, state: &NativeWindowState, is_quit
 
 #[tauri::command]
 fn poc_popup_menu(window: WebviewWindow) -> Result<(), String> {
+    // Why: Electron's `popupMenu` command pops the *application* menu
+    // (`Menu.getApplicationMenu().popup({ window })`), not a context menu.
+    // Reusing the installed bar keeps accelerators, hints, locale labels and
+    // Appearance checkmarks identical between the two entry points.
     let app = window.app_handle();
-    let menu = Menu::with_items(
-        app,
-        &[
-            &PredefinedMenuItem::undo(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::redo(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::cut(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::copy(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::paste(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::select_all(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::minimize(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::maximize(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::fullscreen(app, None).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?,
-            &PredefinedMenuItem::close_window(app, None).map_err(|error| error.to_string())?,
-        ],
-    )
-    .map_err(|error| error.to_string())?;
+    let menu = app
+        .menu()
+        .ok_or_else(|| "application menu is unavailable".to_string())?;
     menu.popup(window.as_ref().window())
         .map_err(|error| error.to_string())
 }
@@ -457,6 +596,18 @@ fn install_window_state_bridge(window: &WebviewWindow, state: Arc<NativeWindowSt
             if state.close_confirmed.swap(false, Ordering::SeqCst) {
                 return;
             }
+            // Why: Electron's `close` handler runs `hideToTrayIfEnabled` before
+            // `window:close-requested` — Alt+F4 and the OS X button minimize to
+            // tray instead of prompting when the setting is on. Renderer push
+            // keeps the flag readable without a JS round-trip on close.
+            if cfg!(target_os = "windows")
+                && state.minimize_to_tray.load(Ordering::SeqCst)
+                && !state.close_confirmed.load(Ordering::SeqCst)
+            {
+                api.prevent_close();
+                let _ = window_handle.hide();
+                return;
+            }
             // Why: Electron lets the renderer protect running terminals and
             // unsaved editors; Alt+F4 and OS close must go through the same gate.
             api.prevent_close();
@@ -480,6 +631,431 @@ fn install_window_state_bridge(window: &WebviewWindow, state: Arc<NativeWindowSt
     });
 }
 
+/// Second-launch argv delivered while this process owns the single-instance
+/// lock. The renderer pulls them through `poc_consume_second_instance_events`
+/// and resolves OS-opened documents through `poc_resolve_opened_documents`.
+const EVENT_SECOND_INSTANCE: &str = "app:second-instance";
+
+/// Exit code the development supervisor treats as "rebuild and restart"
+/// instead of a shutdown, keeping Vite alive across the relaunch.
+const DEV_RESTART_EXIT_CODE: i32 = 75;
+
+#[derive(Default)]
+struct PendingOpenSettingsState {
+    pending: Mutex<bool>,
+}
+
+impl PendingOpenSettingsState {
+    fn mark(&self) {
+        if let Ok(mut pending) = self.pending.lock() {
+            *pending = true;
+        }
+    }
+
+    fn consume(&self) -> bool {
+        self.pending
+            .lock()
+            .map(|mut pending| std::mem::replace(&mut *pending, false))
+            .unwrap_or(false)
+    }
+}
+
+fn reveal_main_window(app: &AppHandle) {
+    // Why: notifications, second launches and the tray surface the running
+    // window instead of booting a second process against the same profile.
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+#[tauri::command]
+fn poc_reveal_window(app: AppHandle) {
+    reveal_main_window(&app);
+}
+
+#[tauri::command]
+fn poc_relaunch(_app: AppHandle, runtime: State<Arc<OrcadRuntime>>) {
+    // Why: relaunch must not orphan the owned Node runtime, so it waits for
+    // the graceful shutdown first. Exiting with the restart code (instead of
+    // an in-place restart) lets the development supervisor rebuild before
+    // the new process starts and keeps Vite alive across the relaunch.
+    let runtime = Arc::clone(runtime.inner());
+    let _ = runtime.close_owner_and_wait(Duration::from_secs(10));
+    std::process::exit(DEV_RESTART_EXIT_CODE);
+}
+
+// Why: Electron's Force Reload bypasses the HTTP cache
+// (webContents.reloadIgnoringCache); WebView2 exposes no such call, so drive
+// CDP Page.reload with ignoreCache — the same mechanism the guest
+// reloadIgnoringCache path already uses. Non-Windows reports unsupported and
+// the menu falls back to a plain reload.
+const MAIN_FORCE_RELOAD_CDP_METHOD: &str = "Page.reload";
+const MAIN_FORCE_RELOAD_CDP_PARAMS: &str = r#"{"ignoreCache":true}"#;
+
+#[tauri::command]
+async fn poc_main_force_reload(app: AppHandle) -> Result<serde_json::Value, String> {
+    let Some(webview) = app.get_webview("main") else {
+        return Err("main webview is no longer available".to_string());
+    };
+    browser_webview::call_browser_devtools_protocol(
+        webview,
+        MAIN_FORCE_RELOAD_CDP_METHOD,
+        MAIN_FORCE_RELOAD_CDP_PARAMS.to_string(),
+    )
+    .await
+}
+
+#[tauri::command]
+fn poc_consume_second_instance_events(
+    state: State<SecondInstanceState>,
+) -> Vec<SecondInstancePayload> {
+    state.consume()
+}
+
+#[tauri::command]
+fn poc_resolve_opened_documents(paths: Vec<String>) -> Vec<OpenedDocument> {
+    resolve_opened_documents(paths)
+}
+
+#[tauri::command]
+fn poc_consume_pending_open_settings(state: State<PendingOpenSettingsState>) -> bool {
+    state.consume()
+}
+
+fn handle_second_instance_launch(app: &AppHandle, argv: &[String], cwd: &str) {
+    // Why: a second OS launch reuses this process so it cannot clobber the
+    // stores owned by the running runtime; its argv still reaches the
+    // renderer for skill-share links and OS-opened documents.
+    if let Some(state) = app.try_state::<SecondInstanceState>() {
+        let payload = state.record(argv.to_vec(), cwd.to_owned());
+        let _ = app.emit(EVENT_SECOND_INSTANCE, &payload);
+    }
+    if argv.iter().any(|arg| arg == "--open-settings") {
+        if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
+            pending.mark();
+        }
+    }
+    if std::env::var("ORCA_BACKGROUND_LAUNCH").as_deref() != Ok("1") {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn emit_menu_event(app: &AppHandle, channel: &str, payload: impl Serialize + Clone) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit(channel, payload);
+    } else {
+        let _ = app.emit(channel, payload);
+    }
+}
+
+/// Route a renderer-bound menu event to whichever window is focused, falling
+/// back to the main window. Mirrors Electron's `resolveMenuTargetRenderer` —
+/// the popup window the user was looking at gets Setup/Feature-Tour/Crash
+/// Report/Check-For-Updates, not whichever window happened to be created first.
+fn emit_menu_event_focused(app: &AppHandle, channel: &str, payload: impl Serialize + Clone) {
+    for (_label, window) in app.webview_windows() {
+        if window.is_focused().unwrap_or(false) {
+            let _ = window.emit(channel, payload);
+            return;
+        }
+    }
+    emit_menu_event(app, channel, payload);
+}
+
+/// Route a menu edit action (copy/selectAll/paste) into the focused browser
+/// guest when one holds DOM focus, matching Electron's
+/// `webContents.getFocusedWebContents()` → `contents.copy()/selectAll()/paste()`
+/// branch. Falls back to the shared renderer event when no guest claims focus.
+fn route_browser_guest_edit(app: &AppHandle, command: &str) -> bool {
+    let state = match app.try_state::<browser_webview::BrowserWebviewState>() {
+        Some(state) => state,
+        None => return false,
+    };
+    let Some(webview) = browser_webview::last_focused_child_webview(app, &state) else {
+        return false;
+    };
+    // execCommand is sync and idempotent; a rejected eval only loses this one
+    // menu click, so we never surface the error.
+    let _ = webview.eval(&format!("document.execCommand('{}')", command));
+    true
+}
+
+/// Modifier state at the instant a "Check for Updates" menu item fires.
+/// `MenuEvent` carries no modifier bits, so Windows reads them out of
+/// `GetAsyncKeyState`; other platforms report none. Mirrors Electron's
+/// hidden modifier-click affordances in `checkForUpdatesClick`.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckForUpdatesMenuOptions {
+    include_prerelease: bool,
+    include_perf_prerelease: bool,
+    local_build: bool,
+}
+
+fn check_for_updates_menu_options() -> CheckForUpdatesMenuOptions {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            GetAsyncKeyState, VK_CONTROL, VK_SHIFT,
+        };
+        let down = |key: u16| unsafe { GetAsyncKeyState(key as i32) } & (0x8000u16 as i16) != 0;
+        // Why no Alt on Windows: Electron only gives Alt the local-build
+        // meaning on macOS; off macOS it is not a modifier-click variant.
+        return CheckForUpdatesMenuOptions {
+            include_prerelease: down(VK_SHIFT),
+            include_perf_prerelease: down(VK_CONTROL),
+            local_build: false,
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        // Why none here: on macOS the AppKit menu action can read
+        // `NSEvent::modifierFlags`, but no Cocoa binding exists in this shell
+        // yet; Linux has no standard modifier query at menu-click time.
+        CheckForUpdatesMenuOptions {
+            include_prerelease: false,
+            include_perf_prerelease: false,
+            local_build: false,
+        }
+    }
+}
+
+fn handle_menu_event(app: &AppHandle, event: &tauri::menu::MenuEvent) {
+    // Why: every spec entry either acts on the window directly or forwards to
+    // the renderer event the Tauri preload bridge already listens for.
+    let id = event.id();
+    if id == ids::FILE_SETTINGS {
+        if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
+            pending.mark();
+        }
+        emit_menu_event(app, "orca:tauri-ui:openSettings", ());
+    } else if id == ids::FILE_QUIT {
+        if let Some(runtime) = app.try_state::<Arc<OrcadRuntime>>() {
+            runtime.close_owner();
+        }
+        app.exit(0);
+    } else if id == ids::EDIT_PASTE {
+        if !route_browser_guest_edit(app, "paste") {
+            emit_menu_event(app, "orca:tauri-ui:appMenuPaste", ());
+        }
+    } else if id == ids::EDIT_SELECT_ALL {
+        if !route_browser_guest_edit(app, "selectAll") {
+            emit_menu_event(app, "orca:tauri-ui:appMenuSelectionAction", "select-all");
+        }
+    } else if id == ids::EDIT_COPY {
+        if !route_browser_guest_edit(app, "copy") {
+            emit_menu_event(app, "orca:tauri-ui:appMenuSelectionAction", "copy");
+        }
+    } else if id == ids::EDIT_UNDO {
+        emit_menu_event(app, "orca:tauri-ui:appMenuEditAction", "undo");
+    } else if id == ids::EDIT_REDO {
+        emit_menu_event(app, "orca:tauri-ui:appMenuEditAction", "redo");
+    } else if id == ids::VIEW_RELOAD {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval("window.location.reload();");
+        }
+    } else if id == ids::VIEW_FORCE_RELOAD {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if poc_main_force_reload(app.clone()).await.is_err() {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval("window.location.reload();");
+                }
+            }
+        });
+    } else if id == ids::VIEW_TOGGLE_DEVTOOLS {
+        #[cfg(any(debug_assertions, feature = "devtools"))]
+        if let Some(window) = app.get_webview_window("main") {
+            window.open_devtools();
+        }
+    } else if id == ids::VIEW_ZOOM_IN {
+        route_menu_zoom(app, "in");
+    } else if id == ids::VIEW_ZOOM_OUT {
+        route_menu_zoom(app, "out");
+    } else if id == ids::VIEW_ZOOM_RESET {
+        route_menu_zoom(app, "reset");
+    } else if id == ids::VIEW_TOGGLE_LEFT_SIDEBAR {
+        emit_menu_event(app, "orca:tauri-ui:toggleLeftSidebar", ());
+    } else if id == ids::VIEW_TOGGLE_RIGHT_SIDEBAR {
+        emit_menu_event(app, "orca:tauri-ui:toggleRightSidebar", ());
+    } else if id == ids::VIEW_TOGGLE_WORKTREE_PALETTE {
+        emit_menu_event(app, "orca:tauri-ui:toggleWorktreePalette", ());
+    } else if id == ids::VIEW_TOGGLE_STATUS_BAR {
+        emit_menu_event(app, "orca:tauri-ui:toggleStatusBar", ());
+    } else if id == ids::VIEW_APPEARANCE_TASKS {
+        emit_menu_event(app, "orca:tauri-ui:toggleAppearance", "showTasksButton");
+    } else if id == ids::VIEW_APPEARANCE_AUTOMATIONS {
+        emit_menu_event(
+            app,
+            "orca:tauri-ui:toggleAppearance",
+            "showAutomationsButton",
+        );
+    } else if id == ids::VIEW_APPEARANCE_MOBILE {
+        emit_menu_event(app, "orca:tauri-ui:toggleAppearance", "showMobileButton");
+    } else if id == ids::VIEW_APPEARANCE_TITLEBAR {
+        emit_menu_event(app, "orca:tauri-ui:toggleAppearance", "showTitlebarAppName");
+    } else if id == ids::VIEW_TOGGLE_FULLSCREEN {
+        if let Some(window) = app.get_webview_window("main") {
+            if let Ok(fullscreen) = window.is_fullscreen() {
+                let _ = window.set_fullscreen(!fullscreen);
+            }
+        }
+    } else if id == ids::WINDOW_MINIMIZE {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.minimize();
+        }
+    } else if id == ids::WINDOW_ZOOM {
+        if let Some(window) = app.get_webview_window("main") {
+            // Why: macOS `zoom` toggles the window's user zoom state, which is
+            // the same "maximize/restore" pair Tauri exposes through
+            // maximize/unmaximize on other platforms.
+            if let Ok(maximized) = window.is_maximized() {
+                if maximized {
+                    let _ = window.unmaximize();
+                } else {
+                    let _ = window.maximize();
+                }
+            }
+        }
+    } else if id == ids::HELP_CRASH_REPORT {
+        emit_menu_event_focused(app, "orca:tauri-ui:openCrashReport", ());
+    } else if id == ids::HELP_FEATURE_TOUR {
+        emit_menu_event_focused(app, "orca:tauri-ui:openFeatureTour", ());
+    } else if id == ids::HELP_SETUP_GUIDE {
+        emit_menu_event_focused(app, "orca:tauri-ui:openSetupGuide", ());
+    } else if id == ids::HELP_CHECK_FOR_UPDATES {
+        emit_menu_event_focused(
+            app,
+            "orca:tauri-ui:checkForUpdates",
+            check_for_updates_menu_options(),
+        );
+    } else if id == system_tray::ids::TRAY_OPEN {
+        reveal_main_window(app);
+    } else if id == system_tray::ids::TRAY_OPEN_SETTINGS {
+        if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
+            pending.mark();
+        }
+        emit_menu_event(app, "orca:tauri-ui:openSettings", ());
+    } else if id == system_tray::ids::TRAY_CHECK_FOR_UPDATES {
+        reveal_main_window(app);
+        emit_menu_event(app, "orca:tauri-ui:checkForUpdates", ());
+    } else if id == system_tray::ids::TRAY_QUIT {
+        if let Some(runtime) = app.try_state::<Arc<OrcadRuntime>>() {
+            runtime.close_owner();
+        }
+        app.exit(0);
+    }
+    // HELP_ABOUT is a predefined about item and needs no forwarding.
+}
+
+fn handle_tray_click(app: &AppHandle, event: &TrayIconEvent) {
+    // Why: a left-click restores the window on Windows; macOS opens the menu.
+    if let TrayIconEvent::Click {
+        id,
+        button,
+        button_state,
+        ..
+    } = event
+    {
+        if id == system_tray::TRAY_ICON_ID
+            && matches!(button, MouseButton::Left)
+            && matches!(button_state, MouseButtonState::Up)
+            && cfg!(target_os = "windows")
+        {
+            reveal_main_window(app);
+        }
+    }
+}
+
+fn install_application_menu(app: &AppHandle) -> tauri::Result<()> {
+    // Why: the spec is the single source of truth; main only materializes it.
+    // Hints stay display-only so chords keep reaching the terminal or DOM.
+    use tauri::menu::{MenuBuilder, SubmenuBuilder};
+    let platform = MenuPlatform::current();
+    let mut builder = MenuBuilder::new(app);
+    for section in application_menu_bar() {
+        let mut submenu = SubmenuBuilder::new(app, section.label).id(section.id);
+        for entry in &section.entries {
+            submenu = append_menu_entry(app, submenu, entry, platform)?;
+        }
+        builder = builder.item(&submenu.build()?);
+    }
+    app.set_menu(builder.build()?)?;
+    Ok(())
+}
+
+/// Gives macOS the native traffic lights Electron has. The shared config
+/// window stays frameless for the Windows/Linux custom titlebar, so macOS
+/// restores decorations here; Overlay style and the (16, 12) inset ship in
+/// tauri.conf (both are mac-only there) and tao re-applies the stored inset
+/// on every redraw. Zoom-level repositioning has no Tauri runtime setter, so
+/// the lights stay at the 1x spot until creation-time wiring lands.
+fn apply_macos_window_chrome(window: &WebviewWindow) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let _ = window.set_decorations(true);
+}
+
+#[allow(clippy::needless_lifetimes)]
+fn append_menu_entry<'a>(
+    app: &'a AppHandle,
+    builder: tauri::menu::SubmenuBuilder<'a, tauri::Wry, AppHandle>,
+    entry: &MenuEntry,
+    platform: MenuPlatform,
+) -> tauri::Result<tauri::menu::SubmenuBuilder<'a, tauri::Wry, AppHandle>> {
+    use tauri::menu::{CheckMenuItemBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+    match entry {
+        MenuEntry::Separator => Ok(builder.separator()),
+        MenuEntry::Undo => Ok(builder.item(&PredefinedMenuItem::undo(app, None)?)),
+        MenuEntry::Redo => Ok(builder.item(&PredefinedMenuItem::redo(app, None)?)),
+        MenuEntry::Cut => Ok(builder.item(&PredefinedMenuItem::cut(app, None)?)),
+        MenuEntry::Copy => Ok(builder.item(&PredefinedMenuItem::copy(app, None)?)),
+        MenuEntry::Services => Ok(builder.item(&PredefinedMenuItem::services(app, None)?)),
+        MenuEntry::Hide => Ok(builder.item(&PredefinedMenuItem::hide(app, None)?)),
+        MenuEntry::HideOthers => Ok(builder.item(&PredefinedMenuItem::hide_others(app, None)?)),
+        MenuEntry::ShowAll => Ok(builder.item(&PredefinedMenuItem::show_all(app, None)?)),
+        MenuEntry::Submenu { id, label, entries } => {
+            let mut nested = SubmenuBuilder::new(app, *label).id(*id);
+            for nested_entry in entries {
+                nested = append_menu_entry(app, nested, nested_entry, platform)?;
+            }
+            Ok(builder.item(&nested.build()?))
+        }
+        MenuEntry::Custom(item) => {
+            if item.id == ids::HELP_ABOUT {
+                return Ok(builder.item(&PredefinedMenuItem::about(
+                    app,
+                    Some("About Orca"),
+                    None,
+                )?));
+            }
+            if let Some(checked) = item.checked {
+                // Why: the spec marks appearance toggles checked; the menu
+                // owns this visual while the renderer owns the live state.
+                let mut check = CheckMenuItemBuilder::with_id(item.id, item.display_text(platform))
+                    .checked(checked);
+                if let Some(accelerator) = item.accelerator(platform) {
+                    check = check.accelerator(accelerator);
+                }
+                return Ok(builder.item(&check.build(app)?));
+            }
+            let mut custom = MenuItemBuilder::with_id(item.id, item.display_text(platform));
+            if let Some(accelerator) = item.accelerator(platform) {
+                custom = custom.accelerator(accelerator);
+            }
+            Ok(builder.item(&custom.build(app)?))
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -489,6 +1065,44 @@ fn main() {
                 .open_js_links_on_click(false)
                 .build(),
         )
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            handle_second_instance_launch(app, &argv, &cwd);
+        }))
+        .register_uri_scheme_protocol("orca-preview", |ctx, request| {
+            let uri = request.uri().to_string();
+            doc_preview::handle_protocol_request(ctx.app_handle(), &uri)
+        })
+        .on_menu_event(|app, event| {
+            handle_menu_event(app, &event);
+        })
+        .on_tray_icon_event(|app, event| {
+            handle_tray_click(app, &event);
+        })
+        .on_window_event(|window, event| {
+            // Why: the owned Node runtime shuts down gracefully on stdin EOF,
+            // so closing its owner here keeps a window close from orphaning it.
+            if matches!(event, WindowEvent::Destroyed) && window.label() == "main" {
+                // Why: temp-file downloads must not outlive the window that
+                // started them; the runtime gets the same graceful EOF close.
+                if let Some(sessions) = window
+                    .app_handle()
+                    .try_state::<filesystem_download::DownloadSessions>()
+                {
+                    sessions.cancel_all();
+                }
+                if let Some(sessions) = window
+                    .app_handle()
+                    .try_state::<filesystem_download::FolderDownloadSessions>()
+                {
+                    sessions.cancel_all();
+                }
+                if let Some(runtime) = window.app_handle().try_state::<Arc<OrcadRuntime>>() {
+                    runtime.close_owner();
+                }
+                agent_awake::release_agent_awake_blocker(window.app_handle());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             poc_host_info,
             poc_path_exists,
@@ -505,20 +1119,174 @@ fn main() {
             poc_set_zoom,
             poc_get_zoom,
             poc_set_focus,
+            poc_reveal_window,
+            poc_relaunch,
+            poc_main_force_reload,
+            poc_consume_second_instance_events,
+            poc_consume_pending_open_settings,
+            poc_resolve_opened_documents,
             poc_request_close,
             poc_confirm_close,
+            poc_set_minimize_to_tray,
             poc_popup_menu,
             poc_emit_zoom,
             poc_notification_sound_path,
-            poc_validate_dropped_paths
+            poc_validate_dropped_paths,
+            menu_appearance::poc_menu_set_appearance_checks,
+            menu_hints::poc_menu_set_hints,
+            system_tray::poc_tray_ensure,
+            system_tray::poc_tray_set_attention,
+            system_tray::poc_tray_rebuild,
+            system_tray::poc_tray_set_visible,
+            system_tray::poc_tray_destroy,
+            ai_vault_delete::poc_trash_ai_vault_session,
+            browser_cdp_events::poc_browser_cdp_subscribe,
+            browser_cdp_events::poc_browser_cdp_unsubscribe,
+            browser_identity::poc_browser_identity_get,
+            browser_identity::poc_browser_identity_set,
+            browser_identity::poc_browser_identity_set_renderer_user_agent,
+            browser_session::poc_browser_session_list_profiles,
+            browser_session::poc_browser_session_create_profile,
+            browser_session::poc_browser_session_delete_profile,
+            browser_session::poc_browser_session_resolve_partition,
+            browser_session::poc_browser_session_detect_browsers,
+            browser_session::poc_browser_session_import_cookies,
+            browser_session::poc_browser_session_import_from_browser,
+            browser_session::poc_browser_session_clear_default_cookies,
+            browser_client_route_sources::poc_browser_client_route_list_sources,
+            browser_client_route_sources::poc_browser_client_route_record_source,
+            browser_client_route_authority::poc_browser_client_route_close_authority,
+            browser_client_route_authority::poc_browser_client_route_note_authority,
+            browser_client_route_partitions::poc_browser_client_route_resolve_partition,
+            browser_client_route_partitions::poc_browser_client_route_import_from_browser,
+            browser_upload_staging::poc_browser_stage_upload_chunk,
+            browser_upload_staging::poc_browser_discard_staged_upload,
+            browser_upload_staging::poc_browser_relay_download_chunk,
+            browser_upload_staging::poc_browser_cleanup_relayed_download,
+            browser_webview::poc_browser_create,
+            browser_webview::poc_browser_close,
+            browser_webview::poc_browser_proceed_certificate,
+            browser_webview::poc_browser_cancel_download,
+            browser_webview::poc_browser_open_devtools,
+            browser_webview::poc_browser_set_viewport_override,
+            browser_webview::poc_browser_set_bounds,
+            browser_webview::poc_browser_set_visible,
+            browser_webview::poc_browser_navigate,
+            browser_webview::poc_browser_go_back,
+            browser_webview::poc_browser_go_forward,
+            browser_webview::poc_browser_reload,
+            browser_webview::poc_browser_stop,
+            browser_webview::poc_browser_focus,
+            browser_webview::poc_browser_set_zoom,
+            browser_webview::poc_browser_find,
+            browser_webview::poc_browser_set_handled_shortcuts,
+            browser_webview::poc_browser_agent_input_begin,
+            browser_webview::poc_browser_agent_input_end,
+            browser_webview::poc_browser_get_handled_shortcuts,
+            browser_webview::poc_browser_cdp,
+            browser_webview::poc_browser_cdp_session,
+            browser_webview::poc_browser_set_grab_mode,
+            browser_webview::poc_browser_await_grab_selection,
+            browser_webview::poc_browser_cancel_grab,
+            browser_webview::poc_browser_extract_hover_payload,
+            browser_webview::poc_browser_capture_selection_screenshot,
+            browser_webview::poc_browser_set_annotation_viewport_bridge,
+            clipboard_files::poc_clipboard_read_file_paths,
+            clipboard_files::poc_clipboard_write_file,
+            clipboard_files::poc_clipboard_restore_native_chat_pastes,
+            agent_awake::poc_agent_awake_set_active,
+            agent_awake::poc_agent_awake_status,
+            crash_reports::poc_crash_reports_get_latest_pending,
+            crash_reports::poc_crash_reports_get_latest,
+            crash_reports::poc_crash_reports_get_requested,
+            crash_reports::poc_crash_reports_dismiss,
+            crash_reports::poc_crash_reports_record_breadcrumb,
+            crash_reports::poc_crash_reports_record_renderer_error,
+            crash_reports::poc_crash_reports_submit,
+            diagnostics::poc_diagnostics_get_status,
+            diagnostics::poc_diagnostics_collect_bundle,
+            diagnostics::poc_diagnostics_open_bundle_preview,
+            diagnostics::poc_diagnostics_upload_bundle,
+            diagnostics::poc_diagnostics_delete_bundle,
+            diagnostics::poc_diagnostics_discard_bundle_preview,
+            doc_preview::poc_doc_preview_mint_grant,
+            doc_preview::poc_doc_preview_revoke_grant,
+            doc_preview::poc_doc_preview_authorize_directory,
+            doc_preview::poc_doc_preview_cache_file,
+            external_editor::poc_open_external_editor,
+            filesystem_download::poc_start_downloaded_folder,
+            filesystem_download::poc_finish_downloaded_folder,
+            filesystem_download::poc_cancel_downloaded_folder,
+            filesystem_download::poc_save_downloaded_file,
+            filesystem_download::poc_start_downloaded_file,
+            filesystem_download::poc_append_downloaded_file_chunk,
+            filesystem_download::poc_finish_downloaded_file,
+            filesystem_download::poc_cancel_downloaded_file,
+            filesystem_import::poc_import_external_paths,
+            filesystem_upload::poc_stage_external_paths,
+            filesystem_upload::poc_read_external_file_chunk,
+            local_log_tail::poc_read_local_log_tail,
+            local_log_tail::poc_read_local_log_snapshot,
+            local_log_tail::poc_start_local_log_tail,
+            local_log_tail::poc_stop_local_log_tail,
+            runtime_process::poc_runtime_pairing,
+            runtime_process::poc_runtime_status,
+            updater::poc_updater_get_version,
+            updater::poc_updater_get_status,
+            updater::poc_updater_check,
+            updater::poc_updater_list_builds,
+            updater::poc_updater_download,
+            updater::poc_updater_quit_and_install,
+            updater::poc_updater_dismiss_nudge,
+            updater::poc_updater_dismiss_available_update,
+            workspace_space::poc_workspace_space_open,
+            workspace_space::poc_workspace_space_close,
+            workspace_space::poc_workspace_space_publish_window_state,
+            workspace_space::poc_workspace_space_request_window_state,
+            workspace_space::poc_workspace_space_reveal_worktree,
+            workspace_space::poc_workspace_space_request_worktree_refresh,
+            workspace_space::poc_workspace_space_publish_window_analysis,
+            workspace_space::poc_workspace_space_analyze,
+            workspace_space::poc_workspace_space_cancel,
+            workspace_space::poc_workspace_space_get_cached_analysis
         ])
         .setup(|app| {
+            app.manage(browser_webview::BrowserWebviewState::default());
+            app.manage(browser_cdp_events::BrowserCdpEventState::default());
+            app.manage(browser_identity::BrowserIdentityState::from_app(
+                app.handle(),
+            ));
+            app.manage(browser_session::BrowserSessionState::from_app(app.handle()));
+            app.manage(
+                browser_client_route_sources::ClientRouteImportSourceState::from_app(app.handle()),
+            );
+            app.manage(
+                browser_client_route_partitions::ClientRoutePartitionStore::from_app(app.handle()),
+            );
+            app.manage(browser_client_route_authority::ClientRouteAuthorityState::default());
+            app.manage(browser_upload_staging::BrowserUploadStagingState::default());
+            app.manage(doc_preview::DocPreviewState::default());
+            app.manage(local_log_tail::LocalLogTailState::default());
+            app.manage(diagnostics::DiagnosticsState::default());
+            app.manage(crash_reports::CrashReportState::default());
+            app.manage(SecondInstanceState::default());
+            app.manage(system_tray::SystemTrayState::default());
+            app.manage(PendingOpenSettingsState::default());
+            app.manage(updater::UpdaterState::default());
+            app.manage(agent_awake::AgentAwakeState::default());
+            app.manage(filesystem_download::DownloadSessions::default());
+            app.manage(filesystem_download::FolderDownloadSessions::default());
+            let resource_root = app.path().resource_dir().ok();
+            app.manage(Arc::new(OrcadRuntime::new(resource_root)));
+
             let window = app
                 .get_webview_window("main")
                 .ok_or_else(|| tauri::Error::AssetNotFound("main window".to_string()))?;
+            apply_macos_window_chrome(&window);
             let state = Arc::new(NativeWindowState::default());
             app.manage(Arc::clone(&state));
             install_window_state_bridge(&window, state);
+            install_application_menu(app.handle())?;
             install_poc_badge(app.handle())?;
             Ok(())
         })
@@ -528,7 +1296,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::poc_host_info;
+    use super::{poc_host_info, step_ui_zoom_level, UI_ZOOM_MAX, UI_ZOOM_MIN};
 
     #[test]
     fn host_info_identifies_the_tauri_transport() {
@@ -537,5 +1305,41 @@ mod tests {
         assert_eq!(info.host, "tauri");
         assert_eq!(info.transport, "rust-command");
         assert_eq!(info.runtime, "Tauri 2");
+    }
+
+    #[test]
+    fn main_force_reload_bypasses_the_http_cache() {
+        assert_eq!(super::MAIN_FORCE_RELOAD_CDP_METHOD, "Page.reload");
+        let params: serde_json::Value = serde_json::from_str(super::MAIN_FORCE_RELOAD_CDP_PARAMS)
+            .expect("force-reload params are static JSON");
+        assert_eq!(
+            params.get("ignoreCache"),
+            Some(&serde_json::Value::Bool(true))
+        );
+    }
+
+    #[test]
+    fn tauri_conf_pins_macos_traffic_light_chrome() {
+        // Why: Overlay + inset are mac-only in the Tauri runtime but live in
+        // the shared config, so this locks the Electron-mirrored values
+        // (hiddenInset-equivalent chrome, x16/y12 at 1x zoom) in place.
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json parses");
+        let main = &conf["app"]["windows"][0];
+        assert_eq!(main["decorations"], false);
+        assert_eq!(main["titleBarStyle"], "Overlay");
+        assert_eq!(
+            main["trafficLightPosition"],
+            serde_json::json!({ "x": 16, "y": 12 })
+        );
+    }
+
+    #[test]
+    fn menu_zoom_steps_clamp_to_the_shared_ui_range() {
+        assert_eq!(step_ui_zoom_level(0.0, "in"), 0.5);
+        assert_eq!(step_ui_zoom_level(0.0, "out"), -0.5);
+        assert_eq!(step_ui_zoom_level(1.5, "reset"), 0.0);
+        assert_eq!(step_ui_zoom_level(UI_ZOOM_MAX, "in"), UI_ZOOM_MAX);
+        assert_eq!(step_ui_zoom_level(UI_ZOOM_MIN, "out"), UI_ZOOM_MIN);
     }
 }

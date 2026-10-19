@@ -20,6 +20,10 @@ export async function sweepAbandonedRuntimeUploadTempPath(
   userDataPath: string,
   args: RuntimeUploadFileStreamRequest
 ): Promise<void> {
+  // Local direct-SSH uploads have no paired runtime to sweep.
+  if (!args.environmentId) {
+    return
+  }
   for (let attempt = 0; attempt < RUNTIME_UPLOAD_SWEEP_ATTEMPTS; attempt += 1) {
     if (attempt > 0) {
       await setTimeout(RUNTIME_UPLOAD_SWEEP_SETTLE_MS)

@@ -1,6 +1,7 @@
 import { codexOpenCodeTokenSessions } from '../usage/agent-token-usage'
-import { app } from 'electron'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import type {
   OpenCodeUsageBreakdownKind,
   OpenCodeUsageBreakdownRow,
@@ -34,13 +35,39 @@ import { splitUsageCacheFileViaWorker } from '../usage/usage-scan-worker-spawn'
 
 let _openCodeUsageFile: string | null = null
 
-export function initOpenCodeUsagePath(): void {
-  _openCodeUsageFile = join(app.getPath('userData'), 'orca-opencode-usage.json')
+const require = createRequire(import.meta.url)
+
+function defaultUserDataPath(): string {
+  if (hasAppEnvironment()) {
+    return getAppEnvironment().getPath('userData')
+  }
+  const electron: unknown = require('electron')
+  if (
+    typeof electron === 'object' &&
+    electron !== null &&
+    'app' in electron &&
+    typeof electron.app === 'object' &&
+    electron.app !== null &&
+    'getPath' in electron.app &&
+    typeof electron.app.getPath === 'function'
+  ) {
+    return electron.app.getPath('userData')
+  }
+  throw new Error('Electron app environment is unavailable')
+}
+
+export function initOpenCodeUsagePath(userDataPath?: string): void {
+  _openCodeUsageFile = join(userDataPath ?? defaultUserDataPath(), 'orca-opencode-usage.json')
 }
 
 function getOpenCodeUsageFile(): string {
+  const file = _openCodeUsageFile
+  if (file) {
+    return file
+  }
+  initOpenCodeUsagePath()
   if (!_openCodeUsageFile) {
-    _openCodeUsageFile = join(app.getPath('userData'), 'orca-opencode-usage.json')
+    throw new Error('OpenCode usage path is unavailable')
   }
   return _openCodeUsageFile
 }
@@ -50,14 +77,17 @@ export class OpenCodeUsageStore extends UsageProviderStoreLifecycle<
   OpenCodeUsagePersistedState,
   'hasAnyOpenCodeData'
 > {
-  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>) {
+  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>, userDataPath?: string) {
+    const cacheFile = userDataPath
+      ? join(userDataPath, 'orca-opencode-usage.json')
+      : getOpenCodeUsageFile()
     super(store, {
       tokenUsage: {
         provider: 'opencode',
         selectSessions: (state) => codexOpenCodeTokenSessions(state.sessions)
       },
       logTag: '[opencode-usage]',
-      resolveCacheFile: getOpenCodeUsageFile,
+      resolveCacheFile: () => cacheFile,
       createDefaultState: getDefaultState,
       normalizeState: normalizePersistedState,
       sourceKey: 'processedDatabases',

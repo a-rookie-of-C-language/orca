@@ -1,13 +1,15 @@
 import { ipcRenderer } from 'electron'
 import type {
   WorkspaceSpaceAnalysis,
+  WorkspaceSpaceAnalyzeInput,
   WorkspaceSpaceScanProgress
 } from '../../shared/workspace-space-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { PreloadApi } from '../api-types'
 
 export const workspaceSpaceApi = {
-  analyze: () => ipcRenderer.invoke('workspaceSpace:analyze'),
+  analyze: (input?: WorkspaceSpaceAnalyzeInput) =>
+    ipcRenderer.invoke('workspaceSpace:analyze', input),
   getCachedAnalysis: () => ipcRenderer.invoke('workspaceSpace:getCachedAnalysis'),
   cancel: () => ipcRenderer.invoke('workspaceSpace:cancel'),
   openWindow: () => ipcRenderer.invoke('workspaceSpace:openWindow'),

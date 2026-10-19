@@ -385,6 +385,20 @@ describe('mergeWorkspaceSessionsFromHosts', () => {
     expect(merged.activeRepoId).toBe('runtime-repo')
   })
 
+  it('falls back to a non-local focus when the local slice has no active workspace', () => {
+    const merged = mergeWorkspaceSessionsFromHosts({
+      [LOCAL_EXECUTION_HOST_ID]: getDefaultWorkspaceSession(),
+      [RUNTIME_A]: {
+        ...getDefaultWorkspaceSession(),
+        activeRepoId: 'runtime-repo',
+        activeWorktreeId: 'runtime-repo::/worktree'
+      }
+    })
+
+    expect(merged.activeRepoId).toBe('runtime-repo')
+    expect(merged.activeWorktreeId).toBe('runtime-repo::/worktree')
+  })
+
   it('tolerates missing and empty slices', () => {
     const merged = mergeWorkspaceSessionsFromHosts({})
     expect(merged.tabsByWorktree).toBeUndefined()

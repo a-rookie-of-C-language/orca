@@ -20,7 +20,6 @@ import {
   TerminalWait
 } from '../../../../../shared/rpc-contract/terminal-unary-params'
 import { TerminalResizeForClient } from '../../../../../shared/rpc-contract/terminal-stream-params'
-
 export const TERMINAL_LIFECYCLE_METHODS = [
   defineMethod({
     name: 'terminal.wait',
@@ -58,6 +57,10 @@ export const TERMINAL_LIFECYCLE_METHODS = [
           (canonicalWorktreeSelector, preAllocatedHandle) =>
             runtime.createTerminal(canonicalWorktreeSelector, {
               command: params.command,
+              cwd: params.cwd,
+              ...(params.cols !== undefined && params.rows !== undefined
+                ? { initialSize: { cols: params.cols, rows: params.rows } }
+                : {}),
               terminalImageViewerSupported: terminalImageViewerSupported(context),
               ...(params.shell ? { shellOverride: params.shell } : {}),
               startupCommandDelivery: params.startupCommandDelivery,

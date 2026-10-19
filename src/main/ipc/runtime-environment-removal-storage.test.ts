@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { retireBrowserRoutePartitionStorageForEnvironment } from '../browser/browser-route-partition-storage-retirement'
+import { setRuntimeEnvironmentBrowserStorageCleanup } from './runtime-environment-removal-cleanup'
 
 const { handleMock, clearStorageMock, removeEnvironmentMock, resolveEnvironmentMock } = vi.hoisted(
   () => ({
@@ -18,10 +20,6 @@ vi.mock('../../shared/runtime-environment-store', () => ({
   resolveEnvironment: resolveEnvironmentMock
 }))
 
-vi.mock('../browser/browser-route-partition-storage-runtime', () => ({
-  clearBrowserRoutePartitionStorageForEnvironment: clearStorageMock
-}))
-
 import { registerRuntimeEnvironmentConnectivityHandlers } from './runtime-environment-connectivity-handlers'
 
 const environment = { id: 'environment-a', name: 'desk', runtimeId: 'runtime-a', endpoints: [] }
@@ -35,6 +33,12 @@ function removeHandler(): (event: unknown, args: { selector: string }) => unknow
 beforeEach(() => {
   handleMock.mockReset()
   clearStorageMock.mockReset()
+  setRuntimeEnvironmentBrowserStorageCleanup({
+    clearStorage: clearStorageMock,
+    async retireStorage(options) {
+      await retireBrowserRoutePartitionStorageForEnvironment(options)
+    }
+  })
   removeEnvironmentMock.mockReset().mockReturnValue(environment)
   resolveEnvironmentMock.mockReset().mockReturnValue(environment)
 })

@@ -32,6 +32,12 @@ import { buildDocPreviewShareControl } from './doc-preview-artifact-share'
 import { useDocPreviewWebviewHistory } from './doc-preview-webview-history'
 import { useDocPreviewGuestFocus } from './use-doc-preview-guest-focus'
 import { useDocPreviewGuestTools } from './use-doc-preview-guest-tools'
+import { joinPath } from '@/lib/path'
+import {
+  cacheDirectSshFilePreview,
+  isDirectSshFileContext
+} from '@/runtime/runtime-direct-ssh-file-read'
+import { isTauriNativeHost } from '@/web/tauri-native-bridge'
 
 type PreviewState = 'loading' | 'ready' | 'unavailable'
 
@@ -178,6 +184,20 @@ export function HtmlDocPreview({
     // Why: an unreadable document answers with a status the guest renders as text, so the reason
     // arrives out-of-band. Subscribe before minting so the entry document's failure cannot be missed.
     let boundGrantId: string | null = null
+    const pendingRemoteResources = new Set<string>()
+    let reloadQueued = false
+    const queueRemoteResourceReload = (): void => {
+      if (reloadQueued) {
+        return
+      }
+      reloadQueued = true
+      window.setTimeout(() => {
+        reloadQueued = false
+        if (!disposed) {
+          reloadRef.current?.()
+        }
+      }, 0)
+    }
     const unsubscribeFailure = window.api.docPreview?.onLoadFailure?.((payload) => {
       if (disposed || payload.grantId !== boundGrantId) {
         return
@@ -203,10 +223,68 @@ export function HtmlDocPreview({
           : [...current, payload]
       )
     })
+    const unsubscribeResource = window.api.docPreview?.onResourceRequested?.((payload) => {
+      if (
+        disposed ||
+        request.owner.kind !== 'ssh' ||
+        boundGrantId !== payload.grantId ||
+        payload.browserPageId !== previewId ||
+        pendingRemoteResources.has(payload.relativePath)
+      ) {
+        return
+      }
+      const remoteContext = {
+        target: { kind: 'local' as const },
+        connectionId: request.owner.connectionId
+      }
+      if (!isDirectSshFileContext(remoteContext)) {
+        return
+      }
+      pendingRemoteResources.add(payload.relativePath)
+      void cacheDirectSshFilePreview(
+        remoteContext,
+        payload.grantId,
+        payload.relativePath,
+        joinPath(request.requestBase, payload.relativePath)
+      )
+        .then((cached) => {
+          if (cached) {
+            queueRemoteResourceReload()
+          }
+        })
+        .catch(() => {})
+        .finally(() => pendingRemoteResources.delete(payload.relativePath))
+    })
     void ensureDocPreviewGrant(previewId, request)
       .then((handle) => {
         boundGrantId = handle.grantId
         if (disposed || !containerRef.current) {
+          return null
+        }
+        if (request.owner.kind === 'ssh' && isTauriNativeHost()) {
+          const remoteContext = {
+            target: { kind: 'local' as const },
+            connectionId: request.owner.connectionId
+          }
+          if (!isDirectSshFileContext(remoteContext)) {
+            throw new Error('SSH document preview is unavailable in this client.')
+          }
+          return cacheDirectSshFilePreview(
+            remoteContext,
+            handle.grantId,
+            request.entryRelativePath,
+            joinPath(request.requestBase, request.entryRelativePath)
+          ).then((cached) => {
+            if (!cached) {
+              throw new Error('SSH document preview entry could not be cached.')
+            }
+            return handle
+          })
+        }
+        return handle
+      })
+      .then((handle) => {
+        if (!handle || disposed || !containerRef.current) {
           return
         }
         const attached = attachDocPreviewWebview({
@@ -252,6 +330,7 @@ export function HtmlDocPreview({
       reloadRef.current = null
       webviewRef.current = null
       unsubscribeFailure?.()
+      unsubscribeResource?.()
       detach?.()
     }
   }, [

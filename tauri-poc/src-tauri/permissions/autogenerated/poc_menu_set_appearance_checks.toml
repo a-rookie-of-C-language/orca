@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-menu-set-appearance-checks"
+description = "Enables the poc_menu_set_appearance_checks command without any pre-configured scope."
+commands.allow = ["poc_menu_set_appearance_checks"]
+
+[[permission]]
+identifier = "deny-poc-menu-set-appearance-checks"
+description = "Denies the poc_menu_set_appearance_checks command without any pre-configured scope."
+commands.deny = ["poc_menu_set_appearance_checks"]

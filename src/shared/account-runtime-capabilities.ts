@@ -2,12 +2,16 @@ export const CODEX_RESET_CREDIT_RUNTIME_CAPABILITY = 'accounts.codex-reset-credi
 export const ACCOUNT_IMPORT_RUNTIME_CAPABILITY = 'accounts.import-host-credentials.v1' as const
 // Why: `orca account add claude` signs in to an account folder the host creates first.
 export const CLAUDE_SIGN_IN_RUNTIME_CAPABILITY = 'accounts.claude-sign-in.v1' as const
+// Why: Tauri owns the local account services but reaches them through the paired runtime socket.
+export const TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY =
+  'accounts.tauri-desktop-control.v1' as const
 export const ANTIGRAVITY_ACCOUNTS_RUNTIME_CAPABILITY = 'accounts.antigravity-native.v1' as const
 export const DATA_ACCOUNT_RUNTIME_CAPABILITY = 'accounts.managed-data-profiles.v1' as const
 
 export const ACCOUNT_RUNTIME_CAPABILITIES = [
   ACCOUNT_IMPORT_RUNTIME_CAPABILITY,
   CLAUDE_SIGN_IN_RUNTIME_CAPABILITY,
+  TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY,
   ANTIGRAVITY_ACCOUNTS_RUNTIME_CAPABILITY,
   DATA_ACCOUNT_RUNTIME_CAPABILITY,
   CODEX_RESET_CREDIT_RUNTIME_CAPABILITY

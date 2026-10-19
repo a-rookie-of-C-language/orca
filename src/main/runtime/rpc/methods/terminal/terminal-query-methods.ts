@@ -3,6 +3,7 @@ import { remoteFileContentBudget } from '../files-remote-content-budget'
 import { remoteRpcResultExceedsContentBudget } from '../../../../../shared/remote-rpc-content-budget'
 import {
   TerminalHandle,
+  TerminalBufferSnapshot,
   TerminalInspectProcess,
   TerminalListParams,
   TerminalRead,
@@ -85,6 +86,25 @@ export const TERMINAL_QUERY_METHODS = [
         screen: params.screen
       })
     })
+  }),
+  defineMethod({
+    name: 'terminal.bufferSnapshot',
+    permission: 'workspace',
+    params: TerminalBufferSnapshot,
+    handler: async (params, { runtime }) => {
+      const terminal = await runtime.showTerminal(params.terminal)
+      if (!terminal.ptyId) {
+        return { snapshot: null }
+      }
+      const snapshotOptions =
+        params.scrollbackRows === undefined ? {} : { scrollbackRows: params.scrollbackRows }
+      return {
+        snapshot: await runtime.serializeAuthoritativeTerminalBuffer(
+          terminal.ptyId,
+          snapshotOptions
+        )
+      }
+    }
   }),
   defineMethod({
     name: 'terminal.inspectProcess',

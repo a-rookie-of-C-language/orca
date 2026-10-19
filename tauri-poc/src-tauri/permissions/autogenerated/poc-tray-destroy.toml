@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-tray-destroy"
+description = "Enables the poc_tray_destroy command without any pre-configured scope."
+commands.allow = ["poc_tray_destroy"]
+
+[[permission]]
+identifier = "deny-poc-tray-destroy"
+description = "Denies the poc_tray_destroy command without any pre-configured scope."
+commands.deny = ["poc_tray_destroy"]

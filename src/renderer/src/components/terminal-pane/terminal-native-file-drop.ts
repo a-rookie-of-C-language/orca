@@ -22,6 +22,8 @@ import { joinRuntimeTerminalDropDir } from './terminal-drop-worktree-path'
 import type { captureTerminalDropTransportOwner } from './terminal-drop-transport-owner'
 import { toLocalWslDropPath } from './terminal-drop-local-wsl'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { isTauriNativeHost } from '@/web/tauri-native-host'
 
 export async function deliverNativeTerminalFileDrop(
   args: NativeDropFlowArgs & {
@@ -52,8 +54,8 @@ export async function deliverNativeTerminalFileDrop(
       tabId,
       worktreeId,
       worktreePath,
-      ...owner,
-      runtimeEnvironmentId: owner.runtimeEnvironmentId
+      runtimeTarget: runtimeTargetForOwnerEnvironment(owner.runtimeEnvironmentId),
+      ...owner
     })
     return
   }
@@ -91,6 +93,23 @@ export async function deliverNativeTerminalFileDrop(
     return
   }
 
+  if (isTauriNativeHost()) {
+    await uploadRuntimeDropPaths({
+      ...owner,
+      connectionId,
+      dataPaths,
+      dropTarget,
+      manager,
+      paneTransports,
+      pane,
+      tabId,
+      worktreePath,
+      runtimeTarget: { kind: 'local' },
+      worktreeId
+    })
+    return
+  }
+
   await uploadRemoteDropPaths({
     ...owner,
     connectionId,
@@ -121,7 +140,8 @@ export type NativeDropFlowArgs = {
 
 async function uploadRuntimeDropPaths(
   args: NativeDropFlowArgs & {
-    runtimeEnvironmentId: string
+    runtimeTarget: RuntimeClientTarget
+    connectionId?: string | null
     worktreeId: string
   }
 ): Promise<void> {
@@ -139,9 +159,10 @@ async function uploadRuntimeDropPaths(
       {
         // Why: drops into existing worktrees must follow the worktree owner,
         // not the currently focused host in the sidebar.
-        target: runtimeTargetForOwnerEnvironment(args.runtimeEnvironmentId),
+        target: args.runtimeTarget,
         worktreeId: args.worktreeId,
         worktreePath: args.worktreePath,
+        connectionId: args.connectionId ?? undefined,
         expectedExecutionHostId: args.expectedExecutionHostId,
         expectedSshTargetId: args.expectedSshTargetId,
         expectedSshConnectionGeneration: args.expectedSshConnectionGeneration

@@ -6,7 +6,7 @@ import {
   assertLocalFilesystemFallbackAllowed,
   canReadRelativeRuntimeFile,
   getRelativePathInsideWorktree,
-  getRemoteFileArgs,
+  getRemoteFileMutationArgs,
   withSshMutationExpectation
 } from './runtime-file-routing'
 import { callRuntimeFileMutation } from './runtime-file-mutation-rpc'
@@ -34,7 +34,7 @@ export async function readRuntimeDirectory(
   dirPath: string,
   options: { followSymlinks?: boolean } = {}
 ): Promise<DirEntry[]> {
-  const remoteArgs = getRemoteFileArgs(context, dirPath)
+  const remoteArgs = getRemoteFileMutationArgs(context, dirPath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
     return window.api.fs.readDir({ dirPath, connectionId: context.connectionId, ...options })
@@ -53,7 +53,7 @@ export async function writeRuntimeFile(
   content: string,
   access?: LocalFileAccess
 ): Promise<void> {
-  const remoteArgs = getRemoteFileArgs(context, filePath)
+  const remoteArgs = getRemoteFileMutationArgs(context, filePath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
     await window.api.fs.writeFile(
@@ -84,7 +84,7 @@ export async function createRuntimePath(
   path: string,
   kind: 'file' | 'directory'
 ): Promise<void> {
-  const remoteArgs = getRemoteFileArgs(context, path)
+  const remoteArgs = getRemoteFileMutationArgs(context, path)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
     await (kind === 'directory'
@@ -116,7 +116,7 @@ export async function renameRuntimePath(
   newPath: string,
   access?: LocalFileAccess
 ): Promise<void> {
-  const oldRemoteArgs = getRemoteFileArgs(context, oldPath)
+  const oldRemoteArgs = getRemoteFileMutationArgs(context, oldPath)
   const newRelativePath = getRelativePathInsideWorktree(context.worktreePath, newPath)
   if (!oldRemoteArgs || newRelativePath === null) {
     assertLocalFilesystemFallbackAllowed(context)
@@ -147,8 +147,8 @@ export async function copyRuntimePath(
   sourcePath: string,
   destinationPath: string
 ): Promise<void> {
-  const sourceArgs = getRemoteFileArgs(context, sourcePath)
-  const destinationArgs = getRemoteFileArgs(context, destinationPath)
+  const sourceArgs = getRemoteFileMutationArgs(context, sourcePath)
+  const destinationArgs = getRemoteFileMutationArgs(context, destinationPath)
   if (!sourceArgs || !destinationArgs) {
     assertLocalFilesystemFallbackAllowed(context)
     await window.api.fs.copy(
@@ -177,7 +177,7 @@ export async function deleteRuntimePath(
   targetPath: string,
   recursive?: boolean
 ): Promise<void> {
-  const remoteArgs = getRemoteFileArgs(context, targetPath)
+  const remoteArgs = getRemoteFileMutationArgs(context, targetPath)
   if (!remoteArgs) {
     assertLocalFilesystemFallbackAllowed(context)
     await window.api.fs.deletePath(

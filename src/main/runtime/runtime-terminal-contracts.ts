@@ -40,6 +40,8 @@ export type TerminalCreateOptions = {
   shellOverride?: string
   claudeAgentTeamsSourceCommand?: string
   cwd?: string
+  /** Renderer-measured dimensions to use before the first PTY byte is spawned. */
+  initialSize?: { cols: number; rows: number }
   env?: Record<string, string>
   envToDelete?: string[]
   launchConfig?: WorktreeStartupLaunch['launchConfig']

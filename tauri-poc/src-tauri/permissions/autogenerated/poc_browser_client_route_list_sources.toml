@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-client-route-list-sources"
+description = "Enables the poc_browser_client_route_list_sources command without any pre-configured scope."
+commands.allow = ["poc_browser_client_route_list_sources"]
+
+[[permission]]
+identifier = "deny-poc-browser-client-route-list-sources"
+description = "Denies the poc_browser_client_route_list_sources command without any pre-configured scope."
+commands.deny = ["poc_browser_client_route_list_sources"]

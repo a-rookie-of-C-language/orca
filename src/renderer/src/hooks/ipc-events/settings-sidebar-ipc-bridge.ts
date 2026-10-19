@@ -93,6 +93,16 @@ export function registerSettingsAndSidebarIpcBridge(unsubs: (() => void)[]): voi
     })
   )
 
+  if (window.api.ui.onToggleAppearance) {
+    unsubs.push(
+      window.api.ui.onToggleAppearance((key) => {
+        const store = useAppStore.getState()
+        const current = store.settings?.[key]
+        void store.updateSettings({ [key]: current === false })
+      })
+    )
+  }
+
   // Why: View > Appearance toggles settings in main and broadcasts; merge into the store for an immediate re-render.
   unsubs.push(
     window.api.settings.onChanged((updates) => {

@@ -17,6 +17,7 @@ export const docPreviewApi = {
     ipcRenderer.invoke(DOC_PREVIEW_REVOKE_GRANT_CHANNEL, grantId),
   authorizeDirectory: (grantId: string, relativePath: string): Promise<boolean> =>
     ipcRenderer.invoke(DOC_PREVIEW_AUTHORIZE_DIRECTORY_CHANNEL, grantId, relativePath),
+  cacheFile: () => Promise.resolve(false),
   onExternalLink: (callback: (payload: { url: string }) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: { url: string }): void =>
       callback(payload)
@@ -28,5 +29,6 @@ export const docPreviewApi = {
       callback(payload)
     ipcRenderer.on(DOC_PREVIEW_LOAD_FAILURE_CHANNEL, listener)
     return () => ipcRenderer.removeListener(DOC_PREVIEW_LOAD_FAILURE_CHANNEL, listener)
-  }
+  },
+  onResourceRequested: () => () => undefined
 } satisfies PreloadApi['docPreview']

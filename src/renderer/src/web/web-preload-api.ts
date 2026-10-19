@@ -1,6 +1,7 @@
 import type { PreloadApi } from '../../../preload/api-types'
 import type { StatsSummary } from '../../../shared/process-stats-types'
 import { createWebE2EApi } from './preload-api/web-e2e-api'
+import { createWebFolderWorkspacesApi } from './preload-api/web-folder-workspaces-api'
 import {
   createClaudeAccountsApi,
   createCodexAccountsApi,
@@ -37,6 +38,9 @@ import { createNotificationsApi } from './preload-api/web-notifications-api'
 import { createWebOnboardingApi } from './preload-api/web-onboarding-api'
 import { createWebOrcaProfilesApi } from './preload-api/web-orca-profiles-api'
 import { createWebPlatformApi } from './preload-api/web-platform-api'
+import { createWebPluginsApi } from './preload-api/web-plugins-api'
+import { createWebProjectGroupsApi } from './preload-api/web-project-groups-api'
+import { createWebProjectsApi } from './preload-api/web-projects-api'
 import { createRateLimitsApi } from './preload-api/web-rate-limits-api'
 import { createReposApi } from './preload-api/web-repositories-api'
 import { createHooksApi, createRuntimeNamespaceApi } from './preload-api/web-review-api'
@@ -46,32 +50,54 @@ import { createWebRuntimeApi } from './preload-api/web-runtime-api'
 import { createRuntimeEnvironmentsApi } from './preload-api/web-runtime-environments-api'
 import { webRuntimeState } from './preload-api/web-runtime-session'
 import { createWebSettingsApi } from './preload-api/web-settings-api'
+import { createWebSpeechApi } from './preload-api/web-speech-api'
 import { createShellApi } from './preload-api/web-shell-api'
 import { createWebStarNagApi } from './preload-api/web-star-nag-api'
 import { createWebTelemetryApi } from './preload-api/web-telemetry-api'
+import {
+  createClaudeUsageApi,
+  createCodexUsageApi,
+  createMuseUsageApi,
+  createOpenCodeUsageApi
+} from './preload-api/web-usage-api'
 import { createPtyApi, createSshApi } from './preload-api/web-terminal-api'
 import { createWebUiApi } from './preload-api/web-ui-api'
 import { createUpdaterApi } from './preload-api/web-updater-api'
 import { createWebWorkspacePortsApi } from './preload-api/web-workspace-ports-api'
 import { createWebWorkspaceSessionApi } from './preload-api/web-workspace-session-api'
+import { createWebSparsePresetsApi } from './preload-api/web-sparse-presets-api'
+import {
+  createWebAutomationsApi,
+  createWebDocPreviewApi,
+  createWebWorkspaceSpaceApi
+} from './preload-api/web-desktop-compat-api'
 import { createWorktreesApi } from './preload-api/web-worktrees-api'
 import {
   createTauriNativeAppNamespaceApi,
+  createTauriNativeBrowserApi,
   createTauriNativeFilesystemDropApi,
+  createTauriNativeFilesystemApi,
   createTauriNativeNotificationsApi,
   createTauriNativePreloadApi,
   createTauriNativePlatformNamespaceApi,
   createTauriNativeUiApi,
+  installTauriBrowserGuestCtrlTabCommit,
+  installTauriBrowserGuestShortcutForwarding,
   installTauriWindowDragBridge,
   isTauriNativeHost
 } from './tauri-native-bridge'
 import { readStoredWebRuntimeEnvironment } from './web-runtime-environment'
+import { createTauriNativeLocalLogTailApi } from './tauri-native-local-log-tail-api'
+import { installTauriSystemTray } from './tauri-native-tray-api'
 
 export function installWebPreloadApi(): void {
   webRuntimeState.activeEnvironment = readStoredWebRuntimeEnvironment()
   const webWindow = window as unknown as { __ORCA_WEB_CLIENT__?: boolean }
   webWindow.__ORCA_WEB_CLIENT__ = true
   installTauriWindowDragBridge()
+  installTauriBrowserGuestShortcutForwarding()
+  installTauriBrowserGuestCtrlTabCommit()
+  installTauriSystemTray()
   const api = createWebPreloadApi()
   if (isTauriNativeHost()) {
     const nativeApi = createTauriNativePreloadApi()
@@ -85,11 +111,13 @@ export function installWebPreloadApi(): void {
 }
 
 function createWebPreloadApi(): Partial<PreloadApi> {
+  const fileApi = createFileApi()
   return {
     ...createWebAppApi(),
     ...createWebStarNagApi(),
     ...createWebPlatformApi(),
     ...createWebWorkspacePortsApi(),
+    workspaceSpace: createWebWorkspaceSpaceApi(),
     ...createWebOrcaProfilesApi(),
     ...createWebE2EApi(),
     ...createTauriNativePlatformNamespaceApi(),
@@ -106,15 +134,25 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ...createWebGithubCacheApi(),
     runtime: createWebRuntimeApi(),
     nativeChat: createWebNativeChatApi(),
+    docPreview: createWebDocPreviewApi(),
     runtimeEnvironments: createRuntimeEnvironmentsApi(),
     repos: createReposApi(),
+    projects: createWebProjectsApi(),
+    projectGroups: createWebProjectGroupsApi(),
+    sparsePresets: createWebSparsePresetsApi(),
+    folderWorkspaces: createWebFolderWorkspacesApi(),
     worktrees: createWorktreesApi(),
     fs: {
-      ...createFileApi(),
-      ...createTauriNativeFilesystemDropApi()
+      ...fileApi,
+      ...createTauriNativeFilesystemDropApi(),
+      ...createTauriNativeFilesystemApi(),
+      ...createTauriNativeLocalLogTailApi(fileApi.readFile)
     },
     git: createGitApi(),
-    browser: createBrowserApi(),
+    browser: {
+      ...createBrowserApi(),
+      ...(isTauriNativeHost() ? createTauriNativeBrowserApi() : {})
+    },
     emulator: createEmulatorApi(),
     gh: createGitHubApi(),
     gl: createGitLabApi(),
@@ -141,6 +179,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       ...createTauriNativeNotificationsApi()
     },
     rateLimits: createRateLimitsApi(),
+    claudeUsage: createClaudeUsageApi(),
+    codexUsage: createCodexUsageApi(),
+    openCodeUsage: createOpenCodeUsageApi(),
+    museUsage: createMuseUsageApi(),
     opencodeGoCredentials: createOpenCodeGoCredentialsApi(),
     minimaxCredentials: createMiniMaxCredentialsApi(),
     zcodePlanCredentials: createZcodePlanCredentialsApi(),
@@ -157,8 +199,11 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     developerPermissions: createDeveloperPermissionsApi(),
     computerUsePermissions: createComputerUsePermissionsApi(),
     updater: createUpdaterApi(),
+    speech: createWebSpeechApi(),
     shell: createShellApi(),
     skills: createSkillsApi(),
+    plugins: createWebPluginsApi(),
+    automations: createWebAutomationsApi(),
     pty: createPtyApi(),
     ssh: createSshApi(),
     wsl: {
