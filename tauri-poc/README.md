@@ -124,7 +124,7 @@ first native slice covers the low-risk operations that the renderer already expe
   files and overwrite rollback.
 - single-instance enforcement: a second launch reuses the existing Tauri process instead of
   starting another `orcad` owner, and forwards skill-share links plus supported local documents
-  to the existing renderer window.
+  to the existing renderer window. Proven live by `tauri-poc/scripts/check-second-instance.mjs`.
 - native desktop notifications through Tauri's notification plugin; the existing renderer
   notification contract remains the compatibility layer, including notification ids, dismissal,
   and click-to-focus routing back into the workspace.
