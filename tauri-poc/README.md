@@ -265,6 +265,10 @@ first native slice covers the low-risk operations that the renderer already expe
   the cached entry with no failed loads, intercepts an external link without leaving the page,
   scrolls same-document fragments in place, navigates sibling documents natively, reload
   re-serves the cached entry, and auto-revokes the grant on close).
+  Preview-partition downloads are refused before anything is reserved or written, proven live by
+  `tauri-poc/scripts/check-doc-preview-download-block.mjs` (a download click notifies once with
+  reason download-blocked and no path, a rapid second click adds no second notice, the page stays
+  on the grant entry, and closing auto-revokes the grant).
   On Windows, local development hosts also expose the certificate failure overlay and a
   page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
   by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
@@ -471,6 +475,10 @@ Not migrated yet:
   `caffeinate` / Linux `systemd-inhibit` mirror the Electron assertions but need live-OS
   verification, plus tray/dock live checks.
 - Windows/WSL/SSH native-boundary audits and production signing.
+- General browser downloads: a navigation that turns into a download currently produces no
+  `browser:download-requested` event on Windows (observed for a same-origin
+  `Content-Disposition: attachment` response), so end-to-end completion still needs to be proven
+  and fixed. Preview pages stay denied regardless through the grant-bound refuse path above.
 
 Those systems are the remaining high-risk parity work; Electron remains the production desktop
 until they have been migrated and verified on every supported host.

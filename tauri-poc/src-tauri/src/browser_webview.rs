@@ -17,8 +17,8 @@ use tauri::{AppHandle, Emitter, Manager, State, Url, WebviewUrl};
 use crate::browser_cdp_events::{drop_cdp_subscriptions_for_page, BrowserCdpEventState};
 use crate::browser_identity::{browser_user_agent, BrowserIdentityState};
 use crate::doc_preview::{
-    grant_id_for_page, guest_script, handle_preview_navigation, preview_navigable_url,
-    revoke_grants_for_page, DocPreviewState,
+    grant_id_for_page, guest_script, handle_preview_navigation, notice_preview_download_blocked,
+    preview_navigable_url, revoke_grants_for_page, DocPreviewState,
 };
 
 const EVENT_BROWSER_PAGE: &str = "browser:page-event";
@@ -2286,6 +2286,15 @@ pub async fn poc_browser_create(
                 .unwrap_or_else(|| page_id_for_download.clone());
             match event {
                 DownloadEvent::Requested { url, destination } => {
+                    let preview_state = app_for_download.state::<DocPreviewState>();
+                    if let Some(grant_id) = grant_id_for_page(&preview_state, &browser_page_id) {
+                        notice_preview_download_blocked(
+                            &app_for_download,
+                            &preview_state,
+                            &grant_id,
+                        );
+                        return false;
+                    }
                     let filename = safe_download_filename(&url);
                     let path = match reserve_download_path(&app_for_download, &filename) {
                         Ok(path) => path,

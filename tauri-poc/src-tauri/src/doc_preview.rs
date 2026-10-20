@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State, Url};
 
 const PREVIEW_SCHEME: &str = "orca-preview";
@@ -13,6 +14,7 @@ const MAX_BINARY_BYTES: u64 = 50 * 1024 * 1024;
 const UNSERVABLE_ASSET_MESSAGE: &str = "This workspace cannot send this file type to a preview.";
 const AUTHORIZATION_REQUIRED_MESSAGE: &str =
     "This file needs permission before the preview can read it.";
+const DOWNLOAD_NOTICE_FLOOR: Duration = Duration::from_secs(2);
 const CSP: &str = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'";
 
 #[derive(Debug, Deserialize, Clone)]
@@ -70,6 +72,47 @@ struct DocPreviewFailure {
     relative_path: String,
     reason: &'static str,
 }
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocPreviewDownloadBlocked {
+    grant_id: String,
+    reason: &'static str,
+}
+
+fn download_notice_due(last: Option<Instant>, now: Instant) -> bool {
+    last.is_none_or(|noticed| now.saturating_duration_since(noticed) >= DOWNLOAD_NOTICE_FLOOR)
+}
+
+/// Refuse a download the way the Electron preview partition does: nothing is
+/// reserved or written, and the shell learns through the failure channel — at
+/// most once per grant per floor so a looping document cannot re-render it.
+pub fn notice_preview_download_blocked(app: &AppHandle, state: &DocPreviewState, grant_id: &str) {
+    let due = state
+        .download_notices
+        .lock()
+        .map(|mut notices| {
+            let now = Instant::now();
+            notices.retain(|_, noticed| {
+                now.saturating_duration_since(*noticed) < DOWNLOAD_NOTICE_FLOOR
+            });
+            if download_notice_due(notices.get(grant_id).copied(), now) {
+                notices.insert(grant_id.to_string(), now);
+                true
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false);
+    if due {
+        let _ = app.emit(
+            "doc-preview:load-failure",
+            DocPreviewDownloadBlocked {
+                grant_id: grant_id.to_string(),
+                reason: "download-blocked",
+            },
+        );
+    }
+}
 
 #[derive(Debug)]
 struct DocPreviewGrant {
@@ -96,6 +139,7 @@ struct CachedDocPreviewFile {
 #[derive(Default)]
 pub struct DocPreviewState {
     grants: Mutex<HashMap<String, DocPreviewGrant>>,
+    download_notices: Mutex<HashMap<String, Instant>>,
 }
 
 fn random_grant_id() -> Result<String, String> {
@@ -727,8 +771,23 @@ pub fn poc_doc_preview_mint_grant(
 }
 
 pub fn revoke_grants_for_page(state: &DocPreviewState, browser_page_id: &str) {
-    if let Ok(mut grants) = state.grants.lock() {
-        grants.retain(|_, grant| grant.browser_page_id != browser_page_id);
+    let removed: Vec<String> = state
+        .grants
+        .lock()
+        .map(|mut grants| {
+            let removed = grants
+                .iter()
+                .filter(|(_, grant)| grant.browser_page_id == browser_page_id)
+                .map(|(grant_id, _)| grant_id.clone())
+                .collect();
+            grants.retain(|_, grant| grant.browser_page_id != browser_page_id);
+            removed
+        })
+        .unwrap_or_default();
+    if let Ok(mut notices) = state.download_notices.lock() {
+        for grant_id in removed {
+            notices.remove(&grant_id);
+        }
     }
 }
 
@@ -737,12 +796,18 @@ pub fn poc_doc_preview_revoke_grant(
     state: State<DocPreviewState>,
     grant_id: String,
 ) -> Result<bool, String> {
-    Ok(state
+    let removed = state
         .grants
         .lock()
         .map_err(|_| "Document preview state is poisoned.".to_string())?
         .remove(&grant_id)
-        .is_some())
+        .is_some();
+    if removed {
+        if let Ok(mut notices) = state.download_notices.lock() {
+            notices.remove(&grant_id);
+        }
+    }
+    Ok(removed)
 }
 
 #[tauri::command]
@@ -927,6 +992,15 @@ pub fn handle_preview_navigation(
         }
         return Some(false);
     }
+    if url.scheme() == INTERNAL_SCHEME && url.host_str() == Some("doc-preview-download-blocked") {
+        let reported_grant = url
+            .query_pairs()
+            .find_map(|(key, value)| (key == "grantId").then(|| value.into_owned()));
+        if reported_grant.as_deref() == Some(grant_id.as_str()) {
+            notice_preview_download_blocked(app, state, &grant_id);
+        }
+        return Some(false);
+    }
     if matches!(url.scheme(), "data" | "blob" | "devtools") {
         return Some(true);
     }
@@ -991,7 +1065,16 @@ pub fn guest_script(grant_id: &str) -> String {
       try {{ location.href = 'http://orca-preview.' + url.href.slice('orca-preview://'.length); }} catch {{}}
       return;
     }}
-    if (isPreviewAlias(url)) return;
+    if (isPreviewAlias(url)) {{
+      let download = false;
+      try {{ download = anchor.node.hasAttribute('download'); }} catch {{ download = false; }}
+      if (download) {{
+        event.preventDefault();
+        event.stopPropagation();
+        try {{ location.href = 'orca-internal://doc-preview-download-blocked?grantId=' + encodeURIComponent(grantId); }} catch {{}}
+      }}
+      return;
+    }}
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
     event.preventDefault();
     event.stopPropagation();
@@ -1008,12 +1091,14 @@ pub fn guest_script(grant_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_preview_url, cache_mime_for, guest_script, is_binary_probe, parse_preview_url,
-        preview_navigable_url, revert_preview_workaround, runtime_directory_already_authorized,
-        safe_relative_path, ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
+        build_preview_url, cache_mime_for, download_notice_due, guest_script, is_binary_probe,
+        parse_preview_url, preview_navigable_url, revert_preview_workaround,
+        runtime_directory_already_authorized, safe_relative_path, ssh_directory_already_authorized,
+        DocPreviewDownloadBlocked, DocPreviewGrant, DocPreviewOwner, DOWNLOAD_NOTICE_FLOOR,
     };
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+    use std::time::Instant;
 
     #[test]
     fn preview_alias_round_trips_through_wry_workaround() {
@@ -1199,8 +1284,33 @@ mod tests {
             "auxclick",
             "orca-preview.",
             "doc-preview-external-link",
+            "doc-preview-external-link",
+            "doc-preview-download-blocked",
+            "hasAttribute",
         ] {
             assert!(script.contains(marker), "guest script lost {marker}");
         }
+    }
+    #[test]
+    fn download_blocked_notice_carries_no_path() {
+        let payload = DocPreviewDownloadBlocked {
+            grant_id: String::from("0123456789abcdef0123456789abcdef"),
+            reason: "download-blocked",
+        };
+        assert_eq!(
+            serde_json::to_value(&payload).expect("notice serializes"),
+            serde_json::json!({
+                "grantId": "0123456789abcdef0123456789abcdef",
+                "reason": "download-blocked",
+            })
+        );
+    }
+
+    #[test]
+    fn download_notice_floor_suppresses_repeats() {
+        let now = Instant::now();
+        assert!(download_notice_due(None, now));
+        assert!(!download_notice_due(Some(now), now));
+        assert!(download_notice_due(Some(now - DOWNLOAD_NOTICE_FLOOR), now));
     }
 }
