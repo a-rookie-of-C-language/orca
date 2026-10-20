@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { assertReadyHidden, connectDevelopmentRenderer } from './hidden-renderer-connection.mjs'
+
+// Live Windows proof for shell open-path ownership parity: SSH and absent
+// owners, relative and missing local paths are refused with Electron's reason
+// vocabulary, remote-host file URIs never resolve, and the existence-batch cap
+// holds — all without opening any OS surface. Positive opens stay covered by
+// unit tests, since revealing or launching would pop OS UI.
+const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+const endpoint = process.env.ORCA_TAURI_CDP_ENDPOINT ?? 'http://127.0.0.1:9224'
+const connections = new Set()
+let page
+const call = (method, ...args) =>
+  page.evaluate(
+    (params) => window.api.shell[params.method](...params.args),
+    { method, args }
+  )
+try {
+  page = await connectDevelopmentRenderer(endpoint, connections)
+  await assertReadyHidden(page, root)
+  const missing = 'C:\\orca-shell-ownership-probe-missing\\a.txt'
+  const notFound = await call('openInFileManager', missing, 'local')
+  assert.deepEqual(notFound, { ok: false, reason: 'not-found' })
+  const notAbsolute = await call('openInFileManager', 'relative\\a.txt', 'local')
+  assert.deepEqual(notAbsolute, { ok: false, reason: 'not-absolute' })
+  const sshRefused = await call('openInFileManager', 'C:\\Windows', 'ssh:probe')
+  assert.deepEqual(sshRefused, { ok: false, reason: 'remote-runtime-unsupported' })
+  const absentRefused = await call('openInFileManager', 'C:\\Windows', null)
+  assert.deepEqual(absentRefused, { ok: false, reason: 'remote-runtime-unsupported' })
+  const openDenied = await call('openFilePath', missing, 'local')
+  assert.equal(openDenied, false)
+  const openSshDenied = await call('openFilePath', 'C:\\Windows', 'ssh:probe')
+  assert.equal(openSshDenied, false)
+  await call('openPath', missing, 'local')
+  await call('openFileUri', 'file://remote-host/C:/Windows', 'local')
+  await assert.rejects(
+    call('openFileUri', 'ftp://example.com/a.txt', 'local'),
+    /Unsupported file URI protocol/
+  )
+  await assert.rejects(
+    call(
+      'pathsExist',
+      Array.from({ length: 129 }, () => 'C:\\a')
+    ),
+    /Invalid path existence batch/
+  )
+  const systemRootExists = await call('pathExists', 'C:\\Windows')
+  assert.equal(systemRootExists, true)
+  await assertReadyHidden(page, root)
+  const evidence = { at: new Date().toISOString() }
+  await writeFile(
+    join(root, '.cache', 'tauri-shell-open-ownership-check-latest.json'),
+    JSON.stringify(evidence, null, 2)
+  )
+  console.log('Shell open ownership matches Electron against the live shell.')
+} finally {
+  for (const browser of connections) {
+    await browser.close().catch(() => {})
+  }
+}

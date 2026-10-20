@@ -104,9 +104,9 @@ first native slice covers the low-risk operations that the renderer already expe
   containment check (named and real folder, symlinks resolved, 256-entry cap)
   so a draft only reattaches files still inside Orca's own paste folder;
 - native file and directory pickers for attachments, images, audio and folders;
-- opening approved external URL schemes, opening a local path, and revealing a path in the file manager;
+- opening approved external URL schemes, opening a local path, and revealing a path in the file manager (owner-enforced like main: local paths resolve as themselves, WSL hosts through their `\\wsl.localhost` spelling, every other owner refused with the same reason vocabulary; the legacy open call reveals like Electron instead of launching);
 - local path existence checks and non-overwriting file copies;
-- PNG repository icon loading with the same 256 KiB limit as Electron;
+- PNG repository icon loading with the same 256 KiB limit and error messages as Electron;
 - minimize, maximize/restore, fullscreen, zoom, and the existing guarded close handshake;
 - native context menu, window-state events, and the renderer's custom Windows/Linux titlebar;
 - dropped-path validation and notification sound-path validation.

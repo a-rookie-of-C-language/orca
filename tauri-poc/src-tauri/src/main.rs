@@ -323,7 +323,7 @@ fn poc_copy_file(src_path: String, dest_path: String) -> Result<(), String> {
     let source = Path::new(&src_path);
     let destination = Path::new(&dest_path);
     if !source.is_absolute() || !destination.is_absolute() {
-        return Err("Both source and destination must be absolute paths.".to_string());
+        return Err("Both source and destination must be absolute paths".to_string());
     }
     if destination.exists() {
         return Err("Destination file already exists.".to_string());
@@ -343,11 +343,11 @@ fn poc_read_file_data_url(path: String) -> Result<FileDataUrl, String> {
         .map(|extension| !extension.eq_ignore_ascii_case("png"))
         .unwrap_or(true)
     {
-        return Err("Repository icons must be PNG files.".to_string());
+        return Err("Repo icons must be PNG files.".to_string());
     }
     let metadata = fs::metadata(source).map_err(|error| error.to_string())?;
     if !metadata.is_file() || metadata.len() > MAX_ICON_BYTES {
-        return Err("Selected file is not a supported-size regular file.".to_string());
+        return Err("Repo icon image must be 256KB or smaller.".to_string());
     }
     let bytes = fs::read(source).map_err(|error| error.to_string())?;
     let file_name = source

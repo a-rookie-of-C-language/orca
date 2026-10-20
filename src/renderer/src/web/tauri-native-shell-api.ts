@@ -2,9 +2,12 @@ import type { PreloadApi } from '../../../preload/api-types'
 import type {
   ShellOpenExternalEditorRequest,
   ShellOpenExternalEditorResult,
+  ShellOpenLocalPathFailureReason,
   ShellOpenLocalPathResult
 } from '../../../shared/shell-open-types'
-import { toSshExecutionHostId } from '../../../shared/execution-host'
+import { parseRoutableExecutionHostId, toSshExecutionHostId } from '../../../shared/execution-host'
+import { getWindowsPathAccess } from '@/lib/windows-path-access'
+import { validatePathExistenceBatch } from '../../../shared/path-existence-batch'
 import type { SshExternalEditorAuthorityResult } from '../../../shared/ssh-types'
 import { createShellApi } from './preload-api/web-shell-api'
 import { callRuntimeResult } from './preload-api/web-runtime-calls'
@@ -30,15 +33,112 @@ async function pickPaths(options: Record<string, unknown>): Promise<string[]> {
   return toPickedPaths(result)
 }
 
+type ResolvedOwnedShellPath =
+  | { ok: true; path: string }
+  | { ok: false; reason: ShellOpenLocalPathFailureReason }
+
+/** Drive, UNC and long-path spellings the local Windows shell accepts. */
+function isWindowsAbsoluteShellPath(path: string): boolean {
+  return /^[A-Za-z]:\\/.test(path) || path.startsWith('\\\\')
+}
+
+/**
+ * Lexical dot-segment cleanup for absolute Windows shell paths, mirroring
+ * node's win32.normalize for the spellings above. Symlinks still resolve at
+ * open time, exactly like Electron's check-then-open race.
+ */
+function normalizeWindowsShellPath(path: string): string {
+  const unified = path.replace(/\//g, '\\')
+  const unc = unified.startsWith('\\\\')
+  if (!unc && !/^[A-Za-z]:\\/.test(unified)) {
+    return unified
+  }
+  const prefix = unc ? '\\\\' : unified.slice(0, 3)
+  const rest = unc ? unified.slice(2) : unified.slice(3)
+  const segments: string[] = []
+  for (const segment of rest.split('\\')) {
+    if (segment === '' || segment === '.') {
+      continue
+    }
+    if (segment === '..') {
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+  return `${prefix}${segments.join('\\')}`
+}
+
+/** Lexical dot-segment cleanup for absolute POSIX shell paths. */
+function normalizePosixShellPath(path: string): string {
+  const segments: string[] = []
+  for (const segment of path.split('/')) {
+    if (segment === '' || segment === '.') {
+      continue
+    }
+    if (segment === '..') {
+      segments.pop()
+      continue
+    }
+    segments.push(segment)
+  }
+  return `/${segments.join('/')}`
+}
+
+/**
+ * The desktop side of resolveOwnedPathTarget: this computer's paths resolve
+ * as themselves, a WSL host's through its \\wsl.localhost spelling, and
+ * every other owner is refused with the same reason main returns.
+ */
+async function resolveOwnedShellTarget(
+  path: string,
+  ownerHostId: unknown,
+  pathExists: (path: string) => Promise<boolean>
+): Promise<ResolvedOwnedShellPath> {
+  const host = typeof ownerHostId === 'string' ? parseRoutableExecutionHostId(ownerHostId) : null
+  if (host?.kind === 'local') {
+    if (getBrowserPlatform() !== 'win32') {
+      const normalized = normalizePosixShellPath(path)
+      if (!normalized.startsWith('/')) {
+        return { ok: false, reason: 'not-absolute' }
+      }
+      return (await pathExists(normalized))
+        ? { ok: true, path: normalized }
+        : { ok: false, reason: 'not-found' }
+    }
+    const normalized = normalizeWindowsShellPath(path)
+    if (!isWindowsAbsoluteShellPath(normalized)) {
+      return { ok: false, reason: 'not-absolute' }
+    }
+    return (await pathExists(normalized))
+      ? { ok: true, path: normalized }
+      : { ok: false, reason: 'not-found' }
+  }
+  const access = typeof ownerHostId === 'string' ? getWindowsPathAccess(ownerHostId) : null
+  if (!access) {
+    return { ok: false, reason: 'remote-runtime-unsupported' }
+  }
+  const windowsPath = access.toWindows(path)
+  if (!windowsPath) {
+    return { ok: false, reason: 'not-absolute' }
+  }
+  const normalized = normalizeWindowsShellPath(windowsPath)
+  if (!isWindowsAbsoluteShellPath(normalized)) {
+    return { ok: false, reason: 'not-absolute' }
+  }
+  return (await pathExists(normalized))
+    ? { ok: true, path: normalized }
+    : { ok: false, reason: 'not-found' }
+}
+
 export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['shell']> | undefined {
   if (!isTauriNativeHost()) {
     return undefined
   }
   const fallback = createShellApi()
-  const openPath = async (path: string): Promise<void> => {
-    await invokePlugin('opener', 'open_path', { path, with: null })
-  }
-  const revealPath = async (path: string): Promise<ShellOpenLocalPathResult> => {
+  const existsNative = (path: string): Promise<boolean> =>
+    invokeNative<boolean>('poc_path_exists', { path })
+  const revealNativePath = async (path: string): Promise<ShellOpenLocalPathResult> => {
     try {
       await invokePlugin('opener', 'reveal_item_in_dir', { path })
       return { ok: true }
@@ -46,10 +146,35 @@ export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['sh
       return { ok: false, reason: 'launch-failed' }
     }
   }
+  const openNativePath = async (path: string): Promise<boolean> => {
+    try {
+      await invokePlugin('opener', 'open_path', { path, with: null })
+      return true
+    } catch {
+      return false
+    }
+  }
+  const resolveShellTarget = (
+    path: string,
+    ownerHostId: unknown
+  ): Promise<ResolvedOwnedShellPath> => resolveOwnedShellTarget(path, ownerHostId, existsNative)
   return {
     ...fallback,
-    openPath: (path, _ownerHostId) => openPath(path),
-    openInFileManager: (path, _ownerHostId) => revealPath(path),
+    // Why reveal, not open: Electron's shell:openPath handler reuses the
+    // file-manager reveal path for this legacy fire-and-forget call.
+    openPath: async (path, ownerHostId) => {
+      const target = await resolveShellTarget(path, ownerHostId)
+      if (target.ok) {
+        await revealNativePath(target.path)
+      }
+    },
+    openInFileManager: async (path, ownerHostId) => {
+      const target = await resolveShellTarget(path, ownerHostId)
+      if (!target.ok) {
+        return target
+      }
+      return revealNativePath(target.path)
+    },
     openInExternalEditor: async (
       request: ShellOpenExternalEditorRequest
     ): Promise<ShellOpenExternalEditorResult> => {
@@ -81,26 +206,38 @@ export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['sh
       assertExternalUrl(url)
       await invokePlugin('opener', 'open_url', { url, with: null })
     },
-    openFilePath: async (path, _ownerHostId) => {
-      try {
-        await openPath(path)
-        return true
-      } catch {
+    openFilePath: async (path, ownerHostId) => {
+      const target = await resolveShellTarget(path, ownerHostId)
+      if (!target.ok) {
         return false
       }
+      return openNativePath(target.path)
     },
-    openFileUri: async (uri, _ownerHostId) => {
+    openFileUri: async (uri, ownerHostId) => {
+      if (parseRoutableExecutionHostId(ownerHostId)?.kind !== 'local') {
+        return
+      }
       const parsed = new URL(uri)
       if (parsed.protocol !== 'file:') {
         throw new Error(`Unsupported file URI protocol: ${parsed.protocol}`)
+      }
+      // Why: only this computer's files open here; a remote host's URI never resolves locally.
+      if (parsed.hostname && parsed.hostname !== 'localhost') {
+        return
       }
       let path = decodeURIComponent(parsed.pathname)
       if (getBrowserPlatform() === 'win32' && /^\/[A-Za-z]:/.test(path)) {
         path = path.slice(1)
       }
-      await openPath(path)
+      const target = await resolveShellTarget(path, ownerHostId)
+      if (target.ok) {
+        await openNativePath(target.path)
+      }
     },
-    pathsExist: (paths) => invokeNative<boolean[]>('poc_paths_exist', { paths }),
+    pathsExist: async (paths) => {
+      validatePathExistenceBatch(paths)
+      return invokeNative<boolean[]>('poc_paths_exist', { paths })
+    },
     pathExists: (path) => invokeNative<boolean>('poc_path_exists', { path }),
     pickAttachment: async () =>
       (
