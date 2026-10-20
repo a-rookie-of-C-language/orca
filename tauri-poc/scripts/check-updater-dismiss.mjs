@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { resolve } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   assertReadyHidden,
@@ -44,7 +45,13 @@ try {
     `pin was not cleared, download said: ${downloadError}`
   )
   await assertReadyHidden(page, root)
-  console.log(JSON.stringify({ ok: true, tag: target.tag, at: new Date().toISOString() }))
+  const evidence = { ok: true, tag: target.tag, at: new Date().toISOString() }
+  mkdirSync(join(root, '.cache'), { recursive: true })
+  writeFileSync(
+    join(root, '.cache', 'tauri-updater-dismiss-check-latest.json'),
+    JSON.stringify(evidence, null, 2)
+  )
+  console.log(JSON.stringify(evidence))
 } finally {
   for (const browser of connections) {
     await browser.close().catch(() => {})
