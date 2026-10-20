@@ -81,7 +81,10 @@ before mounting the renderer, and asks the existing launcher IPC contract to sto
 development runtime is deliberately built into `.cache/orcad-dev`; it is not a release artifact.
 
 For a packaged build, `beforeBuildCommand` also builds `orcad`, stages the bundled Node runtime and
-the supervisor into `tauri-poc/resources`, and then builds the Tauri bundle. That path requires the
+the supervisor into `tauri-poc/resources`, and then builds the Tauri bundle. The staged
+`orcad` slot includes the Windows CLI launcher (`bin/orca.exe`, the same slot command
+Electron ships), which the packaged admin probe runs from the resources bundle;
+`prepare-release-runtime.mjs` fails the build instead of shipping a bundle without it. That path requires the
 same patched `node-pty` native toolchain as the Electron release build; it must not silently fall
 back to an upstream `node-pty` binary.
 

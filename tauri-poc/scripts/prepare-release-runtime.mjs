@@ -31,6 +31,16 @@ for (const name of ['orcad', 'runtimes']) {
   cpSync(source, destination, { recursive: true })
 }
 
+// Why fail loudly here: the packaged admin probe and orcad CLI slot both run
+// `orcad/bin/orca.exe` from the resources bundle, and a bundle without it would
+// only surface as Admin-unknown plus dead CLI registration on the installed app.
+if (process.platform === 'win32') {
+  const launcher = join(resourceRoot, 'orcad', 'bin', 'orca.exe')
+  if (!existsSync(launcher)) {
+    throw new Error(`Packaged Tauri runtime is missing the Windows CLI launcher: ${launcher}`)
+  }
+}
+
 const nativePackage =
   process.platform === 'win32' && process.arch === 'x64'
     ? 'sherpa-onnx-win-x64'

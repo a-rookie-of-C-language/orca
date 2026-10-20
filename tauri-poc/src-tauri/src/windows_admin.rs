@@ -5,7 +5,7 @@
 //! true/false/null vocabulary. This command runs the same binary with the
 //! same budget and vocabulary so the renderer cannot tell the shells apart.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -38,8 +38,14 @@ fn dev_launcher_path(repo_root: &str) -> PathBuf {
 }
 
 /// Locate the probe launcher the way Electron main does: dev reads the
-/// freshly built `.build` output, packaged reads the resources bundle.
+/// freshly built `.build` output, packaged reads `orcad/bin/orca.exe` from the
+/// resources bundle (the `orcad` resource mapping stages the whole slot there).
 /// A missing file means null instead of a spawn error.
+
+/// Packaged path of the probe launcher inside the resources bundle.
+fn packaged_launcher_path(resource_dir: &Path) -> PathBuf {
+    resource_dir.join("orcad").join("bin").join("orca.exe")
+}
 fn launcher_path(app: &AppHandle) -> Option<PathBuf> {
     if std::env::consts::OS != "windows" {
         return None;
@@ -53,7 +59,7 @@ fn launcher_path(app: &AppHandle) -> Option<PathBuf> {
     let packaged = app
         .path()
         .resource_dir()
-        .map(|dir| dir.join("bin").join("orca.exe"))
+        .map(|dir| packaged_launcher_path(&dir))
         .ok()?;
     if packaged.is_file() {
         return Some(packaged);
@@ -135,7 +141,9 @@ pub(crate) fn poc_get_windows_administrator_status(app: AppHandle) -> Option<boo
 
 #[cfg(test)]
 mod tests {
-    use super::{dev_launcher_path, parse_administrator_status, run_command_capped};
+    use super::{
+        dev_launcher_path, packaged_launcher_path, parse_administrator_status, run_command_capped,
+    };
     use std::time::Duration;
 
     #[test]
@@ -156,6 +164,16 @@ mod tests {
         assert_eq!(
             launcher,
             std::path::PathBuf::from("C:\\repo\\native\\windows-cli-launcher\\.build\\orca.exe")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn packaged_launcher_lives_under_the_orcad_resource() {
+        let dir = std::path::Path::new("C:\\bundle\\resources");
+        assert_eq!(
+            packaged_launcher_path(dir),
+            std::path::PathBuf::from("C:\\bundle\\resources\\orcad\\bin\\orca.exe")
         );
     }
 
