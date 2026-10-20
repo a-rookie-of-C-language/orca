@@ -272,8 +272,9 @@ first native slice covers the low-risk operations that the renderer already expe
   Attachment downloads that never raise a native DownloadStarting event fall
   back to an in-page fetch over the native message pipe instead of being lost,
   proven live by `tauri-poc/scripts/check-browser-download-fallback.mjs` (a 3 MiB
-  attachment lands requested-once with the server-suggested file name, chunked
-  progress, completed status, and byte-exact contents).
+  attachment lands requested-once with the server-suggested file name, total bytes,
+  and mime type, chunked progress carrying the total, completed status, and
+  byte-exact contents).
   On Windows, local development hosts also expose the certificate failure overlay and a
   page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
   by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.

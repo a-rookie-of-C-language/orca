@@ -78,6 +78,8 @@ struct BrowserDownload {
     browser_page_id: String,
     save_path: PathBuf,
     canceled: bool,
+    total_bytes: Option<u64>,
+    mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1254,6 +1256,30 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                     let (Ok(request_uri), Ok(disposition)) = (request_uri, disposition) else {
                         return Ok(());
                     };
+                    let header = |name_str: &str| -> Option<String> {
+                        let response = unsafe { args.Response().ok()? };
+                        let headers = unsafe { response.Headers().ok()? };
+                        let name = HSTRING::from(name_str);
+                        let mut raw = PWSTR::null();
+                        unsafe {
+                            headers
+                                .GetHeader(PCWSTR::from_raw(name.as_ptr()), &mut raw)
+                                .ok()?
+                        };
+                        Some(take_pwstr(raw))
+                    };
+                    let total_bytes =
+                        header("Content-Length").and_then(|value| value.trim().parse::<u64>().ok());
+                    let mime_type = header("Content-Type")
+                        .map(|value| {
+                            value
+                                .split(";")
+                                .next()
+                                .unwrap_or(value.as_str())
+                                .trim()
+                                .to_string()
+                        })
+                        .filter(|value| !value.is_empty());
                     if !disposition.to_ascii_lowercase().contains("attachment") {
                         return Ok(());
                     }
@@ -1276,6 +1302,8 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                             PendingAttachmentDownload {
                                 url: request_uri,
                                 filename: disposition_filename(&disposition),
+                                total_bytes,
+                                mime_type,
                             },
                         );
                     }
@@ -1998,6 +2026,8 @@ const FALLBACK_FETCH_CHUNK_BYTES: usize = 512 * 1024;
 struct PendingAttachmentDownload {
     url: String,
     filename: Option<String>,
+    total_bytes: Option<u64>,
+    mime_type: Option<String>,
 }
 
 fn sanitize_download_filename(name: &str) -> String {
@@ -2173,6 +2203,8 @@ fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
         .filename
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| safe_download_filename(&parsed));
+    let total_bytes = recorded.total_bytes;
+    let mime_type = recorded.mime_type;
     let path = match reserve_download_path(app, &filename) {
         Ok(path) => path,
         Err(_) => return,
@@ -2181,6 +2213,8 @@ fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
         download_id: format!("tauri-download-{}", state.next_download_id()),
         browser_page_id: page_id.to_string(),
         save_path: path,
+        total_bytes,
+        mime_type: mime_type.clone(),
         canceled: false,
     };
     let key = download_key(page_id, &parsed);
@@ -2194,8 +2228,8 @@ fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
             download_id: download.download_id.clone(),
             origin: safe_origin(&parsed),
             filename,
-            total_bytes: None,
-            mime_type: None,
+            total_bytes,
+            mime_type: download.mime_type.clone(),
             save_path: download.save_path.to_string_lossy().into_owned(),
             status: "downloading",
         },
@@ -2393,7 +2427,7 @@ fn emit_download_progress(
             browser_page_id: download.browser_page_id.clone(),
             download_id: download.download_id.clone(),
             received_bytes,
-            total_bytes: None,
+            total_bytes: download.total_bytes,
             state,
         },
     );
@@ -2806,6 +2840,8 @@ pub async fn poc_browser_create(
                                 download_id: format!("tauri-download-{}", state.next_download_id()),
                                 browser_page_id,
                                 save_path: PathBuf::new(),
+                                total_bytes: None,
+                                mime_type: None,
                                 canceled: false,
                             };
                             emit_download_finished(
@@ -2822,6 +2858,8 @@ pub async fn poc_browser_create(
                         download_id: format!("tauri-download-{}", state.next_download_id()),
                         browser_page_id: browser_page_id.clone(),
                         save_path: path.clone(),
+                        total_bytes: None,
+                        mime_type: None,
                         canceled: false,
                     };
                     let key = download_key(&browser_page_id, &url);

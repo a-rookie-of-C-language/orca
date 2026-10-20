@@ -128,7 +128,10 @@ try {
   )
   assert.equal(requested.length, 1, 'expected exactly one download-requested')
   assert.equal(requested[0][1].filename, 'fallback.bin')
+  assert.equal(requested[0][1].totalBytes, SIZE, 'expected content-length total')
+  assert.equal(requested[0][1].mimeType, 'application/octet-stream', 'expected server mime type')
   assert.ok(progress.length >= 1, 'expected progress events')
+  assert.equal(progress[0][1].totalBytes, SIZE, 'expected progress to carry the total')
   assert.ok(finished, 'expected download-finished within the deadline')
   assert.equal(finished[1].status, 'completed')
   const savePath = finished[1].savePath
