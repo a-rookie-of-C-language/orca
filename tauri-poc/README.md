@@ -128,7 +128,9 @@ first native slice covers the low-risk operations that the renderer already expe
   to the existing renderer window. Proven live by `tauri-poc/scripts/check-second-instance.mjs`.
 - native desktop notifications through Tauri's notification plugin; the existing renderer
   notification contract remains the compatibility layer, including notification ids, dismissal,
-  and click-to-focus routing back into the workspace.
+  and click-to-focus routing back into the workspace. Registration plus a labeled
+  notify/remove_active round-trip is proven live by
+  `tauri-poc/scripts/check-notifications.mjs`.
 - runtime-owned plugin discovery, consent, enablement, worker execution, logs, installation,
   removal, and marketplace preview/install/rollback through the same RPC boundary used by
   paired clients.
