@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
 use url::Url;
 
@@ -976,14 +976,15 @@ pub fn poc_crash_reports_record_renderer_error(
 /// Pairs the WebView2 Crashpad dump written for a crash with its report and
 /// folds the signature in, mirroring Electron attachMinidumpSignature. Never
 /// throws for absent dumps: those resolve to `{ ok: false, reason }`.
-#[tauri::command]
-pub fn poc_crash_reports_capture_minidump(
-    app: AppHandle,
-    state: State<CrashReportState>,
-    args: CrashReportMinidumpArgs,
+fn capture_minidump_for_report(
+    app: &AppHandle,
+    state: &CrashReportState,
+    report_id: &str,
+    crashed_at_ms: u128,
+    expected_process_type: Option<&str>,
+    dump_directory: Option<&str>,
 ) -> Result<Value, String> {
-    let report_id = string_value(&args.report_id, 120);
-    let path = app_data_path(&app)?;
+    let path = app_data_path(app)?;
     {
         let _guard = state
             .io
@@ -994,36 +995,47 @@ pub fn poc_crash_reports_capture_minidump(
             return Ok(serde_json::json!({ "ok": false, "reason": "unknown_report" }));
         }
     }
-    let crashed_at_ms = args.crashed_at_ms.unwrap_or_else(now_ms);
-    let directory = match args.dump_directory.as_deref() {
+    let directory = match dump_directory {
         Some(directory) => PathBuf::from(directory),
-        None => minidump::webview_crash_reports_dir(&app)?,
+        None => minidump::webview_crash_reports_dir(app)?,
     };
-    let candidates = minidump::collect_dump_candidates(&directory);
-    let mut claims = state
-        .minidump_claims
-        .lock()
-        .map_err(|_| "minidump claim state is unavailable".to_string())?;
-    let fresh = minidump::fresh_dump_candidates(&candidates, crashed_at_ms, &mut claims);
-    // Newest first like the TS poll: a mismatched process type is skipped, a
-    // vanished file is normal because Crashpad promotes dumps by rename.
+    // Crashpad is still writing when the crash event fires, so poll for the
+    // dump like the TS capture instead of reading once.
+    let deadline_ms = crashed_at_ms.saturating_add(minidump::DUMP_WAIT_TIMEOUT_MS);
     let mut captured = None;
-    for candidate in &fresh {
-        let parsed =
-            minidump::parse_dump_file(&candidate.path, args.expected_process_type.as_deref());
-        let Ok(Some((signature, size_bytes))) = parsed else {
-            continue;
-        };
-        if let Some(expected) = args.expected_process_type.as_deref() {
-            if signature.process_type.as_deref() != Some(expected) {
+    let mut candidates = Vec::new();
+    while captured.is_none() {
+        candidates = minidump::collect_dump_candidates(&directory);
+        let mut claims = state
+            .minidump_claims
+            .lock()
+            .map_err(|_| "minidump claim state is unavailable".to_string())?;
+        let fresh = minidump::fresh_dump_candidates(&candidates, crashed_at_ms, &mut claims);
+        // Newest first like the TS poll: a mismatched process type is
+        // skipped, a vanished file is normal because Crashpad promotes dumps
+        // by rename.
+        for candidate in &fresh {
+            let parsed = minidump::parse_dump_file(&candidate.path, expected_process_type);
+            let Ok(Some((signature, size_bytes))) = parsed else {
                 continue;
+            };
+            if let Some(expected) = expected_process_type {
+                if signature.process_type.as_deref() != Some(expected) {
+                    continue;
+                }
             }
+            claims.insert(candidate.path.clone(), candidate.mtime_ms);
+            captured = Some((candidate.clone(), signature, size_bytes));
+            break;
         }
-        claims.insert(candidate.path.clone(), candidate.mtime_ms);
-        captured = Some((candidate.clone(), signature, size_bytes));
-        break;
+        drop(claims);
+        if captured.is_none() {
+            if now_ms() >= deadline_ms {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(minidump::DUMP_POLL_INTERVAL_MS));
+        }
     }
-    drop(claims);
     let Some((candidate, signature, size_bytes)) = captured else {
         return Ok(serde_json::json!({ "ok": false, "reason": "no_fresh_dump" }));
     };
@@ -1056,6 +1068,58 @@ pub fn poc_crash_reports_capture_minidump(
         }
     }
     Ok(serde_json::json!({ "ok": true, "report": report }))
+}
+
+/// Minidump pairing as a renderer-callable command. Dead guests go through
+/// record_guest_renderer_crash on a Rust thread instead.
+#[tauri::command]
+pub fn poc_crash_reports_capture_minidump(
+    app: AppHandle,
+    state: State<CrashReportState>,
+    args: CrashReportMinidumpArgs,
+) -> Result<Value, String> {
+    capture_minidump_for_report(
+        &app,
+        &state,
+        &string_value(&args.report_id, 120),
+        args.crashed_at_ms.unwrap_or_else(now_ms),
+        args.expected_process_type.as_deref(),
+        args.dump_directory.as_deref(),
+    )
+}
+
+/// Records a dead guest renderer the way Electron process-gone path does:
+/// the report is written from Rust because the renderer that died cannot
+/// report itself. The Crashpad dump is paired inline through the same capture
+/// core the command uses. Failures only reach the log: recording a crash must
+/// never crash the shell.
+pub(crate) fn record_guest_renderer_crash(
+    app: &AppHandle,
+    page_id: &str,
+    reason: &str,
+    exit_code: Option<i32>,
+) {
+    let state = app.state::<CrashReportState>();
+    let mut report = base_report(app, &state);
+    report.process_type = "guest".to_string();
+    report.reason = string_value(reason, 120);
+    report.exit_code = exit_code;
+    report.details = sanitize_details([(
+        "browser_page_id".to_string(),
+        Value::from(string_value(page_id, MAX_DETAIL_STRING_LENGTH)),
+    )]);
+    let stored = match store_report(app, &state, report) {
+        Ok(stored) => stored,
+        Err(error) => {
+            eprintln!("orca guest crash report unavailable: {error}");
+            return;
+        }
+    };
+    if let Err(error) =
+        capture_minidump_for_report(app, &state, &stored.id, now_ms(), Some("renderer"), None)
+    {
+        eprintln!("orca guest minidump capture failed: {error}");
+    }
 }
 
 #[tauri::command]

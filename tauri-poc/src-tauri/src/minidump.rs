@@ -21,6 +21,11 @@ const MAX_DUMP_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_STORED_DUMP_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_STORED_DUMPS: usize = 64;
 pub const DUMP_RECENCY_WINDOW_MS: u128 = 30_000;
+/// How long the capture path waits for Crashpad to finish writing the dump,
+/// and how often it re-scans. Mirrors Electron DUMP_WAIT_TIMEOUT_MS and
+/// DUMP_POLL_INTERVAL_MS; the capture thread sleeps between rounds.
+pub const DUMP_WAIT_TIMEOUT_MS: u128 = 8_000;
+pub const DUMP_POLL_INTERVAL_MS: u64 = 250;
 
 const STREAM_TYPE_MODULE_LIST: u32 = 4;
 const STREAM_TYPE_EXCEPTION: u32 = 6;

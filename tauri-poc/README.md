@@ -368,6 +368,11 @@ Not migrated yet:
   minidumpPath and minidumpBytes plus the flattened signature), proven live by
   `tauri-poc/scripts/check-crash-minidump.mjs` against the real WebView2 dump with the minidump
   unit tests.
+  unit tests. Dead guest renderers are recorded from Rust too: the WebView2 ProcessFailed hook
+  writes the crash report on a worker thread (the dead renderer cannot report itself) and
+  pairs the Crashpad dump inline through the same capture core, proven live by
+  `tauri-poc/scripts/check-guest-crash-report.mjs` (CDP Page.crash against a hidden guest,
+  report plus captured renderer signature read back, guest closed and seed dismissed).
 - Remaining Electron PTY parity (Windows-native terminal capabilities), plus the SSH managed-server/relay
   ladder's end-to-end serving proof against a host that still runs relay-era terminals (the
   decision, the bridge host, and the `bridged` connect behavior already run on orcad).

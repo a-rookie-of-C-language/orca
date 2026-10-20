@@ -1250,7 +1250,23 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                         .to_string(),
                     );
                     event.exit_code = Some(exit_code);
+                    let report_reason =
+                        event.reason.clone().unwrap_or_else(|| "crashed".to_string());
+                    let report_exit = event.exit_code;
+                    let app_for_report = app_for_crash.clone();
+                    let page_id_for_report = page_id_for_crash.clone();
                     emit_page_event(&app_for_crash, event);
+                    // The dead renderer cannot report itself: record from Rust
+                    // on a worker thread so dump pairing never runs on the
+                    // COM callback.
+                    std::thread::spawn(move || {
+                        crate::crash_reports::record_guest_renderer_crash(
+                            &app_for_report,
+                            &page_id_for_report,
+                            &report_reason,
+                            report_exit,
+                        );
+                    });
                     Ok(())
                 }));
             unsafe {
