@@ -1,4 +1,5 @@
 import { spawnProcess } from '@orca/process-host'
+import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -47,7 +48,13 @@ export function superviseRuntime({ entry, input, owner = process, spawn = spawnP
   return child
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+// Why realpathSync: Node reports import.meta.url with the filesystem-resolved
+// path (junctions/symlinks followed), while argv[1] keeps the spelling used at
+// spawn. Canonicalizing both keeps the entry guard correct under either.
+if (
+  process.argv[1] &&
+  realpathSync(new URL(import.meta.url)) === realpathSync(resolve(process.argv[1]))
+) {
   if (!process.argv[2]) {
     throw new Error('An orcad server entry is required.')
   }

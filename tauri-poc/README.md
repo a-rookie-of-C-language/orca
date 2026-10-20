@@ -45,6 +45,51 @@ preserves the runtime, restart/relaunch replace it, the renderer reconnects, and
 Screenshots are saved in `.cache/tauri-restart-check`. This is a startup/restart smoke check, not
 proof of full terminal/session restoration or cross-platform parity.
 
+Administrator elevation stays a native action too: `poc_restart_as_administrator`
+reuses the bundled `orca-administrator-restart.exe` helper (staged beside the
+CLI launcher by `prepare-release-runtime.mjs`) and reports the same
+installed-app error in development that Electron throws outside the installed
+Windows app. Verify without triggering UAC via:
+```powershell
+$env:ORCA_BACKGROUND_LAUNCH="1"
+node tauri-poc/scripts/check-restart-as-administrator.mjs
+```
+
+The elevated instance carries the marker back: on boot the renderer
+takes it once via `poc_take_elevation_restart_request`, and when the
+new token is actually elevated it restarts the owned persistent daemon
+through orcad (`terminalDaemon.restart`) before App mounts, so local
+terminals run under the new token. Verify the take-once latch without
+elevation via:
+```powershell
+$env:ORCA_BACKGROUND_LAUNCH="1"
+node tauri-poc/scripts/check-elevation-restart.mjs
+```
+
+Settings font suggestions stay native as well: `poc_list_system_fonts`
+enumerates installed families in-process through GDI (cached, same
+sorted-unique contract and Windows fallback as Electron) instead of
+spawning PowerShell, and the renderer merges it over the web empty-list
+fallback. Verify against the hidden development app via:
+```powershell
+$env:ORCA_BACKGROUND_LAUNCH="1"
+node tauri-poc/scripts/check-system-fonts.mjs
+```
+
+Terminal theme-import previews stay native too. `previewGhosttyImport`
+and `previewWarpThemeImport` reuse the shared Ghostty parser/mapper and
+Warp YAML parser on the renderer, but read the config and theme files
+through the authorized-external staging channel (`poc_stage_external_paths`
++ `poc_read_external_file_chunk`) rather than an ambient fs handle, and the
+Warp auto-scan enumerates `%APPDATA%\warp\<channel>\data\themes` through
+`poc_list_directory` (bounded to the authorized roots). Manual file/folder
+pickers go through the Tauri dialog plugin. Verify against the hidden
+development app via:
+```powershell
+$env:ORCA_BACKGROUND_LAUNCH="1"
+node tauri-poc/scripts/check-ghostty-import.mjs
+node tauri-poc/scripts/check-warp-theme-import.mjs
+```
 The same hidden development app can verify real terminal directory changes:
 
 ```powershell
@@ -147,7 +192,41 @@ first native slice covers the low-risk operations that the renderer already expe
   notification contract remains the compatibility layer, including notification ids, dismissal,
   and click-to-focus routing back into the workspace. Registration plus a labeled
   notify/remove_active round-trip is proven live by
-  `tauri-poc/scripts/check-notifications.mjs`.
+  `tauri-poc/scripts/check-notifications.mjs`. The desktop-away probe that
+  gates presence-sensitive notifications also answers natively:
+  `poc_desktop_away_state` reads `GetLastInputInfo` idle time and the input
+  desktop lock on Windows, returning the same boolean|undefined contract as
+  Electron's `powerMonitor`-backed handler (proven live by
+  `tauri-poc/scripts/check-desktop-away.mjs`).
+- native shell-capability probes for the local Windows host: `poc_shell_availability`
+  scans the same Git Bash install roots and PATH segments Electron's
+  `gitBash:isAvailable` reads (with the `Git|PortableGit bin\bash.exe` shape
+  guard), and spawns the same `pwsh.exe -Version` / `wsl.exe --status` /
+  `wsl.exe --list --quiet` probes Electron's `pwsh`/`wsl`/`wslDistros`
+  handlers run. The renderer's `window.api.wsl`/`pwsh`/`gitBash` and the local
+  `readWindowsTerminalCapabilities` path answer from it, so the shell picker
+  shows the real installed shells instead of the web empty fallbacks
+  (`tauri-poc/scripts/check-shell-availability.mjs` proves a live
+  gitBash/pwsh/wsl + distro list against the hidden development app).
+- native user-keybindings file parity: `window.api.keybindings` resolves
+  `~/.orca/keybindings.json` through dedicated Rust read/write commands
+  (`poc_read_keybindings_file` / `poc_write_keybindings_file`, atomic
+  temp-then-rename like `writeJsonDocument`) instead of the browser
+  localStorage fallback, so Settings edits and the file format match
+  Electron `KeybindingService` byte-for-byte. The fs-free document
+  parse/serialize logic is shared with main via
+  `src/main/keybindings/keybinding-document.ts`, and `openFile`/`revealFile`
+  reach the OS through the opener plugin
+  (`tauri-poc/scripts/check-keybindings-file.mjs` proves a live snapshot
+  path + ensureFile round-trip).
+- native host-memory telemetry for the Resource Manager status segment:
+  `window.api.memory.getSnapshot` answers the `host` block with real
+  `GlobalMemoryStatusEx` totals (total/free/available/used, % used, core
+  count) through `poc_memory_snapshot`, instead of the all-zeros web
+  fallback. Per-worktree and per-process subtree samples stay zero — that
+  telemetry is host-daemon work — matching the existing fallback for those
+  fields (`tauri-poc/scripts/check-memory-snapshot.mjs` proves a live
+  non-zero snapshot).
 - runtime-owned plugin discovery, consent, enablement, worker execution, logs, installation,
   removal, and marketplace preview/install/rollback through the same RPC boundary used by
   paired clients.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { setTimeout as delay } from 'node:timers/promises'
+import { realpathSync } from 'node:fs'
 
 const { chromium } = createRequire(import.meta.url)('playwright')
 
@@ -39,7 +40,7 @@ export async function assertReadyHidden(page, root) {
     runtime: await window.__TAURI_INTERNALS__.invoke('poc_runtime_status'),
     visible: await window.__TAURI__.window.getCurrentWindow().isVisible()
   }))
-  assert.equal(snapshot.identity.devRepoRoot, root, 'The renderer belongs to another checkout.')
+  assert.equal(realpathSync(snapshot.identity.devRepoRoot), realpathSync(root), 'The renderer belongs to another checkout.')
   assert.equal(snapshot.visible, false, 'Refusing to operate on a visible user window.')
   assert.equal(snapshot.runtime.state, 'ready')
 }

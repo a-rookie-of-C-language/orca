@@ -1,5 +1,5 @@
 import { build } from 'esbuild'
-import { cpSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -39,6 +39,29 @@ if (process.platform === 'win32') {
   if (!existsSync(launcher)) {
     throw new Error(`Packaged Tauri runtime is missing the Windows CLI launcher: ${launcher}`)
   }
+}
+
+// Why fail loudly here: the packaged elevation flow spawns
+// `orcad/bin/orca-administrator-restart.exe` beside the CLI launcher, and a
+// bundle without it would only surface as a dead restart-as-administrator
+// action on the installed app.
+if (process.platform === 'win32') {
+  const restartHelperSource = join(
+    root,
+    '.build',
+    'windows-cli-launcher',
+    process.arch,
+    'orca-administrator-restart.exe'
+  )
+  if (!existsSync(restartHelperSource)) {
+    throw new Error(
+      `Packaged Tauri runtime is missing the Windows administrator restart helper: ${restartHelperSource}`
+    )
+  }
+  copyFileSync(
+    restartHelperSource,
+    join(resourceRoot, 'orcad', 'bin', 'orca-administrator-restart.exe')
+  )
 }
 
 const nativePackage =
