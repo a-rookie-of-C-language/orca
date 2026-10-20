@@ -374,18 +374,6 @@ fn poc_toggle_maximize(window: WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn poc_is_fullscreen(window: WebviewWindow) -> Result<bool, String> {
-    window.is_fullscreen().map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn poc_set_fullscreen(window: WebviewWindow, fullscreen: bool) -> Result<(), String> {
-    window
-        .set_fullscreen(fullscreen)
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
 fn poc_set_zoom(
     window: WebviewWindow,
     scale_factor: f64,
@@ -477,16 +465,6 @@ fn poc_popup_menu(window: WebviewWindow) -> Result<(), String> {
         .menu()
         .ok_or_else(|| "application menu is unavailable".to_string())?;
     menu.popup(window.as_ref().window())
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn poc_emit_zoom(window: WebviewWindow, direction: String) -> Result<(), String> {
-    if !matches!(direction.as_str(), "in" | "out" | "reset") {
-        return Err("Unsupported zoom direction.".to_string());
-    }
-    window
-        .emit(EVENT_TERMINAL_ZOOM, direction)
         .map_err(|error| error.to_string())
 }
 
@@ -1147,8 +1125,6 @@ fn main() {
             poc_is_maximized,
             poc_minimize,
             poc_toggle_maximize,
-            poc_is_fullscreen,
-            poc_set_fullscreen,
             poc_set_zoom,
             poc_get_zoom,
             poc_set_focus,
@@ -1162,7 +1138,6 @@ fn main() {
             poc_confirm_close,
             poc_set_minimize_to_tray,
             poc_popup_menu,
-            poc_emit_zoom,
             poc_notification_sound_path,
             poc_validate_dropped_paths,
             menu_appearance::poc_menu_set_appearance_checks,
