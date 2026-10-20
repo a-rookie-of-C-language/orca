@@ -9,10 +9,8 @@ import { forgetHugeRepoWarningDismissalsForWorktrees } from '@/lib/source-contro
 import { forgetWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import { readIpcErrorDetail } from '@/lib/ipc-error'
 import { isArchiveHookRemovalError } from '../../../../../../shared/worktree/archive-hook-removal-gate'
-import {
-  resolveWorktreeOperationRouteResult,
-  resolveWorktreeOperationRouteResultForHost
-} from '@/lib/worktree-operation-route'
+import { resolveWorktreeOperationRouteResultForHost } from '@/lib/worktree-operation-route'
+import { resolveWriteRouteResult } from '@/lib/resolve-owner'
 import {
   beginHostQualifiedRemoval,
   completeSameIdHostScopedRemoval,
@@ -141,7 +139,7 @@ export function createRemoveWorktree(
           // Missing means stale mirror; ambiguous or changed ownership must fail closed.
           const currentResolution = requiredExecutionHostId
             ? resolveWorktreeOperationRouteResultForHost(get(), worktreeId, requiredExecutionHostId)
-            : resolveWorktreeOperationRouteResult(get(), worktreeId)
+            : resolveWriteRouteResult(get(), worktreeId)
           if (currentResolution.kind === 'ambiguous') {
             throw error
           }
@@ -225,10 +223,11 @@ export function createRemoveWorktree(
       }
 
       const worktreeDisplayName = worktreeBeforeRemoval?.displayName?.trim()
-      if (worktreeDisplayName) {
+      if (worktreeDisplayName && hostId) {
         try {
           await window.api.automations?.snapshotWorkspaceName?.({
             workspaceId: worktreeId,
+            hostId,
             displayName: worktreeDisplayName
           })
         } catch (error) {

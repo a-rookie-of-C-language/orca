@@ -84,7 +84,7 @@ export function buildSkillCommandForRuntime(
 ): string {
   const resolvedRuntime = runtime ?? LOCAL_HOST_AGENT_RUNTIME
   if (resolvedRuntime.runtime !== 'wsl') {
-    return wrapWindowsSkillCommandWithPrerequisite(command, currentPlatform, 'copied-command')
+    return wrapWindowsSkillCommandWithNpxPrerequisite(command, currentPlatform, 'copied-command')
   }
   return command
 }
@@ -97,7 +97,7 @@ type SkillCommandTarget = 'copied-command' | 'orca-setup-terminal'
 
 /**
  * Adapts a copied skill command for Orca's inline setup terminal auto-paste.
- * Host Windows installs may gain a command preflight; WSL-targeted PowerShell wrappers
+ * Host Windows installs may gain an npx preflight; WSL-targeted PowerShell wrappers
  * must become bash-native because the daemon forces wsl.exe for WSL worktrees.
  */
 export function buildSkillSetupTerminalCommand(
@@ -119,7 +119,7 @@ export function buildSkillSetupTerminalCommand(
   if (runtime?.runtime === 'wsl' && currentPlatform === 'win32') {
     return buildPowerShellWslSkillCommand(copiedCommand, runtime)
   }
-  return wrapWindowsSkillCommandWithPrerequisite(
+  return wrapWindowsSkillCommandWithNpxPrerequisite(
     copiedCommand,
     currentPlatform,
     'orca-setup-terminal'
@@ -181,17 +181,12 @@ function isSetupTerminalForcedToPowerShell(terminalShellOverride: string | undef
   )
 }
 
-function wrapWindowsSkillCommandWithPrerequisite(
+function wrapWindowsSkillCommandWithNpxPrerequisite(
   command: string,
   currentPlatform: NodeJS.Platform,
   target: SkillCommandTarget
 ): string {
   const trimmedCommand = command.trim()
-  const cli = /^orca\s+skills\s+(?:install|update)\b/i.test(trimmedCommand)
-    ? 'orca'
-    : /^npx\s+skills(?:@[\w.-]+)?\s+add\b/i.test(trimmedCommand)
-      ? 'npx'
-      : null
   if (
     currentPlatform !== 'win32' ||
     // Why: skill setup terminals spawn on the focused runtime environment, so a
@@ -201,21 +196,17 @@ function wrapWindowsSkillCommandWithPrerequisite(
     // shells rewrite cmd.exe's leading /d /s /c switches into drive paths,
     // starting an interactive cmd session instead of running the payload.
     (target === 'copied-command' && isPosixFamilyWindowsShellConfigured()) ||
-    !cli
+    !/^npx\s+skills(?:@[\w.-]+)?\s+add\b/i.test(trimmedCommand)
   ) {
     return command
   }
 
   const missingNpxGuidance =
     'echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1'
-  const guidance =
-    cli === 'orca'
-      ? 'echo ERROR: Orca shell command was not found. Open Orca Settings and install the shell command. & exit /b 1'
-      : missingNpxGuidance
   // Why: cmd.exe is one shell-neutral boundary for PowerShell and Command
   // Prompt, and it resolves the bare name through PATHEXT for both the
   // preflight and the executed command, so shims such as npx.exe still count.
-  return `cmd.exe /d /s /c "where.exe ${cli} >nul 2>nul & if errorlevel 1 (${guidance}) else (${trimmedCommand})"`
+  return `cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 (${missingNpxGuidance}) else (${trimmedCommand})"`
 }
 
 function isPosixFamilyWindowsShellConfigured(): boolean {

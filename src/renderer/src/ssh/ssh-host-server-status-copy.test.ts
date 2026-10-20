@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { SshManagedServerUpdateNote } from '../../../shared/ssh-types'
 import { sshConnectFailureText, sshHostServerStatusLine } from './ssh-host-server-status-copy'
 
 const plain = {}
@@ -66,7 +67,7 @@ describe('SSH host server status line', () => {
       sshHostServerStatusLine(plain, { managedServer: { kind: 'setting-up', phase: 'updating' } })
         ?.text
     ).toBe('Updating managed server…')
-    const managed = (update: { state: 'host-newer' | 'deferred' | 'failed'; detail?: string }) =>
+    const managed = (update: SshManagedServerUpdateNote) =>
       sshHostServerStatusLine(plain, {
         managedServer: { kind: 'managed', environmentId: 'e', update }
       })
@@ -78,6 +79,21 @@ describe('SSH host server status line', () => {
     expect(managed({ state: 'failed', detail: 'readiness timed out' })).toMatchObject({
       tone: 'warning',
       detail: 'readiness timed out'
+    })
+  })
+
+  it('says a managed server may be behind this app, whatever kept it there', () => {
+    const line = (update: SshManagedServerUpdateNote) =>
+      sshHostServerStatusLine(plain, {
+        managedServer: { kind: 'managed', environmentId: 'e', update }
+      })
+    expect(line({ state: 'rolled-back' })).toMatchObject({ tone: 'warning' })
+    expect(line({ state: 'rolled-back' })?.text).toContain('Update server')
+    expect(line({ state: 'no-template' })?.text).toContain('can’t update')
+    expect(line({ state: 'migrating' })?.text).toContain('project move')
+    expect(line({ state: 'check-failed', detail: 'ssh dropped' })).toMatchObject({
+      tone: 'warning',
+      detail: 'ssh dropped'
     })
   })
 
@@ -131,6 +147,15 @@ describe('SSH host server status line', () => {
       text: 'This host isn’t supported by this version of Orca (the host is missing system libraries the server needs). To keep using it, install an older version of Orca.'
     })
     expect(line?.text).not.toContain('relay')
+  })
+
+  it('tells a noexec host what to change, not to install an older Orca', () => {
+    const line = sshHostServerStatusLine(plain, {
+      managedServer: { kind: 'relay', reason: 'orcad_unavailable', detail: 'runtime_noexec' }
+    })
+    expect(line).toMatchObject({ tone: 'destructive', text: expect.stringContaining('noexec') })
+    expect(line?.text).toContain('connect again')
+    expect(line?.text).not.toContain('older version')
   })
 
   it('says plainly when neither port forwarding nor the SSH session reaches the server', () => {
@@ -203,6 +228,19 @@ describe('SSH host server status line', () => {
       text: expect.stringContaining('Try connecting again'),
       detail
     })
+  })
+
+  it('says contact was lost, not that the server failed, when setup lost the host', () => {
+    const line = sshHostServerStatusLine(plain, {
+      managedServer: {
+        kind: 'relay',
+        reason: 'failed',
+        contactLost: true,
+        detail: 'The SSH connection closed before the transfer finished'
+      }
+    })
+    expect(line).toMatchObject({ tone: 'warning', text: expect.stringContaining('lost contact') })
+    expect(line?.text).not.toContain('couldn’t start')
   })
 
   it('says a move that stopped short is paused and kept, not a plain try-again', () => {

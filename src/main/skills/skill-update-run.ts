@@ -1,17 +1,18 @@
-import type { ChildProcess, spawn } from 'node:child_process'
-import { spawnProcess as spawnHostProcess } from '@orca/process-host'
-import {
-  resolveBundledSkillsInstaller,
-  buildSkillsInstallerEnvironment
-} from '../../shared/bundled-skills-installer'
+import { spawn, type ChildProcess } from 'node:child_process'
 import {
   canonicalizeSkillUpdateNames,
   type SkillUpdateRun,
   type SkillUpdateStartResult
 } from '../../shared/skill-freshness'
-import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
+import {
+  buildAgentFeatureSkillInstallArgs,
+  SKILLS_CLI_ENV_OVERRIDES
+} from '../../shared/agent-feature-install-commands'
 import { detectSkillsCliUpdateAgentKeys } from '../../shared/skills-cli-agent-detection'
+import { resolveCliCommand } from '../codex-cli/command'
+import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { killWithDescendantSweep } from '../pty-descendant-termination'
+import { getSpawnArgsForWindows, WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../win32-utils'
 
 // Why: `skills add` prints ANSI colour and \r + erase-line progress. We show
 // this log verbatim to the user but never parse it — `add` has no --json, so
@@ -38,10 +39,11 @@ export type SkillUpdateRunnerDeps = {
   detectAgentKeys?: () => string[]
   spawnProcess?: typeof spawn
   resolveCommand?: (commandName: string) => string
-  resolveInstaller?: () => string
   /** Returns the subset of `names` that did not land, re-read from disk. */
   rescanOutdatedNames?: (names: string[]) => Promise<string[]>
   killTree?: (pid: number, killRoot: () => void) => Promise<void>
+  /** Injected so the Windows cmd.exe rail is reachable off Windows. */
+  buildSpawnArgs?: typeof getSpawnArgsForWindows
   now?: () => number
   onState?: (run: SkillUpdateRun) => void
 }
@@ -54,7 +56,17 @@ function clampOutput(value: string): string {
   return value.length <= MAX_OUTPUT_CHARS ? value : value.slice(value.length - MAX_OUTPUT_CHARS)
 }
 
-/** Runs the locked installer shipped with this build, retaining upstream placement behavior. */
+/**
+ * Runs the pinned `npx --yes skills@<pinned> add <orca>/tree/<commit> --skill <name>... --global
+ * --agent ... -y` headlessly. `add` always re-copies, so the result is this build's bytes
+ * however the old copy was installed or edited.
+ *
+ * Both `--yes` flags are load-bearing and distinct: `npx --yes` skips the
+ * install-this-package prompt, and `skills … -y` takes the CLI's own
+ * non-interactive branch. `skills` gates its prompts on
+ * `options.yes || !process.stdin.isTTY`, and stdin is ignored below, so the run
+ * cannot block on input that no one can answer.
+ */
 export class SkillUpdateRunner {
   private run: SkillUpdateRun = { state: 'idle' }
   private child: ChildProcess | null = null
@@ -89,21 +101,27 @@ export class SkillUpdateRunner {
       return { started: false, reason: 'invalid-names' }
     }
 
-    const spawnProcess =
-      this.deps.spawnProcess ??
-      ((program, args, options) => spawnHostProcess({ program, args, ...options }))
-    const nodeCommand = this.deps.resolveCommand?.('node') ?? process.execPath
-    const installerArgs = buildAgentFeatureSkillInstallArgs(canonicalNames, {
-      sourceCommit: this.deps.sourceCommit,
-      yes: true,
-      agents: (this.deps.detectAgentKeys ?? detectSkillsCliUpdateAgentKeys)()
-    }).slice(1)
+    const resolveCommand = this.deps.resolveCommand ?? ((name: string) => resolveCliCommand(name))
+    const spawnProcess = this.deps.spawnProcess ?? spawn
+    const npxCommand = resolveCommand('npx')
+    const npxArgs = [
+      '--yes',
+      ...buildAgentFeatureSkillInstallArgs(canonicalNames, {
+        sourceCommit: this.deps.sourceCommit,
+        yes: true,
+        agents: (this.deps.detectAgentKeys ?? detectSkillsCliUpdateAgentKeys)()
+      })
+    ]
 
-    let installer: string
+    let spawnCmd: string
+    let spawnArgs: string[]
     try {
-      installer = (this.deps.resolveInstaller ?? resolveBundledSkillsInstaller)()
-    } catch (error) {
-      // Publish missing build assets so the update dialog can explain the failure.
+      const buildSpawnArgs = this.deps.buildSpawnArgs ?? getSpawnArgsForWindows
+      ;({ spawnCmd, spawnArgs } = buildSpawnArgs(npxCommand, npxArgs))
+    } catch {
+      // Why: the names are already canonical here, so this is the cmd.exe rail
+      // rejecting the resolved npx *path*. Publishing the failure keeps the dialog
+      // honest; a bare `started: false` would leave the button dead and silent.
       this.runToken += 1
       this.settling = false
       this.publish({
@@ -112,9 +130,11 @@ export class SkillUpdateRunner {
         finishedAt: this.deps.now(),
         output: '',
         failedNames: canonicalNames,
-        message: error instanceof Error ? error.message : String(error)
+        message:
+          `Could not run ${npxCommand} safely from this location: its path contains one of ` +
+          `${WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL}, which cmd.exe would reinterpret.`
       })
-      return { started: false, reason: 'installer-unavailable' }
+      return { started: false, reason: 'unsafe-command-path' }
     }
 
     const startedAt = this.deps.now()
@@ -122,21 +142,18 @@ export class SkillUpdateRunner {
     this.settling = false
     this.publish({ state: 'running', names: canonicalNames, startedAt, output: '' })
 
-    const child = spawnProcess(nodeCommand, [installer, ...installerArgs], {
+    const child = spawnProcess(spawnCmd, spawnArgs, {
       // Why: stdin ignored keeps `process.stdin.isTTY` falsy in the child, which
       // is the second half of the CLI's non-interactive gate.
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      // Why: The app runtime executes the bundled installer without npm or a user Node install.
-      env: {
-        ...buildSkillsInstallerEnvironment(),
-        ELECTRON_RUN_AS_NODE: '1',
-        ORCA_BACKGROUND_LAUNCH: '1'
-      }
+      // Why: npx is an `#!/usr/bin/env node` script — without its own node ahead of
+      // PATH it loads under whatever version leads, and a native dep dies on ABI.
+      env: withCliRuntimeOnPath(npxCommand, { ...process.env, ...SKILLS_CLI_ENV_OVERRIDES })
     })
     this.child = child
 
-    // Why: `stripAnsi` turns each \r progress frame into its own line, so an installer
+    // Why: `stripAnsi` turns each \r progress frame into its own line, so an npm
     // install emits many chunks a second — and every publish structured-clones
     // the whole buffer to every window. Coalesce into one push per tick.
     let flushTimer: ReturnType<typeof setTimeout> | null = null
@@ -245,7 +262,10 @@ export class SkillUpdateRunner {
       return
     }
 
-    // The installer can spawn Git; retire its descendants before allowing another run.
+    // Why: `npx` is a wrapper — on POSIX the `skills` process it execs is a
+    // child, and on Windows the shim runs under cmd.exe. Killing only the direct
+    // child leaves the process that is actually writing to the global skill
+    // homes alive.
     this.killing = true
     let hasReleased = false
     let releaseTimer: ReturnType<typeof setTimeout> | null = null
@@ -260,7 +280,7 @@ export class SkillUpdateRunner {
       this.killing = false
       // Why: stay `running` until the tree is actually dead. The sweep waits for
       // a descendant snapshot before it signals anything, so releasing on the
-      // synchronous path would let an immediate re-Update spawn a second installer
+      // synchronous path would let an immediate re-Update spawn a second npx
       // writing the same bundles — the corruption the post-run verdict exists to
       // catch. `start()` already refuses while running, so holding the state is
       // the whole guard.

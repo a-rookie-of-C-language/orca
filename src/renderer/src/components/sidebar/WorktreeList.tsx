@@ -25,25 +25,16 @@ import { EMPTY_PROJECT_GROUPS } from './worktree-list/viewport/viewport-props'
 import { NOOP_WORKSPACE_BOARD_DRAG_PREVIEW_CALLBACK } from './worktree-list/drag/drop-commit-context'
 import { useAgentSendTargetWorktreeId } from './worktree-list/listing/use-agent-send-target'
 import { useProjectGroupDialogs } from './worktree-list/rows/use-project-group-dialogs'
-import { useSidebarExternalWorktreeCards } from './worktree-list/listing/use-external-worktree-cards'
-import { useSidebarHostVisibleScope } from './worktree-list/listing/use-host-visible-scope'
 import { useSidebarRevealRequests } from './worktree-list/navigation/use-reveal-requests'
-import { useSidebarSectionRows } from './worktree-list/listing/use-section-rows'
 import { useSidebarWorktreeFilters } from './worktree-list/listing/use-filters'
 import { useSidebarWorktreeSelection } from './worktree-list/navigation/use-selection'
-import { useSidebarWorktreeSortOrder } from './worktree-list/listing/use-sort-order'
-import { useVisibleSidebarWorktrees } from './worktree-list/listing/use-visible-worktrees'
+import { useWindowSidebarListModel } from './worktree-list/listing/use-window-list-model'
+import { useMainSidebarListModel } from './worktree-list/listing/use-main-list-model'
+import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { useWorktreeStatusMutations } from './worktree-list/drag/use-status-mutations'
-
-// Why: shared frozen identity so the search-forced expansion below never
-// reallocates a set per render while the query is active.
-const EMPTY_COLLAPSED_GROUPS = new Set<string>()
 import { shouldFiltersHideAllRows } from './sidebar-empty-state-gate'
 import { buildWorktreeManualOrderCatalog } from './worktree-manual-order-catalog'
-import {
-  didWorkspaceTextQueryHitLimit,
-  filterWorktreesByTextQuery
-} from './worktree-list/listing/workspace-text-filter'
 import { translate } from '@/i18n/i18n'
 
 type WorktreeListProps = {
@@ -57,6 +48,12 @@ type WorktreeListProps = {
   /** Session-local text query; blank means no filtering. */
   textQuery?: string
 }
+
+// Switch point: this host's window lists main's inputs; a paired web client builds its own view.
+const useSidebarListModel =
+  ORCA_SIDEBAR_INPUTS_IS_MAIN && !isPairedWebClientWindow()
+    ? useMainSidebarListModel
+    : useWindowSidebarListModel
 
 const WorktreeList = React.memo(function WorktreeList({
   scrollOffsetRef,
@@ -119,73 +116,38 @@ const WorktreeList = React.memo(function WorktreeList({
   const agentSendTargetWorktreeId = useAgentSendTargetWorktreeId()
   const { filterState, hasFilters, clearFilters, revealWorkspaceFilters } =
     useSidebarWorktreeFilters()
-  const sortedIds = useSidebarWorktreeSortOrder({ repoMap, sortBy })
   const manualOrderCatalog = useMemo(
     () => buildWorktreeManualOrderCatalog({ worktrees: allWorktrees, folderWorkspaces }),
     [allWorktrees, folderWorkspaces]
   )
-  const { visibleWorktrees, pairedDeviceIdsByEnvironment } = useVisibleSidebarWorktrees({
-    filterState,
-    sortBy,
-    sortedIds,
-    repoMap,
-    worktreeLineageById,
-    defaultHostId,
-    agentSendTargetWorktreeId
-  })
-  // Why session-local: dsh collapsed search never touches persisted filters.
-  const displayWorktrees = useMemo(
-    () => filterWorktreesByTextQuery(visibleWorktrees, repoMap, textQuery),
-    [visibleWorktrees, repoMap, textQuery]
+  const { visibleWorktrees, visibleScope, externalWorktreeCards, rowModel, textSearchHitLimit } =
+    useSidebarListModel({
+      filterState,
+      sortBy,
+      groupBy,
+      projectOrderBy,
+      pinnedDisplayPolicy,
+      defaultHostId,
+      workspaceStatuses,
+      settings,
+      collapsedGroups,
+      repos,
+      repoMap,
+      allWorktrees,
+      worktreeMap,
+      worktreeLineageById,
+      projectGroups,
+      folderWorkspaces,
+      projectGrouping,
+      detectedWorktreesByRepo,
+      prCache,
+      agentSendTargetWorktreeId,
+      textQuery
+    })
+  const visibleProjectRepoIdsBySection = useMemo(
+    () => new Map(rowModel.occurrencePlan.sections.map(({ key, group }) => [key, group.repoIds])),
+    [rowModel.occurrencePlan]
   )
-  // Why dsh parity: search-result navigation expands every ancestor, so while
-  // a non-blank query is active no collapsed group may hide a match. Stored
-  // collapses resume untouched once the query clears.
-  const searchActive = textQuery.trim() !== ''
-  // Why separate memo: the capped slice hides whether more rows matched.
-  const textSearchHitLimit = useMemo(
-    () => didWorkspaceTextQueryHitLimit(visibleWorktrees, repoMap, textQuery),
-    [visibleWorktrees, repoMap, textQuery]
-  )
-  const visibleScope = useSidebarHostVisibleScope({
-    filterState,
-    defaultHostId,
-    repos,
-    projectGroups,
-    folderWorkspaces,
-    pairedDeviceIdsByEnvironment
-  })
-  const externalWorktreeCards = useSidebarExternalWorktreeCards({
-    repos,
-    visibleReposForRows: visibleScope.visibleReposForRows,
-    detectedWorktreesByRepo,
-    filterRepoIds: filterState.filterRepoIds
-  })
-  const rowModel = useSidebarSectionRows({
-    groupBy,
-    projectOrderBy,
-    pinnedDisplayPolicy,
-    defaultHostId,
-    worktrees: displayWorktrees,
-    repos,
-    repoMap,
-    worktreeMap,
-    worktreeLineageById,
-    prCache,
-    settings,
-    workspaceStatuses,
-    effectiveCollapsedGroups: searchActive ? EMPTY_COLLAPSED_GROUPS : collapsedGroups,
-    agentSendTargetWorktreeId,
-    projectGrouping,
-    visibleReposForRows: visibleScope.visibleReposForRows,
-    visibleProjectGroupsForRows: visibleScope.visibleProjectGroupsForRows,
-    visibleFolderWorkspacesForRows: visibleScope.visibleFolderWorkspacesForRows,
-    importedWorktreesByRepo: externalWorktreeCards.importedWorktreesByRepo,
-    newExternalWorktreesInboxByRepo: externalWorktreeCards.newExternalWorktreesInboxByRepo,
-    filterRepoIds: filterState.filterRepoIds,
-    visibleWorkspaceHostIds: filterState.visibleWorkspaceHostIds,
-    workspaceHostScope: filterState.workspaceHostScope
-  })
   const effectiveCollapsedGroups = rowModel.effectiveCollapsedGroups
   const selection = useSidebarWorktreeSelection({
     sectionRows: rowModel.sectionRows,
@@ -193,7 +155,6 @@ const WorktreeList = React.memo(function WorktreeList({
   })
   const statusMutations = useWorktreeStatusMutations({
     manualOrderCatalog,
-    worktreeMap,
     workspaceStatuses,
     sortBy
   })
@@ -249,7 +210,7 @@ const WorktreeList = React.memo(function WorktreeList({
   useSidebarRevealRequests({
     groupBy,
     renderedSidebarRowKeys: rowModel.renderedSidebarRowKeys,
-    visibleWorktrees: displayWorktrees,
+    visibleWorktrees,
     visibleFolderWorkspaces: visibleScope.visibleFolderWorkspacesForRows,
     currentSidebarWorktreeId,
     currentSidebarExecutionHostId: activeWorkspaceExecutionHostId,
@@ -262,7 +223,7 @@ const WorktreeList = React.memo(function WorktreeList({
 
   const filtersHideAllRows = shouldFiltersHideAllRows({
     hasFilters,
-    visibleWorktreeCount: displayWorktrees.length,
+    visibleWorktreeCount: visibleWorktrees.length,
     visibleFolderWorkspaceCount: visibleScope.visibleFolderWorkspacesForRows.length,
     placeholderRepoCount: rowModel.placeholderRepoIds.size,
     importedWorktreeCardCount: externalWorktreeCards.importedWorktreesByRepo.size
@@ -296,7 +257,9 @@ const WorktreeList = React.memo(function WorktreeList({
         // Why: status headers move during wake (inactive -> active); key only on grouping mode so row identity survives.
         key={`group:${groupBy}:host:${filterState.visibleWorkspaceHostIds?.join(',') ?? 'all'}:lineage`}
         rows={rowModel.sectionRows}
+        hostOptions={rowModel.hostOptions}
         occurrencePlan={rowModel.occurrencePlan}
+        visibleProjectRepoIdsBySection={visibleProjectRepoIdsBySection}
         // Why: full-page nav views aren't scoped to a worktree, so no sidebar card should look selected.
         activeWorktreeId={
           activeView === 'tasks' || activeView === 'activity' ? null : currentSidebarWorktreeId
@@ -333,7 +296,7 @@ const WorktreeList = React.memo(function WorktreeList({
         clearPendingRevealWorktreeId={clearPendingRevealWorktreeId}
         clearPendingRevealSidebarRow={clearPendingRevealSidebarRow}
         agentSendTargetWorktreeId={agentSendTargetWorktreeId}
-        worktrees={displayWorktrees}
+        worktrees={visibleWorktrees}
         folderWorkspaces={folderWorkspaces}
         selectedWorktreeIds={selection.selectedWorktreeIds}
         selectedWorktrees={selection.selectedWorktrees}

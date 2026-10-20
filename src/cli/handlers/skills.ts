@@ -1,24 +1,25 @@
-import { spawnProcess } from '@orca/process-host'
-import {
-  assertSkillsInstallerNodeVersion,
-  resolveBundledSkillsInstaller,
-  buildSkillsInstallerEnvironment
-} from '../../shared/bundled-skills-installer'
-import { quoteStartupArg } from '../../shared/tui-agent-startup-shell'
-import { forwardSkillsToWsl } from './skills-wsl-forward'
+import { spawn } from 'node:child_process'
 import type { CommandHandler } from '../dispatch'
 import { RuntimeClientError } from '../runtime-client'
 import { getRepeatedStringFlag } from '../flags'
 import { writeStdoutLine } from '../stdout-line'
 import { loadCanonicalGuides, type BundledSkillGuide } from './bundled-skill-guide-table'
 import { SKILL_GUIDE_GET_HANDLER } from './skill-guide-get'
-
+import { resolveCliCommand, withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
+import {
+  getSpawnArgsForWindows,
+  UnsafeWindowsBatchArgumentsError,
+  WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
+} from '../../shared/windows-batch-spawn'
 import { isUsableSkillsCliAgentKey } from '../../shared/skills-cli-agent-keys'
 import {
   detectSkillsCliAgentKeys,
   detectSkillsCliUpdateAgentKeys
 } from '../../shared/skills-cli-agent-detection'
-import { buildAgentFeatureSkillInstallArgs } from '../../shared/agent-feature-install-commands'
+import {
+  buildAgentFeatureSkillInstallArgs,
+  SKILLS_CLI_ENV_OVERRIDES
+} from '../../shared/agent-feature-install-commands'
 import { readOrcaCliBuildCommit } from '../cli-version'
 
 function resolveSelectedSkillNames(
@@ -57,20 +58,58 @@ function resolveSelectedSkillNames(
   return [...canonicalNames].sort()
 }
 
-function runBundledSkills(args: string[]): Promise<number> {
-  assertSkillsInstallerNodeVersion()
+/** PATH with the resolved npx's own directory first, so its `env node` shebang resolves. */
+
+function runNpxSkills(args: string[]): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawnProcess({
-      program: process.execPath,
-      args: [resolveBundledSkillsInstaller(), ...args],
-      stdio: 'inherit',
-      env: {
-        ...buildSkillsInstallerEnvironment(),
-        ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {})
+    // Why: a bare PATH lookup misses nvm/fnm/volta installs, and hardcoding
+    // `npx.cmd` both misses `npx.exe` shims and hides a missing npx behind
+    // cmd.exe's own exit code, so the friendly error below never fires.
+    const resolved = resolveCliCommand('npx')
+    let spawnCmd: string
+    let spawnArgs: string[]
+    try {
+      ;({ spawnCmd, spawnArgs } = getSpawnArgsForWindows(resolved, args))
+    } catch (error) {
+      // Why: the guard rejects cmd metacharacters, and only the resolved npx
+      // path can carry them here — a username like `A&B` puts them in it.
+      if (!(error instanceof UnsafeWindowsBatchArgumentsError)) {
+        reject(error)
+        return
       }
+      reject(
+        new RuntimeClientError(
+          'invalid_environment',
+          `Cannot run npx from "${resolved}": the path contains characters cmd.exe would ` +
+            `reinterpret. Install Node.js somewhere without ${WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL} in the path.`
+        )
+      )
+      return
+    }
+    // Why: npx is an `#!/usr/bin/env node` script, so resolving it off PATH is
+    // not enough — without node alongside it the child exits 127 with no
+    // 'error' event and the message below never fires.
+    const child = spawn(spawnCmd, spawnArgs, {
+      stdio: 'inherit',
+      // Why the shared helper: it verifies the sibling node actually exists,
+      // skips a bare-name fallback whose dirname is '.', and writes the key
+      // Windows will really read — all of which a local join got wrong.
+      env: withCliRuntimeOnPath(resolved, { ...process.env, ...SKILLS_CLI_ENV_OVERRIDES })
     })
-    child.once('error', reject)
-    child.once('exit', (code) => resolve(code ?? 1))
+    // Why: a missing npx/Node on a headless host surfaces as a raw spawn ENOENT;
+    // wrap it so the CLI reports an actionable message like every other failure here.
+    child.once('error', (error) => {
+      const detail = error instanceof Error ? error.message : String(error)
+      reject(
+        new RuntimeClientError(
+          'invalid_environment',
+          `Could not run npx: ${detail}. Install Node.js and ensure npx is on PATH.`
+        )
+      )
+    })
+    child.once('exit', (code, signal) => {
+      resolve(typeof code === 'number' ? code : signal ? 1 : 0)
+    })
   })
 }
 
@@ -128,33 +167,25 @@ function resolveAgentKeys(verb: SkillMutationVerb, flags: Map<string, string | b
   )
 }
 
-function buildInstallerArgs(
-  skillNames: string[],
-  global: boolean,
-  agents: string[],
-  flags: Map<string, string | boolean>
-): string[] {
-  const sourceCommit = flags.get('source-commit') ?? readOrcaCliBuildCommit()
-  if (typeof sourceCommit !== 'string' || !/^[0-9a-f]{40}$/.test(sourceCommit)) {
+function buildNpxSkillsArgs(skillNames: string[], global: boolean, agents: string[]): string[] {
+  const sourceCommit = readOrcaCliBuildCommit()
+  if (!sourceCommit) {
     throw new RuntimeClientError(
       'invalid_environment',
       'Could not read the commit this Orca CLI was built from, so there is no source to install skills from.'
     )
   }
-  return buildAgentFeatureSkillInstallArgs(skillNames, {
-    sourceCommit,
-    global,
-    yes: flags.get('interactive') !== true,
-    agents
-  }).slice(1)
+  // Why: a cold package cache makes bare `npx` prompt before it will fetch
+  // `skills`, which strands an unattended host just like the picker does.
+  return [
+    '--yes',
+    ...buildAgentFeatureSkillInstallArgs(skillNames, { sourceCommit, global, yes: true, agents })
+  ]
 }
 
-function formatInstallerCommand(args: string[]): string {
-  const shell = process.platform === 'win32' ? 'powershell' : 'posix'
-  const words = [process.execPath, resolveBundledSkillsInstaller(), ...args].map((word) =>
-    /^[a-z0-9_./:@=-]+$/i.test(word) ? word : quoteStartupArg(word, shell)
-  )
-  return `${shell === 'powershell' ? '& ' : ''}${words.join(' ')}`
+/** Render the exact argv a real run spawns, so --dry-run can never drift from it. */
+function formatNpxCommand(args: string[]): string {
+  return `npx ${args.join(' ')}`
 }
 
 function formatSkillSelectionHelp(verb: SkillMutationVerb, skillNames: string[]): string {
@@ -168,7 +199,7 @@ function formatSkillSelectionHelp(verb: SkillMutationVerb, skillNames: string[])
 }
 
 function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
-  return async ({ flags, json, cwd }) => {
+  return async ({ flags, json }) => {
     const guides = await loadCanonicalGuides()
     const skillNames = resolveSelectedSkillNames(flags, guides)
 
@@ -182,37 +213,23 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
       return
     }
 
-    const forwarded = ['skills', verb, ...skillNames.flatMap((name) => ['--skill', name])]
-    for (const key of [
-      'local',
-      'dry-run',
-      'interactive',
-      'locked-installer',
-      'json',
-      'agent',
-      'source-commit'
-    ]) {
-      const value = flags.get(key)
-      if (value === true) {
-        forwarded.push(`--${key}`)
-      } else if (typeof value === 'string') {
-        forwarded.push(`--${key}`, value)
-      }
-    }
-    if (await forwardSkillsToWsl(forwarded, cwd)) {
-      return
-    }
+    // Why: this runs before target resolution because the answer belongs to the
+    // other machine — agents detected here would be the wrong host's, and a host
+    // that detects none would hide the forwarding problem behind that error.
     if (process.env.ORCA_CLI_CWD) {
       throw new RuntimeClientError(
         'invalid_environment',
-        `orca skills ${verb} writes to the machine that runs it. Run it on the intended machine's Orca host.`
+        `orca skills ${verb} writes to the machine that runs it, but this shell forwards ` +
+          `orca to the Orca host. Run the same orca skills ${verb} command on the machine ` +
+          "you want it on, where it can detect that host's agents."
       )
     }
+
     const global = flags.get('local') !== true
-    const agents =
-      flags.get('interactive') === true && !flags.has('agent') ? [] : resolveAgentKeys(verb, flags)
-    const installerArgs = buildInstallerArgs(skillNames, global, agents, flags)
-    const command = formatInstallerCommand(installerArgs)
+    // Why: update is the same pinned `skills add`; `skills update` follows GitHub HEAD,
+    // which runs ahead of the build this CLI judges freshness against.
+    const npxArgs = buildNpxSkillsArgs(skillNames, global, resolveAgentKeys(verb, flags))
+    const command = formatNpxCommand(npxArgs)
     const dryRun = flags.get('dry-run') === true
 
     if (dryRun) {
@@ -225,19 +242,19 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
     }
 
     if (json) {
-      // Why: a real run inherits the installer's own stdout so progress stays visible live;
+      // Why: a real run inherits npx's own stdout so progress stays visible live;
       // that stream is not JSON, so --json can't be honored here.
       throw new RuntimeClientError(
         'invalid_argument',
         `orca skills ${verb} --json only supports --dry-run. Real ${verb}s stream ` +
-          "the installer's own output, which isn't JSON."
+          "npx's own output, which isn't JSON."
       )
     }
 
     // Why: stdio is inherited for the child below, so this status line must go to
-    // stderr — stdout is the installer's own output, not this command's JSON channel.
+    // stderr — stdout is npx's own output, not this command's JSON channel.
     process.stderr.write(`Running: ${command}\n`)
-    process.exitCode = await runBundledSkills(installerArgs)
+    process.exitCode = await runNpxSkills(npxArgs)
   }
 }
 

@@ -1,7 +1,9 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { filterRecord, omitStoredFields, withoutKey } from './stored-record-fields'
 import { canReplacePreviewContentType, partitionPinnedTabOrder } from './tab-order'
 import { getNextTerminalOrdinal } from './terminal-tab-ordinal'
 import { layoutContainsLeafId } from './terminal-pane-tree'
+import { editorTabShowsFile, keptAfterEditorClose } from './workspace-layout-editor-tab-file'
 import {
   applied,
   boundPtyIds,
@@ -30,6 +32,7 @@ import {
   type WorkspaceLayoutModel
 } from './workspace-layout-model'
 import { admitsInitialSurface } from './workspace-layout-initial-surface'
+import { heldPaneOfTerminal } from './workspace-layout-terminal-adoption'
 import { removeTabFromWorkspace, withWorkspace } from './workspace-layout-removal'
 
 type RefusedClose = NonNullable<LayoutCommandResult['refused']>[number]
@@ -41,6 +44,11 @@ export function createTerminalTab(
 ): Applied {
   if (command.initial && !admitsInitialSurface(model, command.workspace, command.initial)) {
     return applied(model)
+  }
+  const held =
+    command.adopt && heldPaneOfTerminal(model.workspaces[command.workspace], command.adopt)
+  if (held) {
+    return applied(model, held)
   }
   const workspace = workspaceOrEmpty(model, command.workspace)
   const terminals = workspace.tabs.flatMap((tab) => (tab.kind === 'terminal' ? [tab] : []))
@@ -63,6 +71,12 @@ export function createTerminalTab(
   }
   const placed = placeNewTab(workspace, command.workspace, tab, command, context)
   const paneKey = paneKeyOf(id, leafId)
+  if (command.adopt) {
+    // Its terminal already runs: the pane binds to it and nothing starts.
+    const leaves = { ...placed.leaves, [leafId]: { ptyId: command.adopt.ptyId } }
+    const adopted = withWorkspace(model, command.workspace, { ...placed, leaves })
+    return applied(adopted, { tabId: id, leafId, paneKey })
+  }
   return applied(
     withWorkspace(model, command.workspace, placed),
     { tabId: id, leafId, paneKey },
@@ -90,7 +104,12 @@ export function closeTab(
   ) {
     next = {
       ...next,
-      editorFiles: next.editorFiles.filter((file) => file.filePath !== tab.entityId)
+      editorFiles: next.editorFiles.filter(
+        // Why the switch: shipped builds close through this code too.
+        ORCA_LAYOUT_OWNER_IS_MAIN
+          ? keptAfterEditorClose(workspace, next, tab.entityId)
+          : (file) => !editorTabShowsFile(tab.entityId, file, next.worktreeId)
+      )
     }
   }
   if (next.editorViews) {

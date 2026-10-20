@@ -155,7 +155,11 @@ const MovePaneToNewTabCommand = z.object({
   groupId: z.string().min(1),
   index: z.number().int().nonnegative().optional(),
   /** The terminal the window's pane shows now, when it has one. */
-  windowDetach: z.object({ ptyId: z.string().min(1).max(512).nullable() })
+  windowDetach: z.object({
+    ptyId: z.string().min(1).max(512).nullable(),
+    /** The pane's folder, where an unbound pane's new shell starts. */
+    startupCwd: z.string().min(1).optional()
+  })
 })
 
 /**
@@ -184,6 +188,10 @@ const CreateTerminalTabCommand = z.object({
     .optional(),
   /** Only into a workspace with no tab in main's copy; otherwise nothing is created. */
   initial: z.literal('activation').optional(),
+  /** A live terminal no pane shows: its pane when main holds one, else this tab, bound to it. */
+  adopt: z
+    .object({ ptyId: z.string().min(1), recordedPaneKey: z.string().min(1).optional() })
+    .optional(),
   split: NewGroupSplit
 })
 
@@ -282,6 +290,12 @@ const SetBrowserTabProfileCommand = z.object({
 
 const PromotePreviewTabCommand = z.object({ type: z.literal('promotePreviewTab'), ...OnTab })
 
+/** The window applied the workspace's default tabs (or it had none); main records it, once. */
+const SetDefaultTabsAppliedCommand = z.object({
+  type: z.literal('setDefaultTabsApplied'),
+  workspace: OnPane.workspace
+})
+
 /** A simulator tab under the id the window drew it with, which is also its entity. */
 const OpenSimulatorTabCommand = z.object({
   type: z.literal('openSimulatorTab'),
@@ -369,6 +383,7 @@ export const LayoutApplyParams = z.object({
     MoveTabToWorkspaceCommand,
     RenameEditorFilesCommand,
     SleepCommand,
-    WakeCommand
+    WakeCommand,
+    SetDefaultTabsAppliedCommand
   ])
 })

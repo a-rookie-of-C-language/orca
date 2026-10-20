@@ -88,7 +88,7 @@
 23 src/renderer/src/store/slices/tabs/tabs-drag-preview-actions.ts
 11 src/renderer/src/store/slices/tabs/tabs-drop-actions.ts
 4 src/renderer/src/store/slices/tabs/tabs-focus-actions.ts
-13 src/renderer/src/store/slices/tabs/tabs-group-actions.ts
+12 src/renderer/src/store/slices/tabs/tabs-group-actions.ts
 1 src/renderer/src/store/slices/tabs/tabs-host-mirroring.ts
 8 src/renderer/src/store/slices/tabs/tabs-label-actions.ts
 10 src/renderer/src/store/slices/tabs/tabs-move-actions.ts
@@ -117,5 +117,6 @@
 5 src/renderer/src/store/terminals/workspace-terminal-hydration-patch.ts
 2 src/renderer/src/store/terminals/workspace-terminal-hydration.ts
 2 src/renderer/src/store/terminals/workspace-terminal-reconnect.ts
+7 src/renderer/src/store/workspace-layout-frame-held-tabs.ts
 4 src/renderer/src/store/workspace-layout-frame-slices.ts
 12 src/renderer/src/store/workspace-layout-frame-store-patch.ts

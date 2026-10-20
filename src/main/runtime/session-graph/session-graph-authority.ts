@@ -15,7 +15,7 @@ import { browserNetworkExecutionHostKey } from '../../browser/browser-network-ex
 import type { ClientHostedBrowserRpcRoute } from '../runtime-browser-client-automation'
 import { routeRuntimeBrowserClientAutomation } from '../runtime-browser-client-automation'
 import { getRuntimeBrowserPageRegistry } from '../runtime-browser-page-registry'
-import { getBrowserHostLeaseRegistry } from '../browser-host-lease-registry-instance'
+import { getBrowserHostLeaseRegistry } from '../browser-host/browser-host-lease-registry-instance'
 import {
   routeDesktopBrowserBridgeRpc,
   type DesktopBrowserBridgeRoute
@@ -25,6 +25,7 @@ import {
   isDesktopBrowserBridgeHostEnabled
 } from '../desktop-browser-bridge/desktop-browser-bridge-registry'
 import { runtimeBrowserCommandsFactoryIsAvailable } from '../runtime-browser-commands-factory'
+import { hasPairedPageHost } from '../browser/browser-client-page-opening'
 import { resolveRemoteCliBrowserScopeSelector } from '../desktop-browser-bridge/remote-cli-browser-scope'
 import type { RpcContext } from '../rpc/core'
 
@@ -231,7 +232,12 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
       signal: context.signal,
       hostEnabled: isDesktopBrowserBridgeHostEnabled(),
       registry: getDesktopBrowserBridgeRegistry(this),
-      localBrowserAvailable: runtimeBrowserCommandsFactoryIsAvailable(),
+      // Why desktop-hosted pages count, even with their desktop gone: this runtime lists and
+      // retires them itself, so those commands never need the bridge.
+      localBrowserAvailable:
+        runtimeBrowserCommandsFactoryIsAvailable() ||
+        getRuntimeBrowserPageRegistry(this).listPages().length > 0 ||
+        hasPairedPageHost({ getBrowserHostLeaseRegistry: () => getBrowserHostLeaseRegistry(this) }),
       resolveWorkspace: (selector) => this.resolveBrowserWorkspace(selector)
     })
   }

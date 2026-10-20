@@ -1,7 +1,6 @@
 import {
   ALL_EXECUTION_HOSTS_SCOPE,
   LOCAL_EXECUTION_HOST_ID,
-  getLocalExecutionHostLabel,
   getRepoExecutionHostId,
   getWorktreeExecutionHostId,
   type ExecutionHostId,
@@ -10,6 +9,7 @@ import {
 } from '../execution-host'
 import type { ExecutionHostHealth } from '../execution-host-registry'
 import type { RuntimeCompatVerdict } from '../protocol-compat'
+import type { RuntimeHostBlockedReason } from '../runtime-host-status'
 import type { SshConnectionStatus } from '../ssh-types'
 import type { Repo } from '../repo-types'
 import type { Row } from './row-types'
@@ -26,6 +26,8 @@ export type HostHeaderRow = {
   // Why: blocked-host guidance in the header menu needs the verdict reason so
   // it can deep-link an "Update server/client required" row per skew direction.
   compatibility?: RuntimeCompatVerdict
+  // Why: a revoked pairing needs "Re-pair", not the update guidance a version block gets.
+  blockedReason?: RuntimeHostBlockedReason
   connectionStatus?: SshConnectionStatus
   collapsed: boolean
   count: number
@@ -40,6 +42,7 @@ export type HostSectionOption = {
   detail: string
   health: ExecutionHostHealth
   compatibility?: RuntimeCompatVerdict
+  blockedReason?: RuntimeHostBlockedReason
   connectionStatus?: SshConnectionStatus
 }
 
@@ -70,12 +73,12 @@ function getRowHostId(row: Row, defaultHostId: ExecutionHostId): ExecutionHostId
   }
 }
 
-function getFallbackHost(hostId: ExecutionHostId): HostSectionOption {
+function getFallbackHost(hostId: ExecutionHostId, localHostLabel: string): HostSectionOption {
   const isLocal = hostId === LOCAL_EXECUTION_HOST_ID
   return {
     id: hostId,
     kind: isLocal ? 'local' : hostId.startsWith('ssh:') ? 'ssh' : 'runtime',
-    label: isLocal ? getLocalExecutionHostLabel() : hostId,
+    label: isLocal ? localHostLabel : hostId,
     detail: isLocal ? 'This computer' : 'Host',
     health: isLocal ? 'local' : 'available'
   }
@@ -169,6 +172,8 @@ export function addHostSectionRows(args: {
   workspaceHostScope: ExecutionHostScope
   visibleWorkspaceHostIds?: readonly ExecutionHostId[] | null
   defaultHostId: ExecutionHostId
+  /** The listed host's own name for itself; a phone reader must not derive it from its own platform. */
+  localHostLabel: string
   // Why: host sections reuse the sidebar's persisted collapsed-group keys
   // (`host:<hostId>`) so collapse state survives restarts like other groups.
   collapsedHostKeys?: ReadonlySet<string>
@@ -283,7 +288,7 @@ export function addHostSectionRows(args: {
     if (!hostRows || hostRows.length === 0) {
       continue
     }
-    const host = hostOptionsById.get(hostId) ?? getFallbackHost(hostId)
+    const host = hostOptionsById.get(hostId) ?? getFallbackHost(hostId, args.localHostLabel)
     const collapsed =
       args.forceCollapseHosts || (args.collapsedHostKeys?.has(`host:${host.id}`) ?? false)
     result.push({
@@ -295,6 +300,7 @@ export function addHostSectionRows(args: {
       detail: host.detail,
       health: host.health,
       compatibility: host.compatibility,
+      ...(host.blockedReason ? { blockedReason: host.blockedReason } : {}),
       connectionStatus: host.connectionStatus,
       collapsed,
       count: countWorkspaceRows(hostRows)

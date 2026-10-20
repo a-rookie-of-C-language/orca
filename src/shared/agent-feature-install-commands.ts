@@ -37,12 +37,6 @@ export function buildAgentFeatureSkillInstallArgs(
   if (skillNames.length === 0) {
     throw new Error('At least one skill name is required.')
   }
-  if (
-    !/^[0-9a-f]{40}$/.test(options.sourceCommit) ||
-    skillNames.some((name) => !/^[a-z0-9][a-z0-9-]*$/.test(name))
-  ) {
-    throw new Error('A full source commit and valid skill names are required.')
-  }
   const global = options.global ?? true
   // Why: -y with no --agent is the one combination that makes `skills add` install
   // into every agent it knows. Refuse it here so no caller can express it.
@@ -81,20 +75,5 @@ export function buildAgentFeatureSkillInstallCommand(
   skillNames: readonly string[],
   options: AgentFeatureSkillCommandOptions
 ): string {
-  buildAgentFeatureSkillInstallArgs(skillNames, options)
-  return [
-    'orca skills install',
-    ...skillNames.flatMap((name) => ['--skill', name]),
-    ...(options.global === false ? ['--local'] : []),
-    ...(options.agents?.length
-      ? [
-          '--agent',
-          options.agents.includes('*') ? `"${options.agents.join(',')}"` : options.agents.join(',')
-        ]
-      : []),
-    ...(!options.yes ? ['--interactive'] : []),
-    '--source-commit',
-    options.sourceCommit,
-    '--locked-installer'
-  ].join(' ')
+  return `npx ${buildAgentFeatureSkillInstallArgs(skillNames, options).join(' ')}`
 }

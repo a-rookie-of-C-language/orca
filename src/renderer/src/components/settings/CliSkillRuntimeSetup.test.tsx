@@ -33,10 +33,9 @@ function getWslOuterShellScript(command: string): string {
 }
 
 describe('CliSkillRuntimeSetup runtime helpers', () => {
-  const windowsOrcaPreflightPrefix =
-    'cmd.exe /d /s /c "where.exe orca >nul 2>nul & if errorlevel 1 ('
-  const windowsOrcaGuidance =
-    'echo ERROR: Orca shell command was not found. Open Orca Settings and install the shell command. & exit /b 1'
+  const windowsNpxPreflightPrefix = 'cmd.exe /d /s /c "where.exe npx >nul 2>nul & if errorlevel 1 ('
+  const windowsNpxGuidance =
+    'echo ERROR: npx was not found. Install Node.js LTS from https://nodejs.org/ to get npx. & echo Then close this terminal and start skill setup again - a new terminal picks up the updated PATH. & exit /b 1'
 
   it('keeps copied WSL skill installs valid for the target POSIX shell', () => {
     const skillCommand = 'npx skills add orchestration --global'
@@ -168,14 +167,14 @@ describe('CliSkillRuntimeSetup runtime helpers', () => {
         },
         'win32'
       )
-    ).toBe(`${windowsOrcaPreflightPrefix}${windowsOrcaGuidance}) else (${installCommand})"`)
+    ).toBe(`${windowsNpxPreflightPrefix}${windowsNpxGuidance}) else (${installCommand})"`)
   })
 
   it('treats missing runtime as a preflighted Windows host fallback for skill installs', () => {
     const installCommand = buildAgentFeatureSkillInstallCommand(['orca-cli', 'orchestration'])
 
     expect(buildSkillCommandForRuntime(installCommand, undefined, 'win32')).toBe(
-      `${windowsOrcaPreflightPrefix}${windowsOrcaGuidance}) else (${installCommand})"`
+      `${windowsNpxPreflightPrefix}${windowsNpxGuidance}) else (${installCommand})"`
     )
   })
 
@@ -242,7 +241,7 @@ describe('CliSkillRuntimeSetup runtime helpers', () => {
         settings: { ...getDefaultSettings('/tmp'), terminalWindowsShell: 'cmd.exe' }
       })
       expect(buildSkillCommandForRuntime(installCommand, windowsHost, 'win32')).toBe(
-        `${windowsOrcaPreflightPrefix}${windowsOrcaGuidance}) else (${installCommand})"`
+        `${windowsNpxPreflightPrefix}${windowsNpxGuidance}) else (${installCommand})"`
       )
     } finally {
       useAppStore.setState({ settings: previous.settings })
@@ -262,7 +261,7 @@ describe('CliSkillRuntimeSetup runtime helpers', () => {
       expect(copied).toBe(installCommand)
       // Orca forces its own setup terminal to powershell.exe, where cmd.exe works.
       expect(buildSkillSetupTerminalCommand(copied, 'powershell.exe', undefined, 'win32')).toBe(
-        `${windowsOrcaPreflightPrefix}${windowsOrcaGuidance}) else (${installCommand})"`
+        `${windowsNpxPreflightPrefix}${windowsNpxGuidance}) else (${installCommand})"`
       )
     } finally {
       useAppStore.setState({ settings: previous.settings })

@@ -66,25 +66,17 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['skills', 'install'],
-    summary: 'Install bundled Orca skills with the locked bundled installer',
+    summary: 'Install bundled Orca skills via the community skills CLI',
     usage:
       'orca skills install [--skill <name>]... [--all] [--agent <name>[,<name>]] ' +
       '[--local] [--dry-run] [--json]',
-    allowedFlags: [
-      ...GLOBAL_FLAGS,
-      'skill',
-      'all',
-      'agent',
-      'local',
-      'dry-run',
-      'source-commit',
-      'interactive',
-      'locked-installer'
-    ],
+    allowedFlags: [...GLOBAL_FLAGS, 'skill', 'all', 'agent', 'local', 'dry-run'],
     notes: [
       'Reads the bundled skill registry locally without contacting the Orca runtime.',
-      'Runs the reviewed community skills installer shipped with Orca, including its locked dependencies. No executable package is fetched from npm.',
-      'Use --interactive for the installer target picker, or --source-commit <commit> to install the official skills from a specific Orca build.',
+      'Resolves to the same `npx skills@<pinned> add <repo>/tree/<commit> --skill <name> ...` ' +
+        'command used by Orca Settings, pinned to the commit this Orca build was made from, ' +
+        'plus the non-interactive flags an unattended host needs (`npx --yes` and `-y`), ' +
+        'then runs it and forwards its output and exit code.',
       'Installs globally (all projects, adds --global) by default. Use --local to install ' +
         'into the current project instead.',
       'Targets the coding agents Orca detects on this host, plus the shared ' +
@@ -95,7 +87,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
         'for the shared directory alone. Required when Orca detects no agent.',
       'Use --dry-run to print the resolved command without running it.',
       'With --json, the skill listing and --dry-run emit JSON; a real install streams ' +
-        "the installer's own non-JSON output live and rejects --json.",
+        "npx's own non-JSON output live and rejects --json.",
       'Omit --skill and --all to list installable skill names.',
       'Intended for headless hosts (SSH, containers, CI) with no desktop Settings UI to copy the install command from.'
     ],
@@ -113,20 +105,10 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     usage:
       'orca skills update [--skill <name>]... [--all] [--agent <name>[,<name>]] ' +
       '[--local] [--dry-run] [--json]',
-    allowedFlags: [
-      ...GLOBAL_FLAGS,
-      'skill',
-      'all',
-      'agent',
-      'local',
-      'dry-run',
-      'source-commit',
-      'interactive',
-      'locked-installer'
-    ],
+    allowedFlags: [...GLOBAL_FLAGS, 'skill', 'all', 'agent', 'local', 'dry-run'],
     notes: [
       'Reads the bundled skill registry locally without contacting the Orca runtime.',
-      'Runs the same bundled installer as `orca skills install`, which ' +
+      'Runs the same pinned `npx skills add` command as `orca skills install`, which ' +
         'replaces each selected skill with the copy this Orca build ships.',
       'Updates the global install (all projects, adds --global) by default. Use --local to ' +
         'update the current project instead.',
@@ -134,7 +116,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
         '.agents/skills directory when none is detected; use --agent to choose them yourself.',
       'Use --dry-run to print the resolved command without running it.',
       'With --json, the skill listing and --dry-run emit JSON; a real update streams ' +
-        "the installer's own non-JSON output live and rejects --json.",
+        "npx's own non-JSON output live and rejects --json.",
       'Omit --skill and --all to list updatable skill names.',
       'Intended for headless hosts (SSH, containers, CI) with no desktop Settings UI to copy the update command from.'
     ],

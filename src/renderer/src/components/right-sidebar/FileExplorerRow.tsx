@@ -1,8 +1,16 @@
 import React from 'react'
-import { ChevronRight, CircleAlert, CircleSlash, Link, Loader2 } from 'lucide-react'
+import {
+  ChevronRight,
+  CircleAlert,
+  CircleSlash,
+  Folder,
+  FolderOpen,
+  Link,
+  Loader2
+} from 'lucide-react'
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
-import { WorkspaceFileIcon } from '@/components/WorkspaceFileIcon'
+import { FileTypeIcon } from '@/components/FileTypeIcon'
 import {
   encodeWorkspaceFilePaths,
   WORKSPACE_FILE_PATH_MIME,
@@ -20,8 +28,6 @@ import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { createMultiSelectDragGhost } from './file-explorer-multi-drag-image'
 import { FileExplorerRowContextMenu } from './file-explorer-row-context-menu'
-import { FileExplorerIndentGuides } from './FileExplorerIndentGuides'
-import { FILE_EXPLORER_ROW_HEIGHT, getFileExplorerRowPadding } from './file-explorer-row-layout'
 
 // ─── File / Folder Row with Context Menu ─────────────────────────
 
@@ -119,7 +125,6 @@ export function FileExplorerRow({
   onNativeDragTargetChange,
   onNativeDragExpandDir
 }: FileExplorerRowProps): React.JSX.Element {
-  const displayDepth = Math.max(0, node.depth - displayDepthOffset)
   const showLoadError = node.isDirectory && isExpanded && !isLoading && loadError !== null
   const rowDropDir = node.isDirectory ? node.path : targetDir
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
@@ -149,19 +154,13 @@ export function FileExplorerRow({
         <button
           data-file-explorer-row=""
           data-selected={isSelected ? 'true' : undefined}
-          data-current={isSelected ? 'true' : undefined}
-          aria-expanded={node.isDirectory ? isExpanded : undefined}
-          title={node.relativePath || node.name}
           className={cn(
-            'relative flex w-full min-w-0 items-center gap-1 rounded-none px-2 text-left text-[13px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring',
+            'flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left text-xs transition-colors',
             !isSelected && 'hover:bg-accent hover:text-foreground',
             isSelected && 'text-accent-foreground',
-            isFlashing && 'bg-accent ring-1 ring-inset ring-ring'
+            isFlashing && 'bg-amber-400/20 ring-1 ring-inset ring-amber-400/70'
           )}
-          style={{
-            paddingLeft: getFileExplorerRowPadding(displayDepth),
-            height: FILE_EXPLORER_ROW_HEIGHT
-          }}
+          style={{ paddingLeft: `${(node.depth - displayDepthOffset) * 16 + 8}px` }}
           ref={setRowDragNode}
           // Why: the explorer's OS-drop owner reads the target folder from this at drop time.
           data-file-explorer-drop-dir={rowDropDir}
@@ -206,31 +205,34 @@ export function FileExplorerRow({
           onClick={(e) => onClick(e)}
           onDoubleClick={onDoubleClick}
         >
-          <FileExplorerIndentGuides depth={displayDepth} />
           {node.isDirectory ? (
             <>
               <ChevronRight
-                aria-hidden="true"
                 className={cn(
                   'size-3 shrink-0 text-muted-foreground transition-transform',
                   isExpanded && 'rotate-90'
                 )}
               />
               {isLoading ? (
-                <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
               ) : showLoadError ? (
-                <CircleAlert className="size-4 shrink-0 text-destructive" />
+                <CircleAlert className="size-3 shrink-0 text-destructive" />
+              ) : isExpanded ? (
+                <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
               ) : (
-                <WorkspaceFileIcon path={node.relativePath || node.name} directory />
+                <Folder className="size-3 shrink-0 text-muted-foreground" />
               )}
             </>
           ) : (
             <>
               <span className="size-3 shrink-0" />
               {node.isSymlink ? (
-                <Link aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                <Link className="size-3 shrink-0 text-muted-foreground" />
               ) : (
-                <WorkspaceFileIcon path={node.relativePath || node.name} />
+                React.createElement(FileTypeIcon, {
+                  filePath: node.relativePath || node.name,
+                  className: 'size-3 shrink-0 text-muted-foreground'
+                })
               )}
             </>
           )}
@@ -239,7 +241,7 @@ export function FileExplorerRow({
             // the directory toggle on the second click of a double-click rename.
             {...{ [RENAME_HOTSPOT_ATTR]: '' }}
             className={cn(
-              'min-w-0 truncate',
+              'truncate',
               isSelected && !nodeStatus && !isIgnored && 'text-accent-foreground',
               // Why: italic glyphs overhang their advance width; truncate's
               // overflow:hidden clips it, shaving the last char (".md" → ".ma").
@@ -269,7 +271,7 @@ export function FileExplorerRow({
           ) : null}
           {nodeStatus ? (
             <span
-              className="ml-auto shrink-0 text-3xs font-semibold tracking-wide mr-2"
+              className="ml-auto shrink-0 text-[10px] font-semibold tracking-wide mr-2"
               style={{ color: statusColor ?? undefined }}
             >
               {STATUS_LABELS[nodeStatus]}

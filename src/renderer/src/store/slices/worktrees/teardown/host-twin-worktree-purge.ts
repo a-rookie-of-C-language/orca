@@ -8,7 +8,7 @@ import {
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 import type { WorktreePurgeTarget } from '../../worktree-purge-target'
-import { getFolderWorkspaceHostId } from '../../../folder-workspaces/folder-workspace-catalog'
+import { getFolderWorkspaceHostId } from '../../../../../../shared/folder-workspace-execution-host'
 import { getProjectGroupHostId } from '../../project-group-owner-routing'
 import {
   collectRemovedHostTwinState,
@@ -93,6 +93,11 @@ function resolvePurgedPublishers(
     survivors: [...survivors].filter((hostId) => !purgedHosts.has(hostId)),
     attributedHostIds
   }
+}
+
+/** Every host whose listing publishes this id; empty when no row names it. */
+export function workspacePublishingHosts(s: AppState, workspaceId: string): ExecutionHostId[] {
+  return resolvePurgedPublishers(s, workspaceId, new Set()).survivors
 }
 
 /** Per attributed host, its twin ids with the hosts that still publish them. */

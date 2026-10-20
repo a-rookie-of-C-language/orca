@@ -198,7 +198,9 @@ describe('a Codex send whose turn completes without taking it', () => {
       .flatMap((event) => (event.type === 'batch' ? event.batch.submissions : []))
       .filter((entry) => entry.clientMessageId === compact.clientMessageId)
     expect(states.length).toBeGreaterThan(0)
-    expect(states.every((entry) => entry.dispatchState !== 'unknown' && !entry.recovered)).toBe(true)
+    expect(states.every((entry) => entry.dispatchState !== 'unknown' && !entry.recovered)).toBe(
+      true
+    )
 
     handlers?.onNotification?.('turn/started', {
       threadId: THREAD,
@@ -258,5 +260,34 @@ describe('a Codex send whose turn completes without taking it', () => {
       expect((await rawSubmission(taken)).dispatchState).toBe('accepted')
     )
     expect(host.currentWork(SESSION)?.working()).toBe(false)
+  })
+})
+
+describe('a Codex receipt whose first save fails', () => {
+  it('saves from the second echo of the same message', async () => {
+    const sent = await send('look around')
+    await vi.waitFor(() => expect(answers).toBe(1))
+    turns.start()
+    const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+    const accept = vi.spyOn(journal, 'acceptLate').mockRejectedValueOnce(new Error('disk full'))
+    const echo = {
+      threadId: THREAD,
+      turnId: turns.turnId,
+      item: { type: 'userMessage', id: 'item-user', clientId: sent, content: [] }
+    }
+
+    // Codex echoes a recorded message as its item starts and again as it completes.
+    handlers?.onNotification?.('item/started', echo)
+    await vi.waitFor(() => expect(accept).toHaveBeenCalledOnce())
+    expect((await rawSubmission(sent)).dispatchState).toBe('pending')
+    handlers?.onNotification?.('item/completed', echo)
+
+    await vi.waitFor(async () =>
+      expect(await rawSubmission(sent)).toMatchObject({
+        dispatchState: 'accepted',
+        providerItemId: expect.stringMatching(/^codex:/)
+      })
+    )
+    expect(lastPublished(sent)).toMatchObject({ dispatchState: 'accepted' })
   })
 })

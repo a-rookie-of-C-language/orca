@@ -46,6 +46,12 @@ function formatTaskStatusSyncMessage(message: WorkspaceBoardTaskStatusSyncMessag
         'Could not sync Linear issue {{value0}}.',
         { value0: message.issueIdentifier }
       )
+    case 'owner-ambiguous':
+      return translate(
+        'auto.components.sidebar.WorkspaceKanbanDrawer.f0a1b2c3d4',
+        'Skipped Linear issue {{value0}}: this workspace is on more than one host.',
+        { value0: message.issueIdentifier }
+      )
     case 'unexpected-error':
       return translate(
         'auto.components.sidebar.WorkspaceKanbanDrawer.b6c7d8e9f0',

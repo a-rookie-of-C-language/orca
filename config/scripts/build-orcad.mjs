@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { buildSkillsInstaller } from './build-skills-installer.mjs'
 // Package the server separately from its compatibility launcher.
 import { fork, spawnSync } from 'node:child_process'
 import { build } from 'esbuild'
@@ -239,7 +238,6 @@ const childResults = await Promise.all(
 )
 
 const result = await buildOrcadEntry(SERVER_OUT_FILE)
-await buildSkillsInstaller(join(OUT_DIR, 'out', 'cli'))
 const cliResult = await buildOrcadCli(join(OUT_DIR, ORCAD_CLI_ENTRY_FILENAME))
 const { version: cliVersion } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 // Why commit: `orca skills install|update` pins official skills to it, as the desktop CLI does.

@@ -199,7 +199,4 @@ export type SkillUpdateRun =
 
 export type SkillUpdateStartResult =
   | { started: true }
-  | {
-      started: false
-      reason: 'already-running' | 'invalid-names' | 'unsafe-command-path' | 'installer-unavailable'
-    }
+  | { started: false; reason: 'already-running' | 'invalid-names' | 'unsafe-command-path' }

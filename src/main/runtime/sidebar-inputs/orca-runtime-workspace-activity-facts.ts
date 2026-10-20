@@ -1,17 +1,17 @@
-import { OrcaRuntimeWithMigrationCatalog } from '../orca-runtime-migration-catalog'
+import { OrcaRuntimeWithAgentTransitions } from '../orca-runtime-agent-transitions'
 import type { PtyLivenessVerdict } from '../../../shared/pty-liveness-verdict'
 import type {
   WorkspaceActivityFactsSnapshot,
   WorkspaceTerminalLiveness
 } from '../../../shared/sidebar-list/workspace-activity-facts'
-import { worktreeIdComparisonKey } from '../../../shared/worktree/id'
+import { worktreeIdentityKey } from '../../../shared/worktree/id'
 import { SidebarClock } from './sidebar-clock'
 import {
   WorkspaceActivityFactsProducer,
   type WorkspaceSurfaceActivity
 } from './workspace-activity-facts-producer'
 
-type Runtime = OrcaRuntimeWithMigrationCatalog
+type Runtime = OrcaRuntimeWithAgentTransitions
 
 /**
  * Feeds the activity producer from the runtime's own funnels: every per-workspace session.tabs
@@ -19,7 +19,7 @@ type Runtime = OrcaRuntimeWithMigrationCatalog
  * replaces the tabs agent rows are attributed through, and the PTY liveness writers no
  * publication follows: exits, verdicts and the inventory sweep.
  */
-export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithMigrationCatalog {
+export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeWithAgentTransitions {
   readonly sidebarClock = new SidebarClock()
   readonly workspaceActivityFacts = new WorkspaceActivityFactsProducer({
     readSurfaces: (worktreeId) => this.readWorkspaceSurfaceActivity(worktreeId),
@@ -126,9 +126,8 @@ export abstract class OrcaRuntimeWithWorkspaceActivityFacts extends OrcaRuntimeW
   // getLivePtyIdsForWorktree's identity rule in one pass. A host that only lost contact keeps its
   // terminals unverifiable, never gone, even while the record still reads connected.
   private readWorkspaceTerminalLiveness(worktreeId: string): WorkspaceTerminalLiveness | null {
-    const key = worktreeIdComparisonKey(worktreeId)
-    const owns = (id: string): boolean =>
-      id === worktreeId || (key !== null && worktreeIdComparisonKey(id) === key)
+    const key = worktreeIdentityKey(worktreeId)
+    const owns = (id: string): boolean => id === worktreeId || worktreeIdentityKey(id) === key
     let unverifiable = false
     for (const surfaces of [this.leaves.values(), this.ptysById.values()]) {
       for (const surface of surfaces) {

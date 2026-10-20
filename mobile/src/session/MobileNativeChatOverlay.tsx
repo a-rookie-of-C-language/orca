@@ -2,8 +2,10 @@ import { useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { MobileNativeChatView, type MobileNativeChatInputLockReason } from './MobileNativeChatView'
 import { foldMobileNativeChatMessages } from './mobile-native-chat-render-data'
+import { useMobileNativeChatFoldReuse } from './mobile-native-chat-fold-reuse'
 import type { MobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 import type { MobileNativeChatController } from './use-mobile-native-chat-controller'
+import type { MobileNativeChatStructuredComposer } from './MobileNativeChatComposer'
 import { useMobileNativeChatStreamingBubble } from './use-mobile-native-chat-streaming-bubble'
 import { useMobileNativeChatComposerTray } from './use-mobile-native-chat-composer-tray'
 import { useMobileNativeChatVisualRenderer } from './MobileNativeChatVisual'
@@ -22,6 +24,8 @@ type Props = {
   /** Native-chat image attachments: picking adds a composer chip, and sending
    *  rides the pending images along with the message text (desktop parity). */
   images: MobileNativeChatImageAttachments
+  /** A structured chat's + sheet, files and skills; null on a terminal-backed chat. */
+  structuredComposer?: MobileNativeChatStructuredComposer | null
   onMicPress: () => void
   micActive: boolean
   dictationMode: string | undefined
@@ -49,6 +53,7 @@ export function MobileNativeChatOverlay({
   controller,
   onOpenFile,
   images,
+  structuredComposer = null,
   onMicPress,
   micActive,
   dictationMode,
@@ -65,9 +70,9 @@ export function MobileNativeChatOverlay({
   const session = controller.nativeChatSession
   // The chat is drawn only with a resolved agent; the fallback never reaches the screen.
   const agent = controller.nativeChatAgent ?? ''
-  const folded = useMemo(
-    () => foldMobileNativeChatMessages(session.messages, agent),
-    [session.messages, agent]
+  const folded = useMobileNativeChatFoldReuse(
+    useMemo(() => foldMobileNativeChatMessages(session.messages, agent), [session.messages, agent]),
+    sendSurfaceId
   )
   const streaming = useMobileNativeChatStreamingBubble(
     folded,
@@ -138,7 +143,7 @@ export function MobileNativeChatOverlay({
               composerTray={composerTray}
               onOpenFile={onOpenFile}
               hasMore={session.hasMore}
-              loadingEarlier={session.loadingEarlier}
+              olderPages={session.olderPages}
               onLoadEarlier={session.loadEarlier}
               onSend={images.sendNativeChat}
               sendSurfaceId={sendSurfaceId}
@@ -167,6 +172,7 @@ export function MobileNativeChatOverlay({
               filePaths={controller.nativeChatFilePaths}
               onNeedFiles={controller.loadNativeChatFiles}
               sessionOptions={controller.nativeChatSessionOptions}
+              structuredComposer={structuredComposer}
               keyboardInset={keyboardInset}
             />
           </MobileNativeChatReplyRevealsContext.Provider>

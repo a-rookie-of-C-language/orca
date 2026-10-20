@@ -22,13 +22,6 @@ function runtimeImportSpecifiers(source, file) {
   const specifiers = []
 
   function visit(node) {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text)
-    }
     if (ts.isCallExpression(node) && node.arguments.length > 0) {
       const [argument] = node.arguments
       const expression = node.expression
@@ -60,9 +53,8 @@ function isOptionalPackageImport(artifactRoot, importer, specifier) {
   if (specifier.startsWith('.') || isAbsolute(specifier)) {
     return false
   }
-  const segments = specifier.split('/')
-  const packageName = specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]
-  let directory = realpathSync(dirname(importer))
+  const packageName = bareSpecifierPackage(specifier)
+  let directory = dirname(importer)
 
   while (!isOutsideRoot(artifactRoot, directory)) {
     const packageJson = join(directory, 'package.json')
@@ -85,13 +77,52 @@ function isOptionalPackageImport(artifactRoot, importer, specifier) {
   return false
 }
 
+function bareSpecifierPackage(specifier) {
+  const segments = specifier.split('/')
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]
+}
+
+/**
+ * The in-root path of a package import whose realpath leaves the root.
+ *
+ * Under pnpm's global virtual store `<root>/node_modules/<pkg>` links into a store shared by every
+ * worktree, so Node's realpath lands outside the root even though the artifact does carry the
+ * dependency. Accept it only when a node_modules link inside the root really leads there.
+ */
+function linkedPathInsideRoot(artifactRoot, importer, specifier, resolved) {
+  const isBare = !specifier.startsWith('.') && !isAbsolute(specifier)
+  let directory = dirname(importer)
+  while (!isOutsideRoot(artifactRoot, directory)) {
+    // A bare import reaches the store through node_modules/<pkg>; a relative one through the
+    // linked package dir it sits in.
+    const candidates = isBare
+      ? [join(directory, 'node_modules', bareSpecifierPackage(specifier)), directory]
+      : [directory]
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) {
+        continue
+      }
+      const physical = realpathSync(candidate)
+      if (physical !== candidate && !isOutsideRoot(physical, resolved)) {
+        return join(candidate, relative(physical, resolved))
+      }
+    }
+    if (directory === artifactRoot) {
+      break
+    }
+    directory = dirname(directory)
+  }
+  return null
+}
+
 function resolveRuntimeImport(outDir, artifactRoot, importer, specifier) {
   if (BUILTINS.has(specifier) || isBuiltin(specifier)) {
     return null
   }
   let resolved
   try {
-    resolved = createRequire(importer).resolve(specifier)
+    // Why physical: Node resolves from the realpath, so a store-linked importer must not see the artifact's own node_modules.
+    resolved = createRequire(realpathSync(importer)).resolve(specifier)
   } catch (error) {
     if (isOptionalPackageImport(artifactRoot, importer, specifier)) {
       return null
@@ -103,6 +134,10 @@ function resolveRuntimeImport(outDir, artifactRoot, importer, specifier) {
     )
   }
   if (isOutsideRoot(artifactRoot, resolved)) {
+    const linked = linkedPathInsideRoot(artifactRoot, importer, specifier, resolved)
+    if (linked !== null) {
+      return linked
+    }
     throw new Error(
       `[verify-skills-cli-runtime] import "${specifier}" from ` +
         `${artifactPath(outDir, importer)} resolved outside ${artifactRoot}: ${resolved}`
@@ -111,7 +146,7 @@ function resolveRuntimeImport(outDir, artifactRoot, importer, specifier) {
   return resolved
 }
 
-function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir), extraEntries = []) {
+function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir)) {
   outDir = realpathSync(outDir)
   artifactRoot = realpathSync(artifactRoot)
   if (isOutsideRoot(artifactRoot, outDir)) {
@@ -121,7 +156,7 @@ function collectRuntimeClosure(outDir, artifactRoot = dirname(outDir), extraEntr
   if (!existsSync(entry)) {
     throw new Error(`[verify-skills-cli-runtime] missing entry ${entry}`)
   }
-  const pending = [entry, ...extraEntries]
+  const pending = [entry]
   const visited = new Set()
 
   while (pending.length > 0) {
@@ -180,29 +215,9 @@ function parseJson(label, output) {
 
 function verifySkillsCliRuntime(outDir, artifactRoot = dirname(outDir), options = {}) {
   const absoluteOutDir = resolve(outDir)
-  const installerRoot = join(absoluteOutDir, 'cli', 'skills-installer')
-  for (const file of ['dist/cli.mjs', 'package.json', 'LICENSE', 'ThirdPartyNoticeText.txt']) {
-    if (!existsSync(join(installerRoot, file))) {
-      throw new Error(`[verify-skills-cli-runtime] missing locked installer artifact ${file}`)
-    }
-  }
-  const installer = join(installerRoot, 'dist', 'cli.mjs')
-  const closure = collectRuntimeClosure(absoluteOutDir, resolve(artifactRoot), [installer])
+  const closure = collectRuntimeClosure(absoluteOutDir, resolve(artifactRoot))
   if (options.executeCommands === false) {
     return { closureFiles: closure.length, commands: 0 }
-  }
-  const version = spawnSync(process.execPath, [installer, '--version'], {
-    encoding: 'utf8',
-    timeout: CLI_COMMAND_TIMEOUT_MS,
-    env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' }
-  })
-  const expectedVersion = JSON.parse(
-    readFileSync(join(installerRoot, 'package.json'), 'utf8')
-  ).version
-  if (version.status !== 0 || version.stdout.trim() !== expectedVersion) {
-    throw new Error(
-      `[verify-skills-cli-runtime] locked installer failed its version probe: ${version.stderr || version.error || version.stdout}`
-    )
   }
   const list = parseJson('skills list', runCli(absoluteOutDir, ['skills', 'list', '--json']))
   const topicNames = new Set(list.topics?.map((topic) => topic.name))
@@ -237,7 +252,7 @@ function verifySkillsCliRuntime(outDir, artifactRoot = dirname(outDir), options 
     throw new Error('[verify-skills-cli-runtime] a dry-run reported execution')
   }
 
-  return { closureFiles: closure.length, commands: 6 }
+  return { closureFiles: closure.length, commands: 5 }
 }
 
 if (require.main === module) {

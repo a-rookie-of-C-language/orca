@@ -16,6 +16,7 @@ import {
   writeEnvironmentStore
 } from './runtime-environment-store-file'
 import { writeRuntimeEnvironmentSidecarEntry } from './runtime-environment-sidecar'
+import { findCollidingEnvironmentName } from './runtime-environment-name-collision'
 
 export {
   getEnvironmentStorePath,
@@ -44,11 +45,11 @@ export function addEnvironmentFromPairingCode(
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   const store = readPersistedEnvironmentStore(userDataPath)
   const now = args.now ?? Date.now()
-  const existing = store.environments.find((entry) => entry.name === args.name)
+  const existing = findCollidingEnvironmentName(store.environments, args.name)
   if (existing) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      `A server named "${args.name}" already exists.`
+      `A server named "${existing.name}" already exists.`
     )
   }
   const environment = createEnvironmentFromPairingOffer({
@@ -104,7 +105,7 @@ export function removeEnvironment(userDataPath: string, selector: string): Known
 export function updateEnvironmentFromPairingCode(
   userDataPath: string,
   selector: string,
-  args: { pairingCode: string; now?: number }
+  args: { pairingCode: string; now?: number; runtimeId?: string }
 ): KnownRuntimeEnvironment {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
   assertNoIndependentSshAccess(
@@ -119,7 +120,7 @@ export function updateEnvironmentFromPairingCode(
     name: existing.name,
     now: existing.createdAt,
     offer,
-    runtimeId: existing.runtimeId,
+    runtimeId: args.runtimeId ?? existing.runtimeId,
     ...(existing.source ? { source: existing.source } : {}),
     ...getPairingConnectionDependency(existing.connectionDependency, offer)
   })

@@ -4,6 +4,10 @@ import type { Worktree } from '../../../../../../shared/worktree/types'
 // never floods the sidebar; choosing a result clears the query anyway.
 export const WORKSPACE_TEXT_SEARCH_LIMIT = 20
 
+// Why shared frozen identity: the search-forced expansion below must never
+// reallocate a set per render while the query is active.
+export const EMPTY_COLLAPSED_GROUPS = new Set<string>()
+
 // Why separate: the capped slice hides whether more rows matched, so the
 // sidebar needs its own cheap count to decide if the limit hint should show.
 export function didWorkspaceTextQueryHitLimit<

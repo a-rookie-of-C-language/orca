@@ -14,8 +14,6 @@ export const CLI_BOOLEAN_FLAGS = new Set([
   'current-sqlite',
   'debug',
   'dry-run',
-  'interactive',
-  'locked-installer',
   'enter',
   'focus',
   'grant-desktop-control',

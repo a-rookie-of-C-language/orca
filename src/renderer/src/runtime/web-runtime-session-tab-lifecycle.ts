@@ -4,11 +4,8 @@ import type {
   RuntimeSessionTabCloseReason
 } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
-import {
-  hasRuntimeRpcErrorCode,
-  RuntimeRpcCallError,
-  unwrapRuntimeRpcResult
-} from './runtime-rpc-result'
+import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
+import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   clearWebSessionCloseIntent,
@@ -16,10 +13,11 @@ import {
   recordWebSessionCloseIntent
 } from './web-session-close-intent'
 import {
-  queueWebSessionCloseReplay,
+  holdWebSessionCloseForReplay,
   settleWebSessionCloseReplay,
   type WebSessionCloseReplay
 } from './web-session-close-replay'
+import { appPairedTerminalTabCloseIntentStore } from './paired-terminal-tab-close-intent-store'
 import {
   clearWebSessionFocusIntent,
   clearWebSessionFocusIntentIfMatches,
@@ -111,11 +109,12 @@ function holdUndeliveredUserClose(
   worktreeId: string,
   hostTabIds: readonly string[]
 ): void {
-  for (const hostTabId of hostTabIds) {
-    recordWebSessionCloseIntent(intentOwner, worktreeId, hostTabId, Date.now())
-    makeWebSessionCloseIntentDurable(intentOwner, worktreeId, hostTabId)
-  }
-  queueWebSessionCloseReplay(intentOwner, worktreeId, hostTabIds)
+  holdWebSessionCloseForReplay(
+    appPairedTerminalTabCloseIntentStore,
+    intentOwner,
+    worktreeId,
+    hostTabIds
+  )
   scheduleWebSessionCloseReplayRelist(intentOwner.environmentId, worktreeId)
 }
 
@@ -137,7 +136,7 @@ export async function replayWebSessionTabCloses(
   for (const replay of replays) {
     // Why: the close was the old pairing's; a replacement host must never receive it.
     if (!matchesWebSessionIntentOwner(replay.owner)) {
-      settleWebSessionCloseReplay(replay, true)
+      settleWebSessionCloseReplay(appPairedTerminalTabCloseIntentStore, replay, true)
       continue
     }
     const outcome = await closeWebRuntimeSessionTab({
@@ -149,7 +148,11 @@ export async function replayWebSessionTabCloses(
         ? { expectedPairingRevision: replay.owner.pairingRevision }
         : {})
     })
-    const settled = settleWebSessionCloseReplay(replay, outcome !== 'failed')
+    const settled = settleWebSessionCloseReplay(
+      appPairedTerminalTabCloseIntentStore,
+      replay,
+      outcome !== 'failed'
+    )
     if (settled === 'retry') {
       scheduleWebSessionCloseReplayRelist(environmentId, replay.worktreeId)
       continue
@@ -157,10 +160,7 @@ export async function replayWebSessionTabCloses(
     if (settled === 'done') {
       continue
     }
-    // The host kept failing the close; show the tab again rather than hide a live one forever.
-    for (const hostTabId of replay.hostTabIds) {
-      clearWebSessionCloseIntent(replay.owner, replay.worktreeId, hostTabId)
-    }
+    // The host kept failing the close and its tab is shown again rather than hidden forever.
     // The unchanged snapshot that made this replay due would otherwise be refused as stale.
     await refreshWebRuntimeSessionTabsSnapshot(environmentId, replay.worktreeId, {
       acceptCurrentSnapshot: true

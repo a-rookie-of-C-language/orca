@@ -1,5 +1,6 @@
-import { spawn } from 'node:child_process'
+import type { SpawnedProcess } from '@orca/process-host/process-spec'
 import { delimiter, win32 as pathWin32 } from 'node:path'
+import { spawnProcess } from '@orca/process-host'
 import type { ShellHydrationFailureReason } from '../../shared/shell-path-hydration-types'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 import { isNiubashShell } from '../../shared/niubash-shell'
@@ -195,23 +196,31 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
     let stdout = ''
     let timer: ReturnType<typeof setTimeout> | null = null
 
-    const child = spawn(shell, probe.args, {
-      // Why: inherit current env so the shell sees the same baseline, then let
-      // it layer its own rc files on top. Do NOT forward stdio — some shells
-      // (oh-my-zsh setups, powerlevel10k) print a lot to stderr on startup,
-      // and we don't want that in Orca's console.
-      env: shellProbeEnv(),
-      stdio: ['ignore', 'pipe', 'ignore'],
-      detached: false,
-      windowsHide: true
-    })
+    let child: SpawnedProcess
+    try {
+      child = spawnProcess({
+        program: shell,
+        args: probe.args,
+        // Why: inherit current env so the shell sees the same baseline, then let
+        // it layer its own rc files on top. Do NOT forward stdio — some shells
+        // (oh-my-zsh setups, powerlevel10k) print a lot to stderr on startup,
+        // and we don't want that in Orca's console.
+        env: shellProbeEnv(),
+        stdio: ['ignore', 'pipe', 'ignore'],
+        detached: false
+      })
+    } catch {
+      // Why: a synchronous throw (EPERM from a Store pwsh.exe) must reach the fallback shell.
+      resolve({ segments: [], ok: false, failureReason: 'spawn_error' })
+      return
+    }
 
     const cleanup = (): void => {
       if (timer) {
         clearTimeout(timer)
         timer = null
       }
-      child.stdout.off('data', onStdoutData)
+      child.stdout?.off('data', onStdoutData)
       child.off('error', onError)
       child.off('close', onClose)
     }
@@ -253,7 +262,7 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
       finish({ segments, ok: true, failureReason: 'none' })
     }
 
-    child.stdout.on('data', onStdoutData)
+    child.stdout?.on('data', onStdoutData)
     child.on('error', onError)
     child.on('close', onClose)
   })
@@ -302,7 +311,7 @@ export function hydrateShellPath(options: HydrateOptions = {}): Promise<Hydratio
     () => undefined,
     () => undefined
   )
-  cached = probe.then((result) => {
+  const hydration = probe.then((result) => {
     if (
       platform === 'win32' &&
       options.shellOverride === undefined &&
@@ -312,7 +321,14 @@ export function hydrateShellPath(options: HydrateOptions = {}): Promise<Hydratio
     }
     return result
   })
-  return cached
+  cached = hydration
+  // Why: a cached rejection would fail every later caller without re-probing.
+  hydration.catch(() => {
+    if (cached === hydration) {
+      cached = null
+    }
+  })
+  return hydration
 }
 
 export function configureWindowsShellPathHydration(

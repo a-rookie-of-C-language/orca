@@ -4,7 +4,6 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { buildSkillsInstaller } from './build-skills-installer.mjs'
 import { removeTree } from '../../src/shared/windows-transient-lock-removal.ts'
 
 const require = createRequire(import.meta.url)
@@ -412,8 +411,7 @@ describe('packaged runtime resources', () => {
           { recursive: true }
         )
         await seedBundledRipgrep(resourcesDir)
-        await seedPackagedWebClient(resourcesDir)
-        await buildSkillsInstaller(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'))
+        await seedPackagedServePayload(resourcesDir)
 
         const unpackedMainDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'main')
         await mkdir(unpackedMainDir, { recursive: true })
@@ -480,8 +478,7 @@ describe('packaged runtime resources', () => {
           { recursive: true }
         )
         await seedBundledRipgrep(resourcesDir)
-        await seedPackagedWebClient(resourcesDir)
-        await buildSkillsInstaller(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'))
+        await seedPackagedServePayload(resourcesDir)
         // Layout fixtures use a cross-arch slice; native PTY probes need real packaged binaries.
         const target =
           process.arch === 'x64'
@@ -559,12 +556,20 @@ async function stubObjdump(root) {
   process.env.PATH = `${directory}${delimiter}${process.env.PATH ?? ''}`
 }
 
-async function seedPackagedWebClient(resourcesDir) {
-  const webDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'web')
+async function seedPackagedServePayload(resourcesDir) {
+  const { SERVE_SELECTION_ENTRY } = require('./verify-packaged-serve-payload.cjs')
+  const entry = join(resourcesDir, 'app.asar.unpacked', 'out', ...SERVE_SELECTION_ENTRY.split('/'))
+  await mkdir(dirname(entry), { recursive: true })
+  await writeFile(entry, '')
+  const webDir = join(resourcesDir, 'app.asar.unpacked', 'out', 'renderer')
   await mkdir(join(webDir, 'assets'), { recursive: true })
   await mkdir(join(resourcesDir, 'app.asar.unpacked', 'out', 'cli'), { recursive: true })
   await writeFile(join(webDir, 'web-index.html'), '<script src="./assets/web.js"></script>')
   await writeFile(join(webDir, 'assets', 'web.js'), '')
+  await writeFile(
+    join(webDir, '.orca-web-client-files.json'),
+    JSON.stringify(['web-index.html', 'assets/web.js'])
+  )
 }
 
 async function seedBundledRipgrep(resourcesDir) {

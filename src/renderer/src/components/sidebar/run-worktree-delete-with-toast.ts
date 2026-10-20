@@ -2,15 +2,12 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { translate } from '@/i18n/i18n'
-import {
-  resolveWorktreeOperationRoute,
-  resolveWorktreeOperationRouteForHost
-} from '@/lib/worktree-operation-route'
+import { resolveWorktreeOperationRouteForHost } from '@/lib/worktree-operation-route'
 import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
-import { prepareActiveWorktreeFocusAfterDelete } from './active-worktree-focus-after-delete'
 import { showDeleteWorktreeFailureToast } from './delete-worktree-failure-toast'
 import type { WorktreeDeleteWithToastOptions } from './worktree-delete-request'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
+import { resolveWriteRoute } from '@/lib/resolve-owner'
 
 // A failed delete usually means unresolved changes, so land on the diff panel.
 function viewWorktreeDiff(
@@ -35,8 +32,6 @@ export function runWorktreeDeleteWithToast(
 ): Promise<boolean> {
   const worktreeId = target.id
   const removeWorktree = useAppStore.getState().removeWorktree
-  const commitFocus = prepareActiveWorktreeFocusAfterDelete(worktreeId)
-  const focusSuccessor = options.focusSuccessorOnDelete !== false
 
   const removeOptions = {
     ...(options.suppressPreservedBranchToast ? { suppressPreservedBranchToast: true } : {}),
@@ -49,7 +44,7 @@ export function runWorktreeDeleteWithToast(
     const currentState = useAppStore.getState()
     const route = target.executionHostId
       ? resolveWorktreeOperationRouteForHost(currentState, worktreeId, target.executionHostId)
-      : resolveWorktreeOperationRoute(currentState, worktreeId)
+      : resolveWriteRoute(currentState, worktreeId)
     const hasKnownChanges =
       (useAppStore.getState().gitStatusByWorktree[worktreeId]?.length ?? 0) > 0
     showDeleteWorktreeFailureToast({
@@ -95,7 +90,6 @@ export function runWorktreeDeleteWithToast(
     failedTitle?: string
     withViewAction?: boolean
   }): void => {
-    const commitRetryFocus = prepareActiveWorktreeFocusAfterDelete(worktreeId)
     const viewAction = retry.withViewAction
       ? {
           action: {
@@ -138,7 +132,6 @@ export function runWorktreeDeleteWithToast(
           failed(result.error)
           return
         }
-        commitRetryFocus()
         // "A retry started from this toast completed the delete" — callers hang their bookkeeping
         // off it, so without this a batch or Space-panel delete keeps listing what it removed.
         options.onForceDeleted?.(target)
@@ -163,9 +156,6 @@ export function runWorktreeDeleteWithToast(
               ? { runtimeEnvironmentId: result.preservedBranch.runtimeEnvironmentId }
               : {})
           })
-        }
-        if (focusSuccessor) {
-          commitFocus()
         }
         return true
       }
