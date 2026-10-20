@@ -39,6 +39,7 @@ mod filesystem_upload;
 mod local_log_tail;
 mod menu_appearance;
 mod menu_hints;
+mod minidump;
 mod runtime_process;
 mod runtime_readiness;
 mod second_instance;
