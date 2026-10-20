@@ -10,12 +10,11 @@ import {
   requestedExecutionHostScope,
   type ExecutionHostScope
 } from '../../../../shared/execution-host'
-import { useAppStore } from '@/store'
 import type { AiVaultSessionLimit } from './ai-vault-session-limit'
 import { AiVaultSessionPublicationGate } from './ai-vault-session-publication-gate'
 import { EMPTY_AI_VAULT_SESSIONS } from './ai-vault-session-identity'
 import { useAppliedAiVaultScan } from './ai-vault-applied-scan'
-import { useAiVaultSessionHostRefreshEvents } from './ai-vault-host-scope'
+import { useAiVaultSessionRefreshTriggers } from './use-ai-vault-refresh-triggers'
 import {
   aiVaultSessionResultCacheKey,
   resetAiVaultSessionResultCacheForTest
@@ -26,10 +25,7 @@ import {
   cacheAiVaultSessionList,
   readCachedAiVaultSessionList
 } from './ai-vault-session-list-request'
-import {
-  getAgentSessionIdsKey,
-  resetAgentSessionIdsRefreshKeys
-} from './ai-vault-agent-session-refresh-key'
+import { resetAgentSessionIdsRefreshKeys } from './ai-vault-agent-session-refresh-key'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 
 // In-app session creation bypasses the cache so the new session appears promptly.
@@ -88,9 +84,7 @@ export function useAiVaultSessionRefresh(
   const enabled = options.enabled !== false
   const { scan, applyScan } = useAppliedAiVaultScan()
   const scanResult = enabled ? (scan?.result ?? null) : null
-  const sessions = enabled
-    ? (scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS)
-    : EMPTY_AI_VAULT_SESSIONS
+  const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
   const [failure, setFailure] = useState<{ scopeKey: string; cause: string } | null>(null)
   const [terminalScopeKey, setTerminalScopeKey] = useState<string | null>(null)
@@ -342,34 +336,7 @@ export function useAiVaultSessionRefresh(
   //
   // Gated on a prior error so a local workspace, or one that already listed fine, does not rescan
   // every time some other host connects.
-  useAiVaultSessionHostRefreshEvents(error, refresh)
-
-  // Sessions started inside Orca never blur the window, so refocus alone
-  // can't surface them. Agent hooks already report provider sessions; re-scan
-  // only when a session id we haven't seen appears — state transitions are
-  // deliberately ignored, they fire constantly while agents work.
-  const agentSessionIdsKey = useAppStore((s) => getAgentSessionIdsKey(s.agentStatusByPaneKey))
-  const seenAgentSessionIdsRef = useRef<Set<string> | null>(null)
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-    const ids = agentSessionIdsKey === '' ? [] : agentSessionIdsKey.split('\n')
-    // The mount refresh already covers sessions live at mount time.
-    if (seenAgentSessionIdsRef.current === null) {
-      seenAgentSessionIdsRef.current = new Set(ids)
-      return
-    }
-    const seen = seenAgentSessionIdsRef.current
-    const freshIds = ids.filter((id) => !seen.has(id))
-    if (freshIds.length === 0) {
-      return
-    }
-    for (const id of freshIds) {
-      seen.add(id)
-    }
-    requestForcedRescan()
-  }, [agentSessionIdsKey, enabled, requestForcedRescan])
+  useAiVaultSessionRefreshTriggers({ enabled, error, refresh, requestForcedRescan })
 
   const scopePending = scan?.scopeKey !== scanScopeKey && terminalScopeKey !== scanScopeKey
   return {
