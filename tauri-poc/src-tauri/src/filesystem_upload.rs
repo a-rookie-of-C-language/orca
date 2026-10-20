@@ -21,9 +21,9 @@ pub struct ExternalFileIdentity {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StagedExternalEntry {
-    #[serde(rename = "directory")]
+    #[serde(rename = "directory", rename_all = "camelCase")]
     Directory { relative_path: String },
-    #[serde(rename = "file")]
+    #[serde(rename = "file", rename_all = "camelCase")]
     File {
         relative_path: String,
         #[serde(flatten)]
@@ -34,16 +34,16 @@ pub enum StagedExternalEntry {
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum StagedExternalSource {
-    #[serde(rename = "staged")]
+    #[serde(rename = "staged", rename_all = "camelCase")]
     Staged {
         source_path: String,
         name: String,
         kind: String,
         entries: Vec<StagedExternalEntry>,
     },
-    #[serde(rename = "skipped")]
+    #[serde(rename = "skipped", rename_all = "camelCase")]
     Skipped { source_path: String, reason: String },
-    #[serde(rename = "failed")]
+    #[serde(rename = "failed", rename_all = "camelCase")]
     Failed { source_path: String, reason: String },
 }
 
@@ -549,5 +549,30 @@ mod tests {
         assert!(error.contains("changed since it was staged"));
 
         remove_dir_all(root).expect("remove temporary directory");
+    }
+
+    #[test]
+    fn staged_sources_serialize_with_renderer_camel_case() {
+        let source = StagedExternalSource::Staged {
+            source_path: String::from("C:\\repo\\note.txt"),
+            name: String::from("note.txt"),
+            kind: String::from("file"),
+            entries: vec![StagedExternalEntry::File {
+                relative_path: String::new(),
+                identity: ExternalFileIdentity {
+                    byte_length: 4,
+                    inode: 0,
+                    device_id: 0,
+                    modified_at_ms: 1,
+                },
+            }],
+        };
+        let value = serde_json::to_value(&source).expect("serialize staged source");
+        assert_eq!(value["sourcePath"], "C:\\repo\\note.txt");
+        assert_eq!(value["entries"][0]["relativePath"], "");
+        assert_eq!(value["entries"][0]["byteLength"], 4);
+        assert!(value.get("source_path").is_none());
+        assert!(value["entries"][0].get("relative_path").is_none());
+        assert!(value["entries"][0].get("byte_length").is_none());
     }
 }

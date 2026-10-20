@@ -115,7 +115,8 @@ first native slice covers the low-risk operations that the renderer already expe
   arguments or a validated `\\wsl.localhost` path; the native boundary rejects compound shell
   commands instead of evaluating renderer-provided command text.
 - local file staging with symlink and identity checks, chunked uploads into the paired runtime,
-  and structured-chat attachment uploads.
+  and structured-chat attachment uploads. Proven live by
+  `tauri-poc/scripts/check-external-upload-stage.mjs` (renderer camelCase wire shape plus chunk readback).
 - remote SSH file and folder downloads through the host-owned SFTP transport, with native destination
   pickers, temporary-path cleanup, collision checks, and atomic folder promotion.
 - local external-file imports with document-folder authorization, recursive copy, collision-safe
