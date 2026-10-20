@@ -17,8 +17,8 @@ use tauri::{AppHandle, Emitter, Manager, State, Url, WebviewUrl};
 use crate::browser_cdp_events::{drop_cdp_subscriptions_for_page, BrowserCdpEventState};
 use crate::browser_identity::{browser_user_agent, BrowserIdentityState};
 use crate::doc_preview::{
-    grant_id_for_page, guest_script, handle_preview_navigation, revoke_grants_for_page,
-    DocPreviewState,
+    grant_id_for_page, guest_script, handle_preview_navigation, preview_navigable_url,
+    revoke_grants_for_page, DocPreviewState,
 };
 
 const EVENT_BROWSER_PAGE: &str = "browser:page-event";
@@ -2806,7 +2806,8 @@ pub fn poc_browser_navigate(
     state: State<BrowserWebviewState>,
     args: BrowserPageNavigateArgs,
 ) -> Result<(), String> {
-    let url = Url::parse(&args.url).map_err(|error| error.to_string())?;
+    // Why rewrite: WRY aliases custom schemes to http only for the initial URL.
+    let url = Url::parse(&preview_navigable_url(&args.url)).map_err(|error| error.to_string())?;
     child_webview(&app, &state, &args.browser_page_id)?
         .navigate(url)
         .map_err(|error| error.to_string())

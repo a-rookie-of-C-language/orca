@@ -260,6 +260,9 @@ first native slice covers the low-risk operations that the renderer already expe
   grant-scoped local document previews with CSP, directory authorization, failure events, and
   external-link interception. Grant minting accepts the renderer camelCase owner shape, and
   unlisted text extensions serve as octet-stream (binary-sniffed content keeps the 415).
+  Serving round-trips through a real hidden guest page, proven live by
+  `tauri-poc/scripts/check-doc-preview-serve.mjs` (guest navigates the WRY http alias, serves
+  the cached entry with no failed loads, and auto-revokes the grant on close).
   On Windows, local development hosts also expose the certificate failure overlay and a
   page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
   by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.

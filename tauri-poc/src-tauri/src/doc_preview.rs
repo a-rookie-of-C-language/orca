@@ -317,6 +317,36 @@ fn build_preview_url(grant_id: &str, relative_path: &str) -> String {
         .join("/");
     format!("{PREVIEW_SCHEME}://{grant_id}/{encoded}")
 }
+/// WRY rewrites only the initial webview URL to its http alias, so later
+/// navigations to the raw scheme abort in WebView2 before reaching the handler.
+pub fn preview_navigable_url(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix(&format!("{PREVIEW_SCHEME}://")) {
+        format!("http://{PREVIEW_SCHEME}.{rest}")
+    } else {
+        url.to_string()
+    }
+}
+
+/// Map a WRY alias navigation back to its preview URL for the gate check.
+fn revert_preview_workaround(url: &Url) -> Option<Url> {
+    if !matches!(url.scheme(), "http" | "https")
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return None;
+    }
+    let grant_host = url
+        .host_str()?
+        .strip_prefix(PREVIEW_SCHEME)?
+        .strip_prefix(".")?;
+    if grant_host.is_empty() || grant_host.contains(".") {
+        return None;
+    }
+    let prefix = format!("{}://{}.", url.scheme(), PREVIEW_SCHEME);
+    let rest = url.as_str().strip_prefix(prefix.as_str())?;
+    Url::parse(&format!("{PREVIEW_SCHEME}://{rest}")).ok()
+}
 
 fn content_type(path: &Path) -> Option<(&'static str, bool)> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
@@ -870,6 +900,9 @@ pub fn handle_preview_navigation(
     if is_preview_url(url) {
         return Some(parse_preview_url(url).is_some_and(|(candidate, _)| candidate == grant_id));
     }
+    if let Some(raw) = revert_preview_workaround(url) {
+        return Some(parse_preview_url(&raw).is_some_and(|(candidate, _)| candidate == grant_id));
+    }
     if url.scheme() == INTERNAL_SCHEME && url.host_str() == Some("doc-preview-external-link") {
         let reported_grant = url
             .query_pairs()
@@ -931,11 +964,43 @@ pub fn guest_script(grant_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_preview_url, cache_mime_for, is_binary_probe, runtime_directory_already_authorized,
+        build_preview_url, cache_mime_for, is_binary_probe, parse_preview_url,
+        preview_navigable_url, revert_preview_workaround, runtime_directory_already_authorized,
         safe_relative_path, ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
     };
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn preview_alias_round_trips_through_wry_workaround() {
+        let grant = "0123456789abcdef0123456789abcdef";
+        let raw = build_preview_url(grant, "a b/index.html");
+        let navigable = preview_navigable_url(&raw);
+        assert_eq!(
+            navigable,
+            "http://orca-preview.0123456789abcdef0123456789abcdef/a%20b/index%2Ehtml"
+        );
+        let reverted = revert_preview_workaround(&tauri::Url::parse(&navigable).unwrap()).unwrap();
+        let (candidate, relative) = parse_preview_url(&reverted).unwrap();
+        assert_eq!(candidate, grant);
+        assert_eq!(relative, "a b/index.html");
+        assert_eq!(
+            preview_navigable_url("https://example.com/x"),
+            "https://example.com/x"
+        );
+        assert!(
+            revert_preview_workaround(&tauri::Url::parse("http://example.com/x").unwrap())
+                .is_none()
+        );
+        assert!(revert_preview_workaround(
+            &tauri::Url::parse("http://orca-preview.a.b/x").unwrap()
+        )
+        .is_none());
+        assert!(revert_preview_workaround(
+            &tauri::Url::parse("http://orca-preview.a:8080/x").unwrap()
+        )
+        .is_none());
+    }
 
     #[test]
     fn preview_urls_encode_segments_and_reject_traversal() {
