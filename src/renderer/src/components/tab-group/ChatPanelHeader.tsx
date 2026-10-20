@@ -6,8 +6,8 @@ import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
+import { ImeInput } from '@/lib/ime-text-field'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { useSortableTabRename } from '../tab-bar/use-sortable-tab-rename'
@@ -114,7 +114,9 @@ function ChatPanelTitle({
   return (
     <>
       {isEditing ? (
-        <Input
+        // Inline title editor: same type and position as the static title, no box
+        // chrome; caret plus text selection carries the editing affordance.
+        <ImeInput
           ref={setRenameInputElement}
           data-tab-rename-input="true"
           data-chat-rename-input="true"
@@ -134,7 +136,7 @@ function ChatPanelTitle({
               cancelRename()
             }
           }}
-          className="h-6 min-w-0 flex-1"
+          className="h-6 min-w-0 flex-1 truncate bg-transparent px-0 text-xs font-medium text-foreground caret-primary outline-none selection:bg-primary/20 placeholder:text-muted-foreground/50 focus-visible:outline-none"
           spellCheck={false}
         />
       ) : chats.length > 1 ? (

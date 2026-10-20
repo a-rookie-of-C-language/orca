@@ -34,8 +34,17 @@ import { useSidebarWorktreeSelection } from './worktree-list/navigation/use-sele
 import { useSidebarWorktreeSortOrder } from './worktree-list/listing/use-sort-order'
 import { useVisibleSidebarWorktrees } from './worktree-list/listing/use-visible-worktrees'
 import { useWorktreeStatusMutations } from './worktree-list/drag/use-status-mutations'
+
+// Why: shared frozen identity so the search-forced expansion below never
+// reallocates a set per render while the query is active.
+const EMPTY_COLLAPSED_GROUPS = new Set<string>()
 import { shouldFiltersHideAllRows } from './sidebar-empty-state-gate'
 import { buildWorktreeManualOrderCatalog } from './worktree-manual-order-catalog'
+import {
+  didWorkspaceTextQueryHitLimit,
+  filterWorktreesByTextQuery
+} from './worktree-list/listing/workspace-text-filter'
+import { translate } from '@/i18n/i18n'
 
 type WorktreeListProps = {
   scrollOffsetRef: React.MutableRefObject<number>
@@ -45,6 +54,8 @@ type WorktreeListProps = {
   onWorkspaceBoardDragPreviewStart?: () => void
   onWorkspaceBoardDragPreviewCommit?: () => void
   onWorkspaceBoardDragPreviewCancel?: () => void
+  /** Session-local text query; blank means no filtering. */
+  textQuery?: string
 }
 
 const WorktreeList = React.memo(function WorktreeList({
@@ -54,7 +65,8 @@ const WorktreeList = React.memo(function WorktreeList({
   onWorktreeCardClick,
   onWorkspaceBoardDragPreviewStart = NOOP_WORKSPACE_BOARD_DRAG_PREVIEW_CALLBACK,
   onWorkspaceBoardDragPreviewCommit = NOOP_WORKSPACE_BOARD_DRAG_PREVIEW_CALLBACK,
-  onWorkspaceBoardDragPreviewCancel = NOOP_WORKSPACE_BOARD_DRAG_PREVIEW_CALLBACK
+  onWorkspaceBoardDragPreviewCancel = NOOP_WORKSPACE_BOARD_DRAG_PREVIEW_CALLBACK,
+  textQuery = ''
 }: WorktreeListProps) {
   // ── Granular selectors (each is a primitive or shallow-stable ref) ──
   const allWorktrees = useAllWorktrees()
@@ -121,6 +133,20 @@ const WorktreeList = React.memo(function WorktreeList({
     defaultHostId,
     agentSendTargetWorktreeId
   })
+  // Why session-local: dsh collapsed search never touches persisted filters.
+  const displayWorktrees = useMemo(
+    () => filterWorktreesByTextQuery(visibleWorktrees, repoMap, textQuery),
+    [visibleWorktrees, repoMap, textQuery]
+  )
+  // Why dsh parity: search-result navigation expands every ancestor, so while
+  // a non-blank query is active no collapsed group may hide a match. Stored
+  // collapses resume untouched once the query clears.
+  const searchActive = textQuery.trim() !== ''
+  // Why separate memo: the capped slice hides whether more rows matched.
+  const textSearchHitLimit = useMemo(
+    () => didWorkspaceTextQueryHitLimit(visibleWorktrees, repoMap, textQuery),
+    [visibleWorktrees, repoMap, textQuery]
+  )
   const visibleScope = useSidebarHostVisibleScope({
     filterState,
     defaultHostId,
@@ -140,7 +166,7 @@ const WorktreeList = React.memo(function WorktreeList({
     projectOrderBy,
     pinnedDisplayPolicy,
     defaultHostId,
-    worktrees: visibleWorktrees,
+    worktrees: displayWorktrees,
     repos,
     repoMap,
     worktreeMap,
@@ -148,7 +174,7 @@ const WorktreeList = React.memo(function WorktreeList({
     prCache,
     settings,
     workspaceStatuses,
-    effectiveCollapsedGroups: collapsedGroups,
+    effectiveCollapsedGroups: searchActive ? EMPTY_COLLAPSED_GROUPS : collapsedGroups,
     agentSendTargetWorktreeId,
     projectGrouping,
     visibleReposForRows: visibleScope.visibleReposForRows,
@@ -223,7 +249,7 @@ const WorktreeList = React.memo(function WorktreeList({
   useSidebarRevealRequests({
     groupBy,
     renderedSidebarRowKeys: rowModel.renderedSidebarRowKeys,
-    visibleWorktrees,
+    visibleWorktrees: displayWorktrees,
     visibleFolderWorkspaces: visibleScope.visibleFolderWorkspacesForRows,
     currentSidebarWorktreeId,
     currentSidebarExecutionHostId: activeWorkspaceExecutionHostId,
@@ -236,7 +262,7 @@ const WorktreeList = React.memo(function WorktreeList({
 
   const filtersHideAllRows = shouldFiltersHideAllRows({
     hasFilters,
-    visibleWorktreeCount: visibleWorktrees.length,
+    visibleWorktreeCount: displayWorktrees.length,
     visibleFolderWorkspaceCount: visibleScope.visibleFolderWorkspacesForRows.length,
     placeholderRepoCount: rowModel.placeholderRepoIds.size,
     importedWorktreeCardCount: externalWorktreeCards.importedWorktreesByRepo.size
@@ -307,7 +333,7 @@ const WorktreeList = React.memo(function WorktreeList({
         clearPendingRevealWorktreeId={clearPendingRevealWorktreeId}
         clearPendingRevealSidebarRow={clearPendingRevealSidebarRow}
         agentSendTargetWorktreeId={agentSendTargetWorktreeId}
-        worktrees={visibleWorktrees}
+        worktrees={displayWorktrees}
         folderWorkspaces={folderWorkspaces}
         selectedWorktreeIds={selection.selectedWorktreeIds}
         selectedWorktrees={selection.selectedWorktrees}
@@ -346,6 +372,17 @@ const WorktreeList = React.memo(function WorktreeList({
         scrollOffsetRef={scrollOffsetRef}
         scrollAnchorRef={scrollAnchorRef}
       />
+      {textSearchHitLimit ? (
+        <div
+          data-testid="workspace-search-limit-hint"
+          className="shrink-0 border-t border-border px-3 py-1.5 text-center text-[11px] text-muted-foreground"
+        >
+          {translate(
+            'auto.components.sidebar.WorktreeList.8c2f1a9e44',
+            'Showing the first 20 matches — refine your search to narrow results'
+          )}
+        </div>
+      ) : null}
     </>
   )
 })

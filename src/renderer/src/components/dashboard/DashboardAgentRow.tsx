@@ -20,6 +20,7 @@ import type { DashboardAgentRow as DashboardAgentRowData } from './useDashboardD
 import { getAgentRowPrimaryText } from '@/lib/agent-row-primary-text'
 import { useAgentRowConversationName } from './use-agent-row-conversation-name'
 import { lastEnteredDoneAt } from './agent-finished-timestamp'
+import { getAgentRowPendingText } from '@/lib/agent-row-pending-text'
 import {
   agentChildRowMessageLine,
   agentChildRowNoUpdateLabel
@@ -79,6 +80,8 @@ type Props = {
   sendTargetStatus?: 'eligible' | 'disabled' | 'sending'
   sendTargetDisabledReason?: string
   onSendTargetClick?: (paneKey: string) => void
+  /** dsh-style Copy Session ID hover button. Absent on the dashboard. */
+  onCopySessionId?: (sessionId: string) => void
 }
 
 const DashboardAgentRow = React.memo(function DashboardAgentRow({
@@ -97,7 +100,8 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
   hideLineageConnectors = false,
   sendTargetStatus,
   sendTargetDisabledReason,
-  onSendTargetClick
+  onSendTargetClick,
+  onCopySessionId
 }: Props) {
   const hasChildDisclosure =
     typeof childAgentCount === 'number' &&
@@ -183,7 +187,10 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
 
   const startedTimeAgo = startedAt !== null ? formatTimeAgo(startedAt, now) : null
   const doneTimeAgo = doneAt !== null ? formatTimeAgo(doneAt, now) : null
-  const relativeTimestamp = noUpdateLabel ?? doneTimeAgo ?? startedTimeAgo
+  // Why: a pending question outranks recency — dsh session rows replace the
+  // trailing update time with the pending kind while the interaction is live.
+  const pendingText = getAgentRowPendingText(dotState)
+  const relativeTimestamp = pendingText ?? noUpdateLabel ?? doneTimeAgo ?? startedTimeAgo
   const tsParts: string[] = noUpdateLabel ? [noUpdateLabel] : []
   if (startedTimeAgo !== null) {
     tsParts.push(`started ${startedTimeAgo}`)
@@ -298,6 +305,7 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
         <DashboardAgentRowTrailingControls
           paneKey={agent.paneKey}
           relativeTimestamp={relativeTimestamp}
+          isPendingInput={pendingText !== null}
           childAgentCount={childAgentCount}
           childAgentsExpanded={childAgentsExpanded}
           onToggleChildAgents={onToggleChildAgents}
@@ -305,6 +313,8 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
           hideExpand={hideExpand}
           hideDismiss={agent.rowSource === 'subagent'}
           sendTargetStatus={sendTargetStatus}
+          sessionIdForCopy={agent.entry.providerSession?.id ?? null}
+          onCopySessionId={onCopySessionId}
           onDismiss={onDismiss}
           onToggleExpanded={handleToggleExpanded}
           onSendTargetClick={onSendTargetClick}

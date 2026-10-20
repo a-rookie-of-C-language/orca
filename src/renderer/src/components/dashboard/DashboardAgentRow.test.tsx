@@ -61,6 +61,25 @@ function renderRow(agent: DashboardAgentRowData): string {
   )
 }
 
+function renderRowWithCopy(
+  agent: DashboardAgentRowData,
+  onCopySessionId?: (sessionId: string) => void
+): string {
+  return renderToStaticMarkup(
+    <TooltipProvider>
+      <DashboardAgentRow
+        agent={agent}
+        onDismiss={vi.fn()}
+        onActivate={vi.fn()}
+        now={NOW}
+        hideIdentityIcon
+        hideExpand
+        onCopySessionId={onCopySessionId}
+      />
+    </TooltipProvider>
+  )
+}
+
 function renderSendTargetRow(
   props: Pick<
     ComponentProps<typeof DashboardAgentRow>,
@@ -258,6 +277,13 @@ describe('DashboardAgentRow', () => {
     expect(tokens).not.toContain('bg-red-500')
   })
 
+  it('names a pending question in the trailing cell instead of the update time', () => {
+    const markup = renderRow(makeAgent({}, { state: 'waiting' }))
+
+    expect(markup).toContain('>Waiting for input<')
+    expect(markup).not.toContain('>1m ago<')
+  })
+
   it('keeps blocked rows red', () => {
     const markup = renderRow(makeAgent({}, { state: 'blocked' }))
     const tokens = classTokens(markup)
@@ -265,6 +291,12 @@ describe('DashboardAgentRow', () => {
     expect(markup).toContain('aria-label="Blocked"')
     expect(tokens).toContain('bg-red-500')
     expect(tokens).not.toContain('bg-amber-500')
+  })
+
+  it('names a blocked row in the trailing cell instead of the update time', () => {
+    const markup = renderRow(makeAgent({}, { state: 'blocked' }))
+
+    expect(markup).toContain('>Blocked<')
   })
 
   it('keeps each row hover boundary inside an anonymous ancestor group', () => {
@@ -525,5 +557,30 @@ describe('DashboardAgentRow', () => {
 
     expect(classTokens(markup)).toContain('worktree-agent-lineage-parent-row')
     expect(markup).toContain('aria-label="Show 2 child agents"')
+  })
+
+  it('offers Copy session ID on hover when the provider session is known', () => {
+    const markup = renderRowWithCopy(
+      makeAgent({}, { providerSession: { key: 'session_id', id: 'sess-123' } }),
+      vi.fn()
+    )
+
+    expect(markup).toContain('aria-label="Copy session ID"')
+    // Why: the copy button rides the dismiss hover reveal so the row never shifts.
+    expect(markup).toContain('group-hover/agent-row:opacity-100')
+  })
+
+  it('hides Copy session ID without a handler so the dashboard stays unchanged', () => {
+    const markup = renderRowWithCopy(
+      makeAgent({}, { providerSession: { key: 'session_id', id: 'sess-123' } })
+    )
+
+    expect(markup).not.toContain('Copy session ID')
+  })
+
+  it('hides Copy session ID when the row has no provider session', () => {
+    const markup = renderRowWithCopy(makeAgent(), vi.fn())
+
+    expect(markup).not.toContain('Copy session ID')
   })
 })

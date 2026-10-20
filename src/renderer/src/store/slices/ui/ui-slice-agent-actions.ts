@@ -26,6 +26,8 @@ export function createUiAgentActions(
   | 'toggleSidebar'
   | 'setSidebarOpen'
   | 'setSidebarWidth'
+  | 'sidebarCollapsed'
+  | 'setSidebarCollapsed'
   | 'agentSendPopoverTargetMode'
   | 'openAgentSendPopoverTargetMode'
   | 'closeAgentSendPopoverTargetMode'
@@ -48,6 +50,8 @@ export function createUiAgentActions(
     toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
     setSidebarWidth: (width) => set({ sidebarWidth: width }),
+    sidebarCollapsed: false,
+    setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
     agentSendPopoverTargetMode: null,
     openAgentSendPopoverTargetMode: (args) => {
       const targets = deriveRunningAgentSendTargets(get(), args.worktreeId)

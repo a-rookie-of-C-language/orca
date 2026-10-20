@@ -4,10 +4,13 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { useSidebarResize } from '@/hooks/useSidebarResize'
 import SidebarHeader from './SidebarHeader'
 import SidebarNav from './SidebarNav'
+import SidebarCollapseRail, { SIDEBAR_COLLAPSE_RAIL_WIDTH } from './SidebarCollapseRail'
 import SetupScriptPromptCard from './SetupScriptPromptCard'
 import WorktreeList from './WorktreeList'
 import SidebarToolbar from './SidebarToolbar'
 import WorkspaceKanbanDrawer from './WorkspaceKanbanDrawer'
+import { resolveWorkspaceMode } from '../../app-shell/workspace-mode'
+import { openWorkspaceCreationComposerWithTourHandoff } from '../contextual-tours/workspace-creation-tour-handoff'
 import type { VirtualizedScrollAnchor } from '@/hooks/useVirtualizedScrollAnchor'
 import { cn } from '@/lib/utils'
 import { FolderPlus, Loader2 } from 'lucide-react'
@@ -55,9 +58,16 @@ function Sidebar({
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const sidebarWidth = useAppStore((s) => s.sidebarWidth)
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth)
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed)
+  const openSettingsPage = useAppStore((s) => s.openSettingsPage)
   const repos = useAppStore((s) => s.repos)
   const startupWorktreeRefreshCompleted = useAppStore((s) => s.startupWorktreeRefreshCompleted)
   const settings = useAppStore((s) => s.settings)
+  // Why work-only: Code mode keeps Explorer left with chat right; the dsh
+  // collapse rail is a Work-mode session-browser affordance.
+  const isWorkMode = resolveWorkspaceMode(settings) === 'work'
+  const showCollapseRail = sidebarOpen && sidebarCollapsed && isWorkMode
   const sidebarBody = useAppStore((s) => s.sidebarBody ?? 'workspaces')
   const showAgentDashboard = settings?.experimentalAgentDashboardPopout === true
   const agentDashboardDrawerOpen = useAppStore((s) => s.agentDashboardDrawerOpen)
@@ -69,6 +79,18 @@ function Sidebar({
   const [agentQuery, setAgentQuery] = React.useState('')
   const [agentOptionsTarget, setAgentOptionsTarget] = React.useState<HTMLDivElement | null>(null)
   const agentsScrollTopRef = React.useRef(0)
+  // Why session-local: dsh collapsed search never persists; Code mode never sees it.
+  const [workspaceQuery, setWorkspaceQuery] = React.useState('')
+  const [workspaceSearchOpen, setWorkspaceSearchOpen] = React.useState(false)
+  const workspaceFilterInputRef = React.useRef<HTMLInputElement | null>(null)
+  const handleWorkspaceSearchOpenChange = React.useCallback((open: boolean) => {
+    setWorkspaceSearchOpen(open)
+    if (!open) {
+      setWorkspaceQuery('')
+      return
+    }
+    requestAnimationFrame(() => workspaceFilterInputRef.current?.focus())
+  }, [])
   // Held here so collapsed groups (and the layout the saved scrollTop assumes)
   // survive the Agents list unmounting on sidebar body switches.
   const [agentsCollapsedGroupKeys, setAgentsCollapsedGroupKeys] = React.useState<
@@ -112,6 +134,14 @@ function Sidebar({
     solidifyWorkspaceBoardFromDrag,
     cancelWorkspaceBoardDragPreview
   } = useWorkspaceBoardPanel()
+  // Why dsh parity: choosing a search result clears and collapses search;
+  // opening the session already happens through card activation.
+  const handleWorktreeCardClick = React.useCallback(() => {
+    closeWorkspaceBoard()
+    if (workspaceSearchOpen && workspaceQuery.trim() !== '') {
+      handleWorkspaceSearchOpenChange(false)
+    }
+  }, [closeWorkspaceBoard, workspaceSearchOpen, workspaceQuery, handleWorkspaceSearchOpenChange])
 
   const setLiveSidebarWidth = React.useCallback((width: number) => {
     document.documentElement.style.setProperty('--workspace-sidebar-live-width', `${width}px`)
@@ -142,7 +172,9 @@ function Sidebar({
 
   const { containerRef, onResizeStart, isResizing } = useSidebarResize<HTMLDivElement>({
     isOpen: sidebarOpen,
-    width: sidebarWidth,
+    // Why: the rail pins to 56px while the stored width stays intact, so
+    // expanding restores the exact pre-collapse width.
+    width: showCollapseRail ? SIDEBAR_COLLAPSE_RAIL_WIDTH : sidebarWidth,
     minWidth: MIN_WIDTH,
     maxWidth: MAX_WIDTH,
     deltaSign: 1,
@@ -174,13 +206,27 @@ function Sidebar({
         style={leftSidebarStyle}
         {...dropHandlers}
       >
-        {sidebarOpen && (
+        {sidebarOpen && showCollapseRail ? (
+          <SidebarCollapseRail
+            onExpand={() => setSidebarCollapsed(false)}
+            onNewWorkspace={() => openWorkspaceCreationComposerWithTourHandoff()}
+            onOpenSettings={() => openSettingsPage()}
+          />
+        ) : null}
+        {sidebarOpen && !showCollapseRail && (
           <>
             {/* Fixed controls */}
             <SidebarNav />
             <SidebarHeader
               onWorkspaceBoardMenuOpenChange={setWorkspaceBoardMenuOpen}
               activityOptionsTarget={setAgentOptionsTarget}
+              onCollapseSidebar={isWorkMode ? () => setSidebarCollapsed(true) : undefined}
+              showWorkspaceSearch={isWorkMode && sidebarBody !== 'agents'}
+              workspaceSearchOpen={workspaceSearchOpen}
+              onToggleWorkspaceSearch={() => handleWorkspaceSearchOpenChange(!workspaceSearchOpen)}
+              workspaceQuery={workspaceQuery}
+              onWorkspaceQueryChange={setWorkspaceQuery}
+              workspaceFilterInputRef={workspaceFilterInputRef}
             />
             <SeveredTerminalDaemonBanner />
             <StalledTerminalDaemonBanner />
@@ -206,10 +252,11 @@ function Sidebar({
                   scrollOffsetRef={worktreeScrollOffsetRef}
                   scrollAnchorRef={worktreeScrollAnchorRef}
                   workspaceBoardOpen={workspaceBoardOpen}
-                  onWorktreeCardClick={closeWorkspaceBoard}
+                  onWorktreeCardClick={handleWorktreeCardClick}
                   onWorkspaceBoardDragPreviewStart={previewWorkspaceBoardFromDrag}
                   onWorkspaceBoardDragPreviewCommit={solidifyWorkspaceBoardFromDrag}
                   onWorkspaceBoardDragPreviewCancel={cancelWorkspaceBoardDragPreview}
+                  textQuery={workspaceQuery}
                 />
               </>
             )}
@@ -247,7 +294,8 @@ function Sidebar({
         ) : null}
 
         {/* Resize handle */}
-        {sidebarOpen && (
+        {/* Why: the dsh rail pins to 56px; dragging it would fight the fixed geometry. */}
+        {sidebarOpen && !showCollapseRail && (
           <div
             data-sidebar-resize-handle=""
             className={cn(WORKTREE_SIDEBAR_RESIZE_HANDLE_CLASS_NAME, isResizing && 'bg-ring/10')}

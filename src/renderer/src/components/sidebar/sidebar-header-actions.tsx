@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react'
-import { FolderPlus, Plus } from 'lucide-react'
+import { FolderPlus, PanelLeftClose, Plus, Search } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -81,13 +81,85 @@ function NewWorkspaceButton({
 
 export function SidebarHeaderActions({
   onWorkspaceBoardMenuOpenChange,
-  agentsViewActive = false
+  agentsViewActive = false,
+  onCollapseSidebar,
+  showWorkspaceSearch = false,
+  workspaceSearchOpen = false,
+  onToggleWorkspaceSearch
 }: {
   onWorkspaceBoardMenuOpenChange: (open: boolean) => void
   agentsViewActive?: boolean
+  /** Work mode only; absent in Code mode so the rail never appears there. */
+  onCollapseSidebar?: () => void
+  /** dsh-style collapsed search; only offered on the Work workspaces view. */
+  showWorkspaceSearch?: boolean
+  workspaceSearchOpen?: boolean
+  onToggleWorkspaceSearch?: () => void
 }): React.JSX.Element {
+  const keybindings = useAppStore((s) => s.keybindings)
+  // Why primary: Toggle Sidebar binds one default (Mod+B); when the user
+  // unbinds it the tooltip falls back to the bare label like dsh does.
+  const toggleSidebarShortcut = formatOptionalPrimaryShortcutLabel(
+    'sidebar.left.toggle',
+    keybindings
+  )
+  const collapseLabel = translate(
+    'auto.components.sidebar.SidebarHeaderActions.collapseSidebar',
+    'Collapse sidebar'
+  )
   return (
     <div className="flex shrink-0 items-center gap-1" data-sidebar-header-actions="">
+      {onCollapseSidebar ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              type="button"
+              className="text-muted-foreground"
+              aria-label={collapseLabel}
+              aria-keyshortcuts={toggleSidebarShortcut ?? undefined}
+              aria-expanded={true}
+              onClick={onCollapseSidebar}
+            >
+              <PanelLeftClose className="size-3.5" strokeWidth={2.25} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            {collapseLabel}
+            {toggleSidebarShortcut ? (
+              <span className="ml-1.5 text-background/60">{toggleSidebarShortcut}</span>
+            ) : null}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+      {showWorkspaceSearch && !agentsViewActive ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              type="button"
+              className="text-muted-foreground"
+              aria-label={translate(
+                'auto.components.sidebar.SidebarHeaderActions.searchWorkspaces',
+                'Search workspaces'
+              )}
+              aria-expanded={workspaceSearchOpen}
+              aria-pressed={workspaceSearchOpen}
+              onClick={onToggleWorkspaceSearch}
+            >
+              <Search className="size-3.5" strokeWidth={2.25} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            {translate(
+              'auto.components.sidebar.SidebarHeaderActions.searchWorkspaces',
+              'Search workspaces'
+            )}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
       {/* Why only options swap: the activity view portals its own options button into this slot
           (SidebarHeader), and keeping Add project means no header button shifts between views. */}
       {agentsViewActive ? null : (

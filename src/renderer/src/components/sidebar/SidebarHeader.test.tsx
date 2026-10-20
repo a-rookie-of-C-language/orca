@@ -333,4 +333,154 @@ describe('SidebarHeader', () => {
 
     expect(container.querySelector('[aria-label="Open full Agents view"]')).toBeNull()
   })
+
+  it('collapses from the header button first when the work-mode handler is provided', async () => {
+    const onCollapseSidebar = vi.fn()
+    act(() => {
+      root.render(
+        <SidebarHeader
+          onWorkspaceBoardMenuOpenChange={vi.fn()}
+          onCollapseSidebar={onCollapseSidebar}
+        />
+      )
+    })
+
+    const actions = container.querySelector('[data-sidebar-header-actions]')
+    expect(actions?.querySelector('[aria-label]')?.getAttribute('aria-label')).toBe(
+      'Collapse sidebar'
+    )
+
+    await act(async () => {
+      headerButton('Collapse sidebar').click()
+    })
+
+    expect(onCollapseSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes the toggle shortcut on the collapse button and drops it when unbound', () => {
+    act(() => {
+      root.render(
+        <SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} onCollapseSidebar={vi.fn()} />
+      )
+    })
+    expect(headerButton('Collapse sidebar').getAttribute('aria-keyshortcuts')).toBe('⌘N')
+
+    mocks.shortcutLabel.current = null
+    act(() => {
+      root.render(
+        <SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} onCollapseSidebar={vi.fn()} />
+      )
+    })
+    expect(headerButton('Collapse sidebar').hasAttribute('aria-keyshortcuts')).toBe(false)
+  })
+
+  it('omits the collapse button without the handler so code mode stays untouched', () => {
+    act(() => {
+      root.render(<SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} />)
+    })
+
+    expect(container.querySelector('[aria-label="Collapse sidebar"]')).toBeNull()
+  })
+
+  it('toggles workspace search from the header button on the work workspaces view', async () => {
+    const onToggleWorkspaceSearch = vi.fn()
+    act(() => {
+      root.render(
+        <SidebarHeader
+          onWorkspaceBoardMenuOpenChange={vi.fn()}
+          showWorkspaceSearch
+          workspaceSearchOpen={false}
+          onToggleWorkspaceSearch={onToggleWorkspaceSearch}
+        />
+      )
+    })
+
+    expect(headerButton('Search workspaces').getAttribute('aria-expanded')).toBe('false')
+
+    await act(async () => {
+      headerButton('Search workspaces').click()
+    })
+
+    expect(onToggleWorkspaceSearch).toHaveBeenCalledTimes(1)
+  })
+
+  it('omits workspace search without the flag so code mode stays untouched', () => {
+    act(() => {
+      root.render(<SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} />)
+    })
+
+    expect(container.querySelector('[aria-label="Search workspaces"]')).toBeNull()
+  })
+
+  it('spans the open search across the header instead of a strip below it', () => {
+    const onWorkspaceQueryChange = vi.fn()
+    act(() => {
+      root.render(
+        <SidebarHeader
+          onWorkspaceBoardMenuOpenChange={vi.fn()}
+          showWorkspaceSearch
+          workspaceSearchOpen
+          onToggleWorkspaceSearch={vi.fn()}
+          workspaceQuery="lin"
+          onWorkspaceQueryChange={onWorkspaceQueryChange}
+        />
+      )
+    })
+
+    const box = container.querySelector<HTMLInputElement>('input[aria-label="Search workspaces"]')
+    expect(box?.value).toBe('lin')
+    // The title and action cluster vacate the h-8 row while the field owns it.
+    expect(container.querySelector('[data-sidebar-section-title]')).toBeNull()
+    expect(container.querySelector('[aria-label="Search workspaces"]')).toBe(box)
+    expect(container.querySelector('[aria-label="Close search"]')).toBeTruthy()
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(box, 'lineage')
+      box?.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(onWorkspaceQueryChange).toHaveBeenCalledWith('lineage')
+  })
+
+  it('closes the header search from Escape or the close button', async () => {
+    const onToggleWorkspaceSearch = vi.fn()
+    act(() => {
+      root.render(
+        <SidebarHeader
+          onWorkspaceBoardMenuOpenChange={vi.fn()}
+          showWorkspaceSearch
+          workspaceSearchOpen
+          onToggleWorkspaceSearch={onToggleWorkspaceSearch}
+          workspaceQuery=""
+          onWorkspaceQueryChange={vi.fn()}
+        />
+      )
+    })
+
+    const box = container.querySelector<HTMLInputElement>('input[aria-label="Search workspaces"]')
+    act(() => {
+      box?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(onToggleWorkspaceSearch).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Close search"]')?.click()
+    })
+    expect(onToggleWorkspaceSearch).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores the open flag without the search flag so code mode keeps its header', () => {
+    act(() => {
+      root.render(
+        <SidebarHeader
+          onWorkspaceBoardMenuOpenChange={vi.fn()}
+          workspaceSearchOpen
+          onToggleWorkspaceSearch={vi.fn()}
+        />
+      )
+    })
+
+    expect(container.querySelector('input[aria-label="Search workspaces"]')).toBeNull()
+    expect(container.querySelector('[data-sidebar-section-title]')).toBeTruthy()
+  })
 })

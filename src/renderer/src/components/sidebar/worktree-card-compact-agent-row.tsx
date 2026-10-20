@@ -6,6 +6,8 @@ import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/da
 import { AgentIcon } from '@/lib/agent-catalog'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { cn } from '@/lib/utils'
+import { Copy } from 'lucide-react'
+import { translate } from '@/i18n/i18n'
 import { getAgentDotState } from './worktree-card-agent-summary'
 import { getAgentRowPrimaryText } from '@/lib/agent-row-primary-text'
 import { formatAgentToolPreview } from '@/lib/agent-row-tool-preview'
@@ -16,6 +18,7 @@ import CacheTimer, { usePromptCacheCountdownForPane } from './CacheTimer'
 import { formatShortTimeAgo } from '@/lib/short-time-ago'
 import { agentVerdictStatusLine } from '@/lib/agent-verdict-status-line'
 import { agentRowStoppingLabel } from '@/lib/agent-row-stopping-label'
+import { getAgentRowPendingText } from '@/lib/agent-row-pending-text'
 import { getCompactAgentLineOrder } from './worktree-card-compact-agent-line-order'
 
 function getCompactAgentPrimary(
@@ -89,6 +92,9 @@ type CompactAgentRowProps = {
   hideIdentityIcon?: boolean
   cacheTimerActive?: boolean
   isUnvisited?: boolean
+  /** Provider session id for the dsh-style Copy Session ID hover button. */
+  sessionIdForCopy?: string | null
+  onCopySessionId?: (sessionId: string) => void
 }
 
 export const CompactAgentRow = React.memo(function CompactAgentRow({
@@ -104,7 +110,9 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   isFocusedPane = false,
   hideIdentityIcon = false,
   cacheTimerActive = true,
-  isUnvisited = false
+  isUnvisited = false,
+  sessionIdForCopy,
+  onCopySessionId
 }: CompactAgentRowProps) {
   const hasChildDisclosure =
     typeof childAgentCount === 'number' &&
@@ -147,6 +155,12 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   const rowTitle = `${leadingText}${trailingText ? ` - ${trailingText}` : ''}`
   const model = agent.entry.model?.trim() ?? ''
   const shortTime = getCompactAgentTime(agent, now)
+  // Why: a pending question outranks recency — dsh session rows replace the
+  // trailing update time with the pending kind while the interaction is live.
+  // The state dot already carries the same state for assistive tech.
+  const pendingText = getAgentRowPendingText(dotState)
+  const trailingStatusText = pendingText ?? shortTime
+  const trailingStatusTitle = pendingText && shortTime ? shortTime : undefined
   const cacheTimer = usePromptCacheCountdownForPane(agent.paneKey, cacheTimerActive)
 
   const handleActivate = useCallback(
@@ -178,15 +192,61 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
     },
     [agent.paneKey, onSendTargetClick, sendTargetStatus]
   )
-  const timestamp = shortTime ? (
+  const timestamp = trailingStatusText ? (
     <span
       className={cn(
         'shrink-0 text-[10px] tabular-nums',
-        isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/60'
+        pendingText
+          ? 'text-agent-question'
+          : isFocusedPane
+            ? 'text-foreground/70'
+            : 'text-muted-foreground/60'
+      )}
+      title={trailingStatusTitle}
+    >
+      {trailingStatusText}
+    </span>
+  ) : null
+
+  // Why: the copy button rides the same hover reveal as the timestamp so the
+  // compact row never shifts — dsh session rows show their hover actions the
+  // same way. Disclosure rows keep their chevron surface untouched, and a row
+  // with no timestamp has no cell to share so it offers no copy target.
+  const showCopySessionId = Boolean(sessionIdForCopy && onCopySessionId && shortTime)
+  const handleCopySessionId = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (sessionIdForCopy && onCopySessionId) {
+        onCopySessionId(sessionIdForCopy)
+      }
+    },
+    [onCopySessionId, sessionIdForCopy]
+  )
+  const stopCopyActivate = useCallback((event: React.SyntheticEvent) => {
+    event.stopPropagation()
+  }, [])
+  const copyButton = showCopySessionId ? (
+    <button
+      type="button"
+      onClick={handleCopySessionId}
+      onMouseDown={stopCopyActivate}
+      onKeyDown={stopCopyActivate}
+      className={cn(
+        'inline-flex items-center justify-center text-muted-foreground/70 hover:text-foreground',
+        'can-hover:opacity-0 transition-opacity duration-150 group-hover/compact-agent-row:opacity-100 focus-visible:opacity-100'
+      )}
+      aria-label={translate(
+        'auto.components.dashboard.DashboardAgentRow.copySessionId',
+        'Copy session ID'
+      )}
+      title={translate(
+        'auto.components.dashboard.DashboardAgentRow.copySessionId',
+        'Copy session ID'
       )}
     >
-      {shortTime}
-    </span>
+      <Copy className="size-3" />
+    </button>
   ) : null
 
   // Why: the selected-row fill is strong enough to wash out the dimmed prompt/secondary text, so
@@ -267,6 +327,25 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
           onToggleChildAgents={onToggleChildAgents}
           timestamp={timestamp}
         />
+      ) : showCopySessionId && shortTime ? (
+        <span className="relative grid shrink-0 grid-cols-1 grid-rows-1 items-center justify-items-end">
+          <span
+            className={cn(
+              '[grid-area:1/1] pointer-events-none text-[10px] tabular-nums',
+              pendingText
+                ? 'text-agent-question'
+                : isFocusedPane
+                  ? 'text-foreground/70'
+                  : 'text-muted-foreground/60',
+              'transition-opacity duration-150 group-hover/compact-agent-row:opacity-0 [@media(hover:none)]:opacity-0'
+            )}
+            aria-hidden
+            title={trailingStatusTitle}
+          >
+            {trailingStatusText}
+          </span>
+          <span className="[grid-area:1/1] inline-flex items-center justify-end">{copyButton}</span>
+        </span>
       ) : (
         timestamp
       )}

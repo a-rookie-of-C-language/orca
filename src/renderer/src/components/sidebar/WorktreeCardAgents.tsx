@@ -29,6 +29,7 @@ import { useWorktreeAgentExpansionState } from './worktree-card-agents-expansion
 import { translate } from '@/i18n/i18n'
 import { activateStructuredAgentSessionTab } from '@/lib/structured-agent-session-tab-activation'
 import { selectAgentRowsUnread } from './worktree-card-agent-ack-inputs'
+import { copyAgentSessionId } from '@/lib/copy-agent-session-id'
 
 export const SUPPRESS_WORKTREE_LIST_SCROLL_ADJUSTMENT_EVENT =
   'orca-suppress-worktree-list-scroll-adjustment'
@@ -280,6 +281,9 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
           sendTargetStatus={sendTarget?.status}
           sendTargetDisabledReason={sendTarget?.disabledReason}
           onSendTargetClick={isAgentSendTargetModeActive ? handleSendTargetClick : undefined}
+          // Why: dsh session rows offer Copy Session ID; the sidebar agent
+          // rows mirror it while the dashboard keeps its current controls.
+          onCopySessionId={(sessionId) => void copyAgentSessionId(sessionId)}
           // Why: hierarchy shows via chevron + indent; legacy L-connectors use a fixed offset that mismatches the column and reads as floating fragments.
           hideLineageConnectors
         />
@@ -333,6 +337,10 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
           }
           isFocusedPane={agent.paneKey === focusedAgentPaneKey}
           cacheTimerActive={cacheTimerActive}
+          // Why: dsh session rows offer Copy Session ID; compact rows mirror
+          // the full rows while the dashboard keeps its current controls.
+          sessionIdForCopy={agent.entry.providerSession?.id ?? null}
+          onCopySessionId={(sessionId) => void copyAgentSessionId(sessionId)}
         />
         {hasChildAgents ? (
           <CompactAgentExpansion expanded={expanded}>

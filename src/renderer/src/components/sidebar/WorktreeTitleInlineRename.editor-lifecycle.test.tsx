@@ -3,6 +3,7 @@
 import { StrictMode, useState } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { WorktreeTitleInlineRename } from './WorktreeTitleInlineRename'
 
 vi.mock('@/i18n/i18n', () => ({
@@ -90,6 +91,87 @@ function openEditorByShortcut(props: HarnessProps = {}): {
 }
 
 describe('WorktreeTitleInlineRename editor lifecycle', () => {
+  // Why: happy-dom reports zero geometry, so overflow is faked at the
+  // prototype like the TruncatedSidebarLabel suite does.
+  function mockTitleOverflow(): () => void {
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth'
+    )
+    const originalScrollWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollWidth'
+    )
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get: () => 120
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get: () => 200
+    })
+    return () => {
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth)
+      } else {
+        delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth
+      }
+      if (originalScrollWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth)
+      } else {
+        delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth
+      }
+    }
+  }
+
+  it('scrolls an overlong title to its far edge on hover and back on leave', () => {
+    const restoreOverflow = mockTitleOverflow()
+    try {
+      render(
+        <TooltipProvider>
+          <WorktreeTitleInlineRename
+            displayName="A very long workspace title that overflows"
+            onRename={vi.fn()}
+          />
+        </TooltipProvider>
+      )
+      const title = screen
+        .getByText('A very long workspace title that overflows')
+        .closest<HTMLElement>('[data-worktree-title-inline-rename]')
+      if (!title) {
+        throw new Error('expected the title wrapper to render')
+      }
+      const scrollTo = vi.spyOn(title, 'scrollTo').mockImplementation(() => undefined)
+
+      fireEvent.mouseEnter(title)
+      expect(scrollTo).toHaveBeenCalledWith({ left: 200, behavior: 'smooth' })
+
+      fireEvent.mouseLeave(title)
+      expect(scrollTo).toHaveBeenLastCalledWith({ left: 0, behavior: 'smooth' })
+    } finally {
+      restoreOverflow()
+    }
+  })
+
+  it('leaves a fitting title unmoved on hover', () => {
+    render(
+      <TooltipProvider>
+        <WorktreeTitleInlineRename displayName="Short" onRename={vi.fn()} />
+      </TooltipProvider>
+    )
+    const title = screen
+      .getByText('Short')
+      .closest<HTMLElement>('[data-worktree-title-inline-rename]')
+    if (!title) {
+      throw new Error('expected the title wrapper to render')
+    }
+    const scrollTo = vi.spyOn(title, 'scrollTo').mockImplementation(() => undefined)
+
+    fireEvent.mouseEnter(title)
+    fireEvent.mouseLeave(title)
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
   it('closes the shortcut-opened editor on Escape', () => {
     const { input } = openEditorByShortcut()
 

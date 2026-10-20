@@ -130,6 +130,9 @@ export type UISliceCore = {
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setSidebarWidth: (width: number) => void
+  /** Work-mode sidebar collapsed to the icon rail. Session-local chrome, never persisted. */
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (collapsed: boolean) => void
   agentSendPopoverTargetMode: AgentSendPopoverTargetMode | null
   openAgentSendPopoverTargetMode: (args: OpenAgentSendPopoverTargetModeArgs) => void
   closeAgentSendPopoverTargetMode: (id?: string, instanceId?: string) => void

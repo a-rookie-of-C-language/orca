@@ -123,6 +123,28 @@ export function WorktreeTitleInlineRename({
     [measureTitleTruncated, wrapTitle]
   )
 
+  // Why: dsh session rows scroll an overlong title to its far edge on hover
+  // and back on leave; truncate + tooltip stay as the at-rest presentation.
+  // Skipped while wrapping (nothing overflows) or editing (the span is gone).
+  const scrollTitleToEdge = useCallback(
+    (edge: 'start' | 'end') => {
+      const node = titleElementRef.current
+      if (!node || wrapTitle || !titleTruncated) {
+        return
+      }
+      const left = edge === 'end' ? node.scrollWidth : 0
+      if (typeof node.scrollTo === 'function') {
+        const reduceMotion =
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        node.scrollTo({ left, behavior: reduceMotion ? 'auto' : 'smooth' })
+        return
+      }
+      node.scrollLeft = left
+    },
+    [titleTruncated, wrapTitle]
+  )
+
   // Why: remounts the rendered title so truncation is measured again. The editor must
   // not share it — an unread flip would remount the input and reselect what was typed.
   const titleElementKey = `${displayName}:${showUnreadEmphasis ? 'unread' : 'read'}`
@@ -354,6 +376,8 @@ export function WorktreeTitleInlineRename({
       )}
       data-worktree-title-inline-rename=""
       onDoubleClick={startRename}
+      onMouseEnter={() => scrollTitleToEdge('end')}
+      onMouseLeave={() => scrollTitleToEdge('start')}
       tabIndex={disabled ? undefined : 0}
     >
       {/* Why: visible text alone misses the unread state for assistive tech. */}

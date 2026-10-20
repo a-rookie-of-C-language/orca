@@ -14,6 +14,9 @@ type TruncatedSidebarLabelProps = {
   tooltipEnabled?: boolean
   tooltipSide?: 'top' | 'right' | 'bottom' | 'left'
   tooltipSideOffset?: number
+  /** dsh session-row behavior: hovering a truncated label scrolls it to its
+   *  far edge and reveals the full text; leaving returns it to the start. */
+  scrollOnHover?: boolean
 }
 
 export function TruncatedSidebarLabel({
@@ -21,7 +24,8 @@ export function TruncatedSidebarLabel({
   className,
   tooltipEnabled = true,
   tooltipSide = 'right',
-  tooltipSideOffset = 8
+  tooltipSideOffset = 8,
+  scrollOnHover = false
 }: TruncatedSidebarLabelProps): React.JSX.Element {
   const nodeRef = React.useRef<HTMLSpanElement | null>(null)
   const resizeObserverRef = React.useRef<ResizeObserver | null>(null)
@@ -32,6 +36,27 @@ export function TruncatedSidebarLabel({
     const nextTruncated = element ? isSidebarLabelTruncated(element) : false
     setTruncated((current) => (current === nextTruncated ? current : nextTruncated))
   }, [])
+
+  const scrollToEdge = useCallback(
+    (edge: 'start' | 'end') => {
+      const node = nodeRef.current
+      if (!node || !scrollOnHover || !isSidebarLabelTruncated(node)) {
+        return
+      }
+      const left = edge === 'end' ? node.scrollWidth : 0
+      // Why: happy-dom and older engines lack scrollTo; direct assignment
+      // scrolls identically for an overflow-hidden label.
+      if (typeof node.scrollTo === 'function') {
+        const reduceMotion =
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        node.scrollTo({ left, behavior: reduceMotion ? 'auto' : 'smooth' })
+        return
+      }
+      node.scrollLeft = left
+    },
+    [scrollOnHover]
+  )
 
   const handleRef = useCallback(
     (node: HTMLSpanElement | null): void => {
@@ -70,7 +95,12 @@ export function TruncatedSidebarLabel({
   }, [measureTruncated, text])
 
   const label = (
-    <span ref={handleRef} className={cn('block min-w-0 truncate', className)}>
+    <span
+      ref={handleRef}
+      className={cn('block min-w-0 truncate', className)}
+      onMouseEnter={scrollOnHover ? () => scrollToEdge('end') : undefined}
+      onMouseLeave={scrollOnHover ? () => scrollToEdge('start') : undefined}
+    >
       {text}
     </span>
   )

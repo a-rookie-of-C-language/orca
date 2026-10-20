@@ -63,6 +63,7 @@ export function WorktreeCardMetaRow({
             text={identityDisplay!}
             className="text-[11px] text-muted-foreground leading-none"
             tooltipEnabled={!hasHoverDetails}
+            scrollOnHover
           />
         ) : isFolder && !newCardStyle ? (
           <span
@@ -77,6 +78,7 @@ export function WorktreeCardMetaRow({
             className="text-[11px] text-muted-foreground leading-none"
             // Why: whole-card details hover already shows full identity; a nested tooltip would compete for it.
             tooltipEnabled={!hasHoverDetails}
+            scrollOnHover
           />
         ) : showDetachedHeadInMetaRow && detachedHeadDisplay ? (
           <DetachedHeadBadge

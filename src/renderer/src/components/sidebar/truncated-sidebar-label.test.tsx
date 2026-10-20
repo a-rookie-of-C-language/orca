@@ -106,6 +106,52 @@ describe('TruncatedSidebarLabel', () => {
     expect(container.querySelector('[data-tooltip-content]')).toBeNull()
   })
 
+  it('scrolls a truncated label to its far edge on hover and back on leave', async () => {
+    const scrollTo = vi.fn()
+    const originalScrollTo = HTMLElement.prototype.scrollTo
+    HTMLElement.prototype.scrollTo = scrollTo
+    try {
+      await act(async () => {
+        root.render(<TruncatedSidebarLabel text="feature/really-long-branch-name" scrollOnHover />)
+      })
+      const label = container.querySelector('span')
+      expect(label).toBeTruthy()
+
+      await act(async () => {
+        label!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      })
+      expect(scrollTo).toHaveBeenCalledWith({ left: 180, behavior: 'smooth' })
+
+      await act(async () => {
+        label!.dispatchEvent(
+          new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })
+        )
+      })
+      expect(scrollTo).toHaveBeenLastCalledWith({ left: 0, behavior: 'smooth' })
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo
+    }
+  })
+
+  it('leaves a fitting label unmoved on hover', async () => {
+    const scrollTo = vi.fn()
+    const originalScrollTo = HTMLElement.prototype.scrollTo
+    HTMLElement.prototype.scrollTo = scrollTo
+    try {
+      await act(async () => {
+        root.render(<TruncatedSidebarLabel text="feature/short" scrollOnHover />)
+      })
+      const label = container.querySelector('span')
+
+      await act(async () => {
+        label!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      })
+      expect(scrollTo).not.toHaveBeenCalled()
+    } finally {
+      HTMLElement.prototype.scrollTo = originalScrollTo
+    }
+  })
+
   // Why: worktree titles change on the hot store-write path. Remounting the
   // span per text change tore down and rebuilt its ResizeObserver every time.
   it('keeps one ResizeObserver across a label text change', async () => {
