@@ -946,16 +946,60 @@ pub fn guest_script(grant_id: &str) -> String {
   }};
   if (globalThis.__orcaDocPreviewLinkBridge) return;
   globalThis.__orcaDocPreviewLinkBridge = true;
+  const isPreviewAlias = (url) => url.protocol === 'http:' && typeof url.host === 'string' && url.host.indexOf('orca-preview.') === 0;
+  const scrollToFragment = (fragment) => {{
+    let target = document.getElementById(fragment);
+    if (!target) {{
+      try {{ target = document.getElementById(decodeURIComponent(fragment)); }} catch {{ target = null; }}
+    }}
+    if (target) {{ target.scrollIntoView(); return; }}
+    if (fragment === 'top') {{ window.scrollTo(0, 0); }}
+  }};
+  const readAnchor = (event) => {{
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+    for (const node of path) {{
+      if (node && typeof node.tagName === 'string' && node.tagName.toUpperCase() === 'A') {{
+        let raw = null;
+        try {{ raw = node.getAttribute('href'); }} catch {{ raw = null; }}
+        return {{ node, raw }};
+      }}
+    }}
+    return null;
+  }};
   document.addEventListener('click', (event) => {{
-    if (event.defaultPrevented || event.button !== 0) return;
-    const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
-    if (!target) return;
+    if (!event.isTrusted || event.defaultPrevented || event.button !== 0) return;
+    const anchor = readAnchor(event);
+    if (!anchor) return;
+    if (anchor.raw === '#') {{ event.preventDefault(); window.scrollTo(0, 0); return; }}
+    let href = null;
+    try {{
+      const current = anchor.node.href;
+      const base = current && current.baseVal !== undefined ? current.baseVal : current;
+      href = new URL(base, location.href).toString();
+    }} catch {{ return; }}
+    const hashIndex = href.indexOf('#');
+    if (hashIndex !== -1 && href.slice(0, hashIndex) === location.href.split('#')[0]) {{
+      event.preventDefault();
+      scrollToFragment(href.slice(hashIndex + 1));
+      return;
+    }}
     let url;
-    try {{ url = new URL(target.href, location.href); }} catch {{ return; }}
+    try {{ url = new URL(href); }} catch {{ return; }}
+    if (url.protocol === 'orca-preview:') {{
+      event.preventDefault();
+      event.stopPropagation();
+      try {{ location.href = 'http://orca-preview.' + url.href.slice('orca-preview://'.length); }} catch {{}}
+      return;
+    }}
+    if (isPreviewAlias(url)) return;
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
     event.preventDefault();
     event.stopPropagation();
     signal(url.href);
+  }}, true);
+  document.addEventListener('auxclick', (event) => {{
+    if (!event.isTrusted || event.button !== 1) return;
+    if (readAnchor(event)) event.preventDefault();
   }}, true);
 }})();"#
     )
@@ -964,7 +1008,7 @@ pub fn guest_script(grant_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_preview_url, cache_mime_for, is_binary_probe, parse_preview_url,
+        build_preview_url, cache_mime_for, guest_script, is_binary_probe, parse_preview_url,
         preview_navigable_url, revert_preview_workaround, runtime_directory_already_authorized,
         safe_relative_path, ssh_directory_already_authorized, DocPreviewGrant, DocPreviewOwner,
     };
@@ -1142,6 +1186,21 @@ mod tests {
                 assert_eq!(worktree_root, "r");
             }
             DocPreviewOwner::Ssh { .. } => panic!("wrong variant"),
+        }
+    }
+    #[test]
+    fn guest_link_bridge_keeps_fragments_and_siblings_in_page() {
+        let script = guest_script("0123456789abcdef0123456789abcdef");
+        for marker in [
+            "__orcaDocPreviewLinkBridge",
+            "isTrusted",
+            "composedPath",
+            "scrollIntoView",
+            "auxclick",
+            "orca-preview.",
+            "doc-preview-external-link",
+        ] {
+            assert!(script.contains(marker), "guest script lost {marker}");
         }
     }
 }

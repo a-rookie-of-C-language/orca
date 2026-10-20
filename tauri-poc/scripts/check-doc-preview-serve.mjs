@@ -9,10 +9,12 @@ import { assertReadyHidden, connectDevelopmentRenderer } from './hidden-renderer
 // pages in the doc-preview partition: a plain http baseline renders, then a
 // separate guest navigates the minted grant URL (rewritten to the WRY http
 // alias, since WebView2 aborts raw post-creation custom-scheme navigations)
-// and serves the cached entry bytes with no did-fail-load. Clicking an
-// external link emits doc-preview:external-link without leaving the grant
-// page, reload re-serves the cached entry, and closing auto-revokes the
-// grant. Refuses visible windows and foreign checkouts like the sibling checks.
+// and serves the cached entry bytes. Trusted clicks prove the Electron link
+// contract: an external link emits doc-preview:external-link without leaving
+// the grant page, a same-document fragment scrolls in place with no signal, a
+// sibling document navigates natively, reload re-serves the cached entry, and
+// closing auto-revokes the grant. Refuses visible windows and foreign
+// checkouts like the sibling checks.
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const endpoint = process.env.ORCA_TAURI_CDP_ENDPOINT ?? 'http://127.0.0.1:9224'
 const HOST = '127.0.0.1'
@@ -22,6 +24,8 @@ const BASE_PAGE_ID = 'e2e-doc-serve-base-' + STAMP
 const PAGE_ID = 'e2e-doc-serve-' + STAMP
 const HTTP_MARKER = 'DOC-SERVE-HTTP-BASELINE'
 const DOC_MARKER = 'DOC-SERVE-CACHED-ENTRY'
+const FRAG_MARKER = 'DOC-SERVE-FRAG-TARGET'
+const SIB_MARKER = 'DOC-SERVE-SIBLING-ENTRY'
 const EXT_URL = 'https://example.com/ext-proof'
 const connections = new Set()
 
@@ -59,6 +63,26 @@ async function childEvaluate(page, pageId, expression, strict) {
     throw new Error(`guest evaluate threw: ${JSON.stringify(reply.exceptionDetails).slice(0, 200)}`)
   }
   return reply?.result?.value
+}
+async function trustedClick(page, pageId, elementId) {
+  const rectJson = await childEvaluate(
+    page,
+    pageId,
+    `(() => { const el = document.getElementById('${elementId}'); el.scrollIntoView({ block: 'center' }); const rect = el.getBoundingClientRect(); return JSON.stringify({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }); })()`,
+    true
+  )
+  const rect = JSON.parse(rectJson)
+  const x = Math.round(rect.x + rect.width / 2)
+  const y = Math.round(rect.y + rect.height / 2)
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await invoke(page, 'poc_browser_cdp', {
+      args: {
+        browserPageId: pageId,
+        method: 'Input.dispatchMouseEvent',
+        params: { type, x, y, button: 'left', clickCount: 1 }
+      }
+    })
+  }
 }
 
 function step(message) {
@@ -144,13 +168,33 @@ try {
       relativePath: 'probe.html',
       filePath: '/docs/probe.html',
       contentBase64: Buffer.from(
-        `<!doctype html><html><body><h1>${DOC_MARKER}</h1><a id="extlink" href="${EXT_URL}">external</a></body></html>`,
+        `<!doctype html><html><body><h1>${DOC_MARKER}</h1><p><a id="extlink" href="${EXT_URL}">external</a> <a id="fraglink" href="#frag">fragment</a> <a id="siblink" href="sibling.html">sibling</a></p><div style="height:1500px"></div><h2 id="frag">${FRAG_MARKER}</h2></body></html>`,
         'utf8'
       ).toString('base64')
     }
   })
   assert.equal(cached, true, 'grant entry never cached')
-  step('grant minted and entry cached')
+  assert.equal(
+    await invoke(page, 'poc_doc_preview_authorize_directory', {
+      grantId: grant.grantId,
+      relativePath: 'sibling.html'
+    }),
+    true,
+    'sibling directory never authorized'
+  )
+  const cachedSibling = await invoke(page, 'poc_doc_preview_cache_file', {
+    request: {
+      grantId: grant.grantId,
+      relativePath: 'sibling.html',
+      filePath: '/docs/sibling.html',
+      contentBase64: Buffer.from(
+        `<!doctype html><html><body><h1>${SIB_MARKER}</h1></body></html>`,
+        'utf8'
+      ).toString('base64')
+    }
+  })
+  assert.equal(cachedSibling, true, 'sibling entry never cached')
+  step('grant minted and entries cached')
   await invoke(page, 'poc_browser_navigate', {
     args: { browserPageId: PAGE_ID, url: grant.url }
   })
@@ -177,7 +221,7 @@ try {
     true
   )
   assert.equal(anchorHref, EXT_URL, 'served entry has no external link')
-  await childEvaluate(page, PAGE_ID, 'document.getElementById("extlink").click()', true)
+  await trustedClick(page, PAGE_ID, 'extlink')
   let ext = []
   for (let attempt = 0; attempt < 100; attempt++) {
     ext = await page.evaluate(() => window.__docServeExtEvents || [])
@@ -194,16 +238,60 @@ try {
     `guest left the grant page: ${String(hrefAfter).slice(0, 120)}`
   )
   step('guest stayed on the grant page')
+  await trustedClick(page, PAGE_ID, 'fraglink')
+  let fragState = ''
+  for (let attempt = 0; attempt < 100; attempt++) {
+    fragState =
+      (await childEvaluate(
+        page,
+        PAGE_ID,
+        'location.href + "|" + window.scrollY + "|" + document.body.innerText'
+      )) ?? ''
+    if (Number(fragState.split(`|`)[1] ?? `0`) > 0) break
+    await delay(100)
+  }
+  assert.ok(
+    !fragState.split(`|`)[0].includes(`#frag`),
+    `fragment click navigated: ${fragState.slice(0, 160)}`
+  )
+  assert.ok(fragState.includes(FRAG_MARKER), `fragment target missing: ${fragState.slice(0, 160)}`)
+  assert.ok(
+    Number(fragState.split('|')[1]) > 0,
+    `fragment click never scrolled: ${fragState.slice(0, 160)}`
+  )
+  const extAfterFrag = await page.evaluate(() => window.__docServeExtEvents || [])
+  assert.equal(
+    extAfterFrag.length,
+    1,
+    `fragment click leaked a signal: ${JSON.stringify(extAfterFrag).slice(0, 200)}`
+  )
+  step('fragment click scrolls in place')
+  await trustedClick(page, PAGE_ID, 'siblink')
+  let sibText = ''
+  for (let attempt = 0; attempt < 100; attempt++) {
+    sibText =
+      (await childEvaluate(page, PAGE_ID, 'location.href + "|" + document.body.innerText')) ?? ''
+    if (sibText.includes(SIB_MARKER)) break
+    await delay(100)
+  }
+  assert.ok(sibText.includes(SIB_MARKER), `sibling never served: ${sibText.slice(0, 160)}`)
+  const extAfterSib = await page.evaluate(() => window.__docServeExtEvents || [])
+  assert.equal(
+    extAfterSib.length,
+    1,
+    `sibling click leaked a signal: ${JSON.stringify(extAfterSib).slice(0, 200)}`
+  )
+  step('sibling document navigates natively')
   await invoke(page, 'poc_browser_reload', { args: { browserPageId: PAGE_ID } })
   let reloaded = ''
   for (let attempt = 0; attempt < 100; attempt++) {
     reloaded =
       (await childEvaluate(page, PAGE_ID, 'location.href + "|" + document.body.innerText')) ?? ''
-    if (reloaded.includes(DOC_MARKER)) break
+    if (reloaded.includes(SIB_MARKER)) break
     await delay(100)
   }
   assert.ok(
-    reloaded.includes(DOC_MARKER),
+    reloaded.includes(SIB_MARKER),
     `reload lost the served entry: ${reloaded.slice(0, 160)}`
   )
   step('reload re-serves the cached entry')
