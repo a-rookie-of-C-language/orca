@@ -227,6 +227,9 @@ export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> 
       if ('worktreeVisibilityDefaults' in updates) {
         await get().fetchAllWorktrees({ visibilityOwnerHostId })
       }
+      // The native close handler cannot read this store, so push the loaded
+      // minimize-to-tray flag again after every successful save.
+      void syncTauriMinimizeToTray(get().settings?.minimizeToTrayOnClose === true).catch(() => {})
     } catch (err) {
       console.error('Failed to update settings:', err)
     }
@@ -248,6 +251,9 @@ export const createSettingsSlice: StateCreator<AppState, [], [], SettingsSlice> 
     if ('worktreeVisibilityDefaults' in updates) {
       await get().fetchAllWorktrees({ visibilityOwnerHostId })
     }
+    // The native close handler cannot read this store, so push the loaded
+    // minimize-to-tray flag again after every successful save.
+    void syncTauriMinimizeToTray(get().settings?.minimizeToTrayOnClose === true).catch(() => {})
   },
 
   setActiveRuntimeEnvironmentPreference: async (environmentId) => {

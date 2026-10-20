@@ -10,6 +10,10 @@ import { uiZoomFactorFromLevel } from '../../../shared/ui-zoom-level'
 import { invokeNative, invokePlugin, isTauriNativeHost, listenNative } from './tauri-native-host'
 import { createTauriNativeSecondInstanceBridge } from './tauri-native-second-instance'
 import {
+  installTauriMinimizeToTrayNotice,
+  notifyMinimizedToTrayOnce
+} from './tauri-native-tray-close'
+import {
   readTauriClipboardImagePngBase64,
   readTauriClipboardImageThumbnail,
   tauriClipboardHasImage,
@@ -19,7 +23,6 @@ import { saveClipboardImageAsWebAgentSessionAttachment } from './preload-api/web
 import { saveClipboardImageAsTempFileInRuntime } from './preload-api/web-clipboard-api'
 import { requireActiveEnvironmentOrNull } from './preload-api/web-runtime-session'
 import { useAppStore } from '../store'
-import { translate } from '../i18n/i18n'
 
 const EVENT_MAXIMIZE_CHANGED = 'window:maximize-changed'
 const EVENT_FULLSCREEN_CHANGED = 'window:fullscreen-changed'
@@ -82,6 +85,7 @@ export function createTauriNativeUiApi(): Partial<PreloadApi['ui']> {
   if (!isTauriNativeHost()) {
     return {}
   }
+  installTauriMinimizeToTrayNotice()
   let zoomLevel = 0
   const secondInstance = createTauriNativeSecondInstanceBridge()
   const saveClipboardImageAsTempFile = async (args?: {
@@ -219,31 +223,15 @@ export function createTauriNativeUiApi(): Partial<PreloadApi['ui']> {
         (payload) => callback({ isQuitting: payload.isQuitting })
       ),
     requestClose: () => {
-      // Why: Electron's `window:request-close` handler runs
-      // `hideToTrayIfEnabled` before emitting `window:close-requested`, so the
-      // X button minimizes to the tray on Windows when the setting is on and
-      // shows a one-shot notification the first time. Mirror that here —
-      // `poc_minimize` is idempotent and the notification goes through the
-      // shared renderer channel so it lands in the user's notification center.
+      // Why: Electron request-close runs hideToTrayIfEnabled before
+      // window:close-requested, so the X button hides to the tray on Windows
+      // when the setting is on. poc_hide_to_tray hides like Electron instead
+      // of taskbar-minimizing, and the one-shot notice is shared with the
+      // native Alt+F4 path through notifyMinimizedToTrayOnce.
       const settings = useAppStore.getState().settings
       if (navigator.userAgent.includes('Windows') && settings?.minimizeToTrayOnClose === true) {
-        void invokeNative('poc_minimize').catch(() => {})
-        void (async () => {
-          const ui = await window.api.ui.get().catch(() => null)
-          if (ui?.trayMinimizeNoticeShown === true) {
-            return
-          }
-          await invokePlugin('notification', 'notify', {
-            options: {
-              title: 'Orca',
-              body: translate(
-                'tray.minimizeNotice.body',
-                'Orca is still running in the system tray'
-              )
-            }
-          }).catch(() => {})
-          await window.api.ui.set({ trayMinimizeNoticeShown: true }).catch(() => {})
-        })()
+        void invokeNative('poc_hide_to_tray').catch(() => {})
+        void notifyMinimizedToTrayOnce()
         return
       }
       void invokeNative('poc_request_close').catch(() => {})

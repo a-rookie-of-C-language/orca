@@ -60,6 +60,7 @@ const NOTIFICATION_SOUND_EXTENSIONS: [&str; 6] = ["ogg", "mp3", "wav", "m4a", "a
 const EVENT_MAXIMIZE_CHANGED: &str = "window:maximize-changed";
 const EVENT_FULLSCREEN_CHANGED: &str = "window:fullscreen-changed";
 const EVENT_WINDOW_CLOSE_REQUESTED: &str = "window:close-requested";
+const EVENT_MINIMIZED_TO_TRAY: &str = "window:minimized-to-tray";
 const EVENT_TERMINAL_ZOOM: &str = "terminal:zoom";
 
 /// UI zoom level bookkeeping for non-main windows (Workspace Space, dashboard
@@ -357,9 +358,33 @@ fn poc_is_maximized(window: WebviewWindow) -> Result<bool, String> {
     window.is_maximized().map_err(|error| error.to_string())
 }
 
+/// Distinguishes hide-to-tray from taskbar minimize in live checks: hide
+/// leaves the window unminimized while minimize sets the flag.
+#[tauri::command]
+fn poc_is_minimized(window: WebviewWindow) -> Result<bool, String> {
+    window.is_minimized().map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 fn poc_minimize(window: WebviewWindow) -> Result<(), String> {
     window.minimize().map_err(|error| error.to_string())
+}
+
+/// Renderer-drawn X on Windows with minimize-to-tray on hides through this
+/// command so the window leaves the taskbar like Electron hideToTrayIfEnabled.
+/// The title bar minimize button keeps using poc_minimize.
+#[tauri::command]
+fn poc_hide_to_tray(window: WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|error| error.to_string())
+}
+
+/// Native OS close path consults this before prompting, mirroring the Electron
+/// hideToTrayIfEnabled guard: Windows only, setting pushed from the renderer,
+/// and no confirmed close pending.
+fn close_should_hide_to_tray(state: &NativeWindowState) -> bool {
+    cfg!(target_os = "windows")
+        && state.minimize_to_tray.load(Ordering::SeqCst)
+        && !state.close_confirmed.load(Ordering::SeqCst)
 }
 
 #[tauri::command]
@@ -610,12 +635,10 @@ fn install_window_state_bridge(window: &WebviewWindow, state: Arc<NativeWindowSt
             // `window:close-requested` — Alt+F4 and the OS X button minimize to
             // tray instead of prompting when the setting is on. Renderer push
             // keeps the flag readable without a JS round-trip on close.
-            if cfg!(target_os = "windows")
-                && state.minimize_to_tray.load(Ordering::SeqCst)
-                && !state.close_confirmed.load(Ordering::SeqCst)
-            {
+            if close_should_hide_to_tray(&state) {
                 api.prevent_close();
                 let _ = window_handle.hide();
+                let _ = window_handle.emit(EVENT_MINIMIZED_TO_TRAY, ());
                 return;
             }
             // Why: Electron lets the renderer protect running terminals and
@@ -1123,7 +1146,9 @@ fn main() {
             poc_platform_info,
             poc_app_identity,
             poc_is_maximized,
+            poc_is_minimized,
             poc_minimize,
+            poc_hide_to_tray,
             poc_toggle_maximize,
             poc_set_zoom,
             poc_get_zoom,
@@ -1309,9 +1334,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        poc_host_info, step_ui_zoom_level, zoom_factor_for_level, zoom_level_for_factor,
-        UI_ZOOM_MAX, UI_ZOOM_MIN,
+        close_should_hide_to_tray, poc_host_info, step_ui_zoom_level, zoom_factor_for_level,
+        zoom_level_for_factor, NativeWindowState, UI_ZOOM_MAX, UI_ZOOM_MIN,
     };
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn host_info_identifies_the_tauri_transport() {
@@ -1375,5 +1401,24 @@ mod tests {
         assert!(zoom_level_for_factor(-1.2).is_none());
         assert!(zoom_level_for_factor(f64::NAN).is_none());
         assert!(zoom_level_for_factor(f64::INFINITY).is_none());
+    }
+
+    #[test]
+    fn close_tray_guard_needs_the_pushed_setting() {
+        let state = NativeWindowState::default();
+        assert!(!close_should_hide_to_tray(&state));
+        state.minimize_to_tray.store(true, Ordering::SeqCst);
+        assert_eq!(
+            close_should_hide_to_tray(&state),
+            cfg!(target_os = "windows")
+        );
+    }
+
+    #[test]
+    fn close_tray_guard_yields_after_confirm() {
+        let state = NativeWindowState::default();
+        state.minimize_to_tray.store(true, Ordering::SeqCst);
+        state.confirm_close();
+        assert!(!close_should_hide_to_tray(&state));
     }
 }

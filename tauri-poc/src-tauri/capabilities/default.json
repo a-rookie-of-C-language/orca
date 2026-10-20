@@ -29,6 +29,8 @@
     "allow-poc-platform-info",
     "allow-poc-app-identity",
     "allow-poc-is-maximized",
+    "allow-poc-is-minimized",
+    "allow-poc-hide-to-tray",
     "allow-poc-minimize",
     "allow-poc-toggle-maximize",
     "allow-poc-set-zoom",

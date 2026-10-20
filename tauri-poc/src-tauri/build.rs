@@ -11,6 +11,8 @@ fn main() {
             "poc_platform_info",
             "poc_app_identity",
             "poc_is_maximized",
+            "poc_is_minimized",
+            "poc_hide_to_tray",
             "poc_minimize",
             "poc_toggle_maximize",
             "poc_set_zoom",

@@ -143,12 +143,15 @@ first native slice covers the low-risk operations that the renderer already expe
   the two sidebar toggles). Popup-menu clicks pop the _installed_ application
   menu so accelerators, hints, locale labels and Appearance checkmarks match
   the menu bar exactly; the pre-PoC custom context menu is gone.
-  Windows' "minimize to tray on close" works through the same surface Electron
-  uses: the renderer pushes the setting into Rust state on every save, and
-  the native `CloseRequested` handler consults it before prompting — so both
-  the OS X button and the renderer-drawn X take the same branch. The
-  one-shot tray-minimize notice goes through `tauri-plugin-notification` and
-  the `trayMinimizeNoticeShown` flag persists through `window.api.ui.set`.
+  Windows minimize to tray on close hides like Electron instead of
+  taskbar-minimizing: the renderer-drawn X calls `poc_hide_to_tray` while the
+  native `CloseRequested` handler consults the pushed setting before prompting,
+  so both the OS button and the X take the hide branch (`poc_is_minimized`
+  distinguishes hide from minimize in live checks). The one-shot notice is
+  shared by both paths and `trayMinimizeNoticeShown` is pinned pairing-local so
+  a host value cannot overwrite it. Proven live by
+  `tauri-poc/scripts/check-minimize-to-tray.mjs`; the renderer pushes the setting
+  into Rust state on every fetch and save.
 - a signed updater bridge for version/status checks, download progress, and quit-and-install;
   release endpoints and the public key are intentionally supplied per build through
   `ORCA_TAURI_UPDATER_ENDPOINTS` and `ORCA_TAURI_UPDATER_PUBLIC_KEY`.
