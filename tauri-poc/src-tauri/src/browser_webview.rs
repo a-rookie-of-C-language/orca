@@ -48,7 +48,7 @@ pub struct BrowserWebviewState {
     certificate_challenges: Mutex<HashMap<String, PendingCertificateChallenge>>,
     accepted_certificates: Mutex<HashMap<String, AcceptedCertificateIdentity>>,
     /// Attachment URLs whose response arrived but native DownloadStarting never fired for (Windows host gap).
-    pending_attachment_downloads: Mutex<HashMap<String, String>>,
+    pending_attachment_downloads: Mutex<HashMap<String, PendingAttachmentDownload>>,
     navigation_epochs: Mutex<HashMap<String, u64>>,
     navigation_in_flight: Mutex<HashMap<String, String>>,
     active_grab_ops: Mutex<HashMap<String, String>>,
@@ -1271,7 +1271,13 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                         return Ok(());
                     }
                     if let Ok(mut pending) = state.pending_attachment_downloads.lock() {
-                        pending.insert(page_id_for_attachment.clone(), request_uri);
+                        pending.insert(
+                            page_id_for_attachment.clone(),
+                            PendingAttachmentDownload {
+                                url: request_uri,
+                                filename: disposition_filename(&disposition),
+                            },
+                        );
                     }
                     Ok(())
                 }));
@@ -1972,7 +1978,6 @@ fn reserve_download_path(app: &AppHandle, filename: &str) -> Result<PathBuf, Str
     Err("Could not choose a unique Downloads file name.".to_string())
 }
 
-#[tauri::command]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserDownloadBlobArgs {
@@ -1987,6 +1992,85 @@ pub struct BrowserDownloadBlobArgs {
 const MAX_FALLBACK_DOWNLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 const FALLBACK_FETCH_CHUNK_BYTES: usize = 512 * 1024;
 
+/// Attachment response seen without a native DownloadStarting: the URL that
+/// must still match at abort time plus the server-suggested file name.
+#[derive(Clone, Debug)]
+struct PendingAttachmentDownload {
+    url: String,
+    filename: Option<String>,
+}
+
+fn sanitize_download_filename(name: &str) -> String {
+    let sanitized = name
+        .chars()
+        .map(|character| {
+            if character.is_control() || "<>:\"/\\|?*".contains(character) {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    if sanitized.trim().is_empty() || sanitized.len() > 128 {
+        "download".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn percent_decode(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'%' if index + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[index + 1..index + 3]).ok()?;
+                out.push(u8::from_str_radix(hex, 16).ok()?);
+                index += 3;
+            }
+            byte => {
+                out.push(byte);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+// Electron names the download from Content-Disposition when the server sends
+// one; match that instead of always falling back to the URL tail.
+fn disposition_filename(disposition: &str) -> Option<String> {
+    for part in disposition.split(';') {
+        let part = part.trim();
+        let raw = if let Some(encoded) = part
+            .strip_prefix("filename*=")
+            .or_else(|| part.strip_prefix("Filename*="))
+        {
+            // RFC 5987 shape: charset'lang'percent-encoded.
+            let encoded = encoded.split('\'').nth(2).unwrap_or(encoded);
+            percent_decode(encoded)
+        } else if let Some(name) = part
+            .strip_prefix("filename=")
+            .or_else(|| part.strip_prefix("Filename="))
+        {
+            Some(name.trim().trim_matches('"').trim().to_string())
+        } else {
+            None
+        };
+        if let Some(raw) = raw {
+            let tail = raw
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(raw.as_str())
+                .trim();
+            if !tail.is_empty() && tail != "." && tail != ".." {
+                return Some(sanitize_download_filename(tail));
+            }
+        }
+    }
+    None
+}
 fn fallback_staging_path(download_id: &str) -> Option<PathBuf> {
     if download_id.is_empty() || download_id.len() > 128 {
         return None;
@@ -2076,7 +2160,7 @@ fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
     let Some(recorded) = recorded else {
         return;
     };
-    if recorded != url || native_claimed {
+    if recorded.url != url || native_claimed {
         return;
     }
     // Preview partitions refuse downloads instead of saving them.
@@ -2085,7 +2169,10 @@ fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
         notice_preview_download_blocked(app, &preview_state, &grant_id);
         return;
     }
-    let filename = safe_download_filename(&parsed);
+    let filename = recorded
+        .filename
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| safe_download_filename(&parsed));
     let path = match reserve_download_path(app, &filename) {
         Ok(path) => path,
         Err(_) => return,
@@ -2180,6 +2267,7 @@ fn attachment_fetch_script(page_id: &str, download_id: &str, url: &str) -> Strin
         chunk = FALLBACK_FETCH_CHUNK_BYTES,
     )
 }
+#[tauri::command]
 pub fn poc_browser_download_blob(
     app: AppHandle,
     _state: State<BrowserWebviewState>,

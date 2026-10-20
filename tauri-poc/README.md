@@ -269,6 +269,11 @@ first native slice covers the low-risk operations that the renderer already expe
   `tauri-poc/scripts/check-doc-preview-download-block.mjs` (a download click notifies once with
   reason download-blocked and no path, a rapid second click adds no second notice, the page stays
   on the grant entry, and closing auto-revokes the grant).
+  Attachment downloads that never raise a native DownloadStarting event fall
+  back to an in-page fetch over the native message pipe instead of being lost,
+  proven live by `tauri-poc/scripts/check-browser-download-fallback.mjs` (a 3 MiB
+  attachment lands requested-once with the server-suggested file name, chunked
+  progress, completed status, and byte-exact contents).
   On Windows, local development hosts also expose the certificate failure overlay and a
   page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
   by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
