@@ -154,6 +154,14 @@ first native slice covers the low-risk operations that the renderer already expe
   a host value cannot overwrite it. Proven live by
   `tauri-poc/scripts/check-minimize-to-tray.mjs`; the renderer pushes the setting
   into Rust state on every fetch and save.
+- main-window bounds memory matching Electron: moves and resizes persist through a 500ms
+  debounce with a maximized flag, off-screen or under-size saves fall back to a centered
+  default on the next launch, and nothing saves once the window is closing. `set_size`
+  sizes the content rectangle on Windows while the persisted state speaks outer pixels,
+  so the set path re-applies the live residual until the window reports back exactly
+  what was asked, keeping restarts idempotent instead of growing a frame per launch.
+  Proven live by `tauri-poc/scripts/check-window-state.mjs` (exact restore, off-screen
+  fallback, maximized restore, and file/live agreement).
 - a signed updater bridge for version/status checks, download progress, and quit-and-install;
   release endpoints and the public key are intentionally supplied per build through
   `ORCA_TAURI_UPDATER_ENDPOINTS` and `ORCA_TAURI_UPDATER_PUBLIC_KEY`.

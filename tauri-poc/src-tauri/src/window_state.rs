@@ -289,7 +289,7 @@ pub fn restore_main_window(window: &WebviewWindow) {
         .and_then(|raw| validate_saved_bounds(&raw, &monitors));
     match valid {
         Some(rect) => {
-            let _ = window.set_size(PhysicalSize::new(rect.width as u32, rect.height as u32));
+            let _ = apply_outer_size(window, rect.width as u32, rect.height as u32);
             let _ = window.set_position(PhysicalPosition::new(rect.x, rect.y));
         }
         None => center_on_primary(window),
@@ -312,6 +312,45 @@ pub fn poc_window_get_bounds(window: WebviewWindow) -> Result<WindowBoundsReport
     })
 }
 
+/// Residual correction so an outer-pixel request lands exactly: returns the
+/// next inner size to try, or None when the live window already matches.
+fn size_correction(
+    requested: (u32, u32),
+    set: (u32, u32),
+    actual: (u32, u32),
+) -> Option<(u32, u32)> {
+    let dx = requested.0 as i64 - actual.0 as i64;
+    let dy = requested.1 as i64 - actual.1 as i64;
+    if dx == 0 && dy == 0 {
+        return None;
+    }
+    Some((
+        (set.0 as i64 + dx).clamp(1, i32::MAX as i64) as u32,
+        (set.1 as i64 + dy).clamp(1, i32::MAX as i64) as u32,
+    ))
+}
+
+/// Apply an outer size the way Electron setBounds does: re-apply the live
+/// residual instead of hard-coding per-DPI frame chrome. The mapping is
+/// linear, so a single correction converges; three rounds bound TAO clamps.
+fn apply_outer_size(window: &WebviewWindow, width: u32, height: u32) -> Result<(), String> {
+    let mut size = (width.max(1), height.max(1));
+    for _ in 0..3 {
+        window
+            .set_size(PhysicalSize::new(size.0, size.1))
+            .map_err(|error| error.to_string())?;
+        let Ok(actual) = window.outer_size() else {
+            return Ok(());
+        };
+        let Some(next) = size_correction((width, height), size, (actual.width, actual.height))
+        else {
+            return Ok(());
+        };
+        size = next;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn poc_window_set_bounds(
     window: WebviewWindow,
@@ -321,9 +360,8 @@ pub fn poc_window_set_bounds(
         if width <= 0 || height <= 0 {
             return Err("window size must stay positive".to_string());
         }
-        window
-            .set_size(PhysicalSize::new(width as u32, height as u32))
-            .map_err(|error| error.to_string())?;
+        // Why: set_size sizes content while checks persist outer pixels.
+        apply_outer_size(&window, width as u32, height as u32)?;
     }
     if let (Some(x), Some(y)) = (update.x, update.y) {
         window
@@ -339,6 +377,30 @@ mod tests {
 
     fn two_monitors() -> Vec<MonitorRect> {
         vec![(0, 0, 1920, 1080), (1920, 0, 1280, 1024)]
+    }
+
+    #[test]
+    fn size_correction_compensates_frame_delta() {
+        // Outer lands a fixed frame delta past the inner size, so the next
+        // try shifts the request back by exactly the residual.
+        assert_eq!(
+            size_correction((1800, 1150), (1800, 1150), (1822, 1193)),
+            Some((1778, 1107))
+        );
+        // A corrected try reporting back the request needs no third round.
+        assert_eq!(
+            size_correction((1800, 1150), (1778, 1107), (1800, 1150)),
+            None
+        );
+    }
+
+    #[test]
+    fn size_correction_clamps_to_one_pixel() {
+        assert_eq!(
+            size_correction((10, 10), (10, 10), (2000, 2000)),
+            Some((1, 1))
+        );
+        assert_eq!(size_correction((800, 600), (800, 600), (800, 600)), None);
     }
 
     #[test]
