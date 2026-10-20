@@ -9,6 +9,10 @@ import { createWebRuntimeApi } from './preload-api/web-runtime-api'
 import { callRuntimeResult } from './preload-api/web-runtime-calls'
 import { getBrowserPlatform } from './preload-api/web-storage'
 import type { MarkdownDocument } from '../../../shared/filesystem-entry-types'
+import type {
+  WriteTerminalRenderDesyncEvidenceArgs,
+  WriteTerminalRenderDesyncEvidenceResult
+} from '../../../shared/terminal-render-desync-evidence'
 import { invokeNative, invokePlugin, isTauriNativeHost } from './tauri-native-host'
 import { prepareAndInvokeAppRestart } from '../../../preload/renderer-restart-wiring'
 
@@ -245,6 +249,14 @@ export function createTauriNativeAppApi(): Partial<AppApi> {
       await callRuntimeResult<void>('host.floating.trustDirectory', { dirPath })
       return dirPath
     },
+    // Why native: the evidence lands in the app-owned profile like
+    // Electron's userData write, so the web reject fallback only applies
+    // off the Tauri host.
+    writeTerminalRenderDesyncEvidence: (args: WriteTerminalRenderDesyncEvidenceArgs) =>
+      invokeNative<WriteTerminalRenderDesyncEvidenceResult>(
+        'poc_write_terminal_render_desync_evidence',
+        { args }
+      ),
     // Tauri owns a local orcad runtime through the same RPC boundary as a
     // paired desktop. Query its durable inventory so existing Codex/Claude
     // chats are restored even when the new-chat preference is disabled.
@@ -260,7 +272,11 @@ export function createTauriNativeAppApi(): Partial<AppApi> {
         awaitBeforeUnloadCheckpoint
       ),
     relaunch: invokeRestart,
-    restart: invokeRestart
+    restart: invokeRestart,
+    // Why native: the elevation helper + UAC handoff live in the Rust owner
+    // like Electron main, so the web desktop-app reject only applies off the
+    // Tauri host.
+    restartAsAdministrator: () => invokeNative<void>('poc_restart_as_administrator')
   }
 }
 
@@ -289,9 +305,12 @@ export function createTauriNativeAppNamespaceApi(): Pick<PreloadApi, 'app'> {
         api.pickFloatingMarkdownDocument ?? fallback.pickFloatingMarkdownDocument,
       pickFloatingWorkspaceDirectory:
         api.pickFloatingWorkspaceDirectory ?? fallback.pickFloatingWorkspaceDirectory,
+      writeTerminalRenderDesyncEvidence:
+        api.writeTerminalRenderDesyncEvidence ?? fallback.writeTerminalRenderDesyncEvidence,
       reload: api.reload ?? fallback.reload,
       relaunch: api.relaunch ?? fallback.relaunch,
-      restart: api.restart ?? fallback.restart
+      restart: api.restart ?? fallback.restart,
+      restartAsAdministrator: api.restartAsAdministrator ?? fallback.restartAsAdministrator
     }
   }
 }

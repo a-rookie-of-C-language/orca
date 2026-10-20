@@ -30,6 +30,7 @@ export { createTauriNativeCliApi } from './tauri-native-cli-api'
 export { createTauriNativeDiagnosticsApi } from './tauri-native-diagnostics-api'
 export { createTauriNativeCrashReportsApi } from './tauri-native-crash-reports-api'
 export { createTauriNativeAgentAwakeApi } from './tauri-native-agent-awake-api'
+export { createTauriNativeSettingsApi } from './tauri-native-settings-api'
 export {
   createTauriNativeBrowserWebview,
   hasTauriNativeBrowserPage,

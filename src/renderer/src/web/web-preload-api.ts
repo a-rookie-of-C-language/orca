@@ -1,5 +1,5 @@
 import type { PreloadApi } from '../../../preload/api-types'
-import type { StatsSummary } from '../../../shared/process-stats-types'
+import type { MemorySnapshot, StatsSummary } from '../../../shared/process-stats-types'
 import { createWebE2EApi } from './preload-api/web-e2e-api'
 import { createWebFolderWorkspacesApi } from './preload-api/web-folder-workspaces-api'
 import {
@@ -31,6 +31,7 @@ import {
   createSkillsApi
 } from './preload-api/web-host-capability-api'
 import { createWebKeybindingsApi } from './preload-api/web-keybindings-api'
+import { createTauriNativeKeybindingsApi } from './tauri-native-keybindings-api'
 import { createMacosTccPromptsApi } from './preload-api/web-macos-tcc-api'
 import { createEmptyMemorySnapshot } from './preload-api/web-memory-api'
 import { createWebMobileApi } from './preload-api/web-mobile-api'
@@ -51,6 +52,8 @@ import { createWebRuntimeApi } from './preload-api/web-runtime-api'
 import { createRuntimeEnvironmentsApi } from './preload-api/web-runtime-environments-api'
 import { webRuntimeState } from './preload-api/web-runtime-session'
 import { createWebSettingsApi } from './preload-api/web-settings-api'
+import { createTauriNativeSettingsApi } from './tauri-native-settings-api'
+import { invokeNative } from './tauri-native-host'
 import { createWebSpeechApi } from './preload-api/web-speech-api'
 import { createShellApi } from './preload-api/web-shell-api'
 import { createWebStarNagApi } from './preload-api/web-star-nag-api'
@@ -111,8 +114,31 @@ export function installWebPreloadApi(): void {
   window.api = withFallback(api, []) as PreloadApi
 }
 
+type TauriShellAvailability = {
+  gitBash: boolean
+  pwsh: boolean
+  wslAvailable: boolean
+  wslDistros: string[]
+  hostPlatform: string
+}
+
+// Local shell probes are host-owned; on the Tauri shell Rust answers them
+// directly, so a local run does not wait on (or require) a paired runtime.
+let tauriShellAvailabilityPromise: Promise<TauriShellAvailability | null> | undefined
+function tauriShellAvailability(): Promise<TauriShellAvailability | null> {
+  if (!isTauriNativeHost()) {
+    return Promise.resolve(null)
+  }
+  tauriShellAvailabilityPromise ??= invokeNative<TauriShellAvailability>(
+    'poc_shell_availability'
+  ).catch(() => null)
+  return tauriShellAvailabilityPromise
+}
+
 function createWebPreloadApi(): Partial<PreloadApi> {
   const fileApi = createFileApi()
+  const webSettingsApi = createWebSettingsApi()
+  const nativeSettingsApi = createTauriNativeSettingsApi()
   return {
     ...createWebAppApi(),
     ...createWebStarNagApi(),
@@ -123,8 +149,11 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ...createWebE2EApi(),
     ...createTauriNativePlatformNamespaceApi(),
     ...createTauriNativeAppNamespaceApi(),
-    ...createWebSettingsApi(),
-    keybindings: createWebKeybindingsApi(),
+    ...webSettingsApi,
+    ...(webSettingsApi.settings
+      ? { settings: { ...webSettingsApi.settings, ...nativeSettingsApi } }
+      : {}),
+    keybindings: createTauriNativeKeybindingsApi() ?? createWebKeybindingsApi(),
     ui: {
       ...createWebUiApi(),
       ...createTauriNativeUiApi()
@@ -171,7 +200,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
         }))
     },
     memory: {
-      getSnapshot: () => Promise.resolve(createEmptyMemorySnapshot())
+      getSnapshot: () =>
+        isTauriNativeHost()
+          ? invokeNative<MemorySnapshot>('poc_memory_snapshot')
+          : Promise.resolve(createEmptyMemorySnapshot())
     },
     aiVault: createWebAiVaultApi(),
     preflight: createPreflightApi(),
@@ -209,8 +241,18 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ssh: createSshApi(),
     legacyRelayBridge: createLegacyRelayBridgeApi(),
     wsl: {
-      isAvailable: () => callRuntimeResult<boolean>('host.wsl.isAvailable').catch(() => false),
-      listDistros: () => callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => [])
+      isAvailable: () =>
+        tauriShellAvailability().then(
+          (native) =>
+            native?.wslAvailable ??
+            callRuntimeResult<boolean>('host.wsl.isAvailable').catch(() => false)
+        ),
+      listDistros: () =>
+        tauriShellAvailability().then(
+          (native) =>
+            native?.wslDistros ??
+            callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => [])
+        )
     },
     // Desktop-only: a web client never owns a WSL move's desktop stores.
     wslMove: {
@@ -218,10 +260,19 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       recordStoreRewritten: () => Promise.resolve({ recorded: false, reason: 'gated-off' })
     },
     pwsh: {
-      isAvailable: () => callRuntimeResult<boolean>('host.pwsh.isAvailable').catch(() => false)
+      isAvailable: () =>
+        tauriShellAvailability().then(
+          (native) =>
+            native?.pwsh ?? callRuntimeResult<boolean>('host.pwsh.isAvailable').catch(() => false)
+        )
     },
     gitBash: {
-      isAvailable: () => callRuntimeResult<boolean>('host.gitBash.isAvailable').catch(() => false)
+      isAvailable: () =>
+        tauriShellAvailability().then(
+          (native) =>
+            native?.gitBash ??
+            callRuntimeResult<boolean>('host.gitBash.isAvailable').catch(() => false)
+        )
     },
     ...createWebAgentStatusApi(),
     ...createWebMobileApi(),

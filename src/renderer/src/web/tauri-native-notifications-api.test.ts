@@ -147,4 +147,43 @@ describe('tauri native notifications', () => {
       reason: 'playback-failed'
     })
   })
+
+  it('maps the native desktop-away probe to the boolean-or-undefined result', async () => {
+    const invoke = vi.fn((command: string) =>
+      command === 'poc_desktop_away_state'
+        ? Promise.resolve({ away: true })
+        : Promise.resolve(undefined)
+    )
+    const windowStub = new EventTarget() as unknown as Window & typeof globalThis
+    Object.assign(windowStub, {
+      __TAURI_INTERNALS__: { invoke },
+      __TAURI__: {
+        notification: { onAction: vi.fn(async () => ({ unregister: async () => {} })) }
+      },
+      localStorage: { getItem: () => null }
+    })
+    vi.stubGlobal('window', windowStub)
+
+    const { createTauriNativeNotificationsApi } = await import('./tauri-native-notifications-api')
+    const notifications = createTauriNativeNotificationsApi()
+    await expect(notifications?.getDesktopAwayState?.()).resolves.toBe(true)
+    expect(invoke).toHaveBeenCalledWith('poc_desktop_away_state', undefined)
+  })
+
+  it('returns undefined when the away probe fails like Electron unknown presence', async () => {
+    const invoke = vi.fn(() => Promise.reject(new Error('native down')))
+    const windowStub = new EventTarget() as unknown as Window & typeof globalThis
+    Object.assign(windowStub, {
+      __TAURI_INTERNALS__: { invoke },
+      __TAURI__: {
+        notification: { onAction: vi.fn(async () => ({ unregister: async () => {} })) }
+      },
+      localStorage: { getItem: () => null }
+    })
+    vi.stubGlobal('window', windowStub)
+
+    const { createTauriNativeNotificationsApi } = await import('./tauri-native-notifications-api')
+    const notifications = createTauriNativeNotificationsApi()
+    await expect(notifications?.getDesktopAwayState?.()).resolves.toBeUndefined()
+  })
 })

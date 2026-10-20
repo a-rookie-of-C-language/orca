@@ -39,7 +39,12 @@ export function createTauriNativeNotificationsApi(): PreloadApi['notifications']
   const isSupported = typeof Notification !== 'undefined'
   installNotificationActionListener()
   return {
-    getDesktopAwayState: async () => undefined,
+    getDesktopAwayState: async () => {
+      const { away } = await invokeNative<{ away: boolean | null }>('poc_desktop_away_state').catch(
+        () => ({ away: null })
+      )
+      return away ?? undefined
+    },
     dispatch: async (args): Promise<NotificationDispatchResult> => {
       if (!isSupported) {
         return { delivered: false, reason: 'not-supported' }
