@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-memory-snapshot"
+description = "Enables the poc_memory_snapshot command without any pre-configured scope."
+commands.allow = ["poc_memory_snapshot"]
+
+[[permission]]
+identifier = "deny-poc-memory-snapshot"
+description = "Denies the poc_memory_snapshot command without any pre-configured scope."
+commands.deny = ["poc_memory_snapshot"]

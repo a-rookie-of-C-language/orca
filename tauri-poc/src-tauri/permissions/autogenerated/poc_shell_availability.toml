@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-shell-availability"
+description = "Enables the poc_shell_availability command without any pre-configured scope."
+commands.allow = ["poc_shell_availability"]
+
+[[permission]]
+identifier = "deny-poc-shell-availability"
+description = "Denies the poc_shell_availability command without any pre-configured scope."
+commands.deny = ["poc_shell_availability"]

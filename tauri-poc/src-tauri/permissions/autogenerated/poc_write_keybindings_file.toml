@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-write-keybindings-file"
+description = "Enables the poc_write_keybindings_file command without any pre-configured scope."
+commands.allow = ["poc_write_keybindings_file"]
+
+[[permission]]
+identifier = "deny-poc-write-keybindings-file"
+description = "Denies the poc_write_keybindings_file command without any pre-configured scope."
+commands.deny = ["poc_write_keybindings_file"]

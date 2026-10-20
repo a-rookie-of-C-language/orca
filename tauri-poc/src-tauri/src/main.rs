@@ -30,6 +30,7 @@ mod browser_upload_staging;
 mod browser_webview;
 mod clipboard_files;
 mod crash_reports;
+mod desktop_away_state;
 mod diagnostics;
 mod doc_preview;
 mod external_editor;
@@ -37,14 +38,20 @@ mod feature_wall;
 mod filesystem_download;
 mod filesystem_import;
 mod filesystem_upload;
+mod keybindings_file;
 mod local_log_tail;
 mod menu_appearance;
+mod host_memory;
 mod menu_hints;
 mod minidump;
 mod runtime_process;
 mod runtime_readiness;
 mod second_instance;
+mod settings_theme_directories;
+mod shell_availability;
+mod system_fonts;
 mod system_tray;
+mod terminal_desync;
 mod updater;
 mod window_state;
 mod windows_admin;
@@ -1212,6 +1219,8 @@ fn main() {
             poc_app_identity,
             feature_wall::poc_get_feature_wall_asset_base_url,
             windows_admin::poc_get_windows_administrator_status,
+            windows_admin::poc_restart_as_administrator,
+            windows_admin::poc_take_elevation_restart_request,
             poc_is_maximized,
             poc_is_minimized,
             poc_minimize,
@@ -1312,6 +1321,14 @@ fn main() {
             diagnostics::poc_diagnostics_upload_bundle,
             diagnostics::poc_diagnostics_delete_bundle,
             diagnostics::poc_diagnostics_discard_bundle_preview,
+            desktop_away_state::poc_desktop_away_state,
+            shell_availability::poc_shell_availability,
+            system_fonts::poc_list_system_fonts,
+            settings_theme_directories::poc_list_directory,
+            keybindings_file::poc_read_keybindings_file,
+            keybindings_file::poc_write_keybindings_file,
+            host_memory::poc_memory_snapshot,
+            terminal_desync::poc_write_terminal_render_desync_evidence,
             doc_preview::poc_doc_preview_mint_grant,
             doc_preview::poc_doc_preview_revoke_grant,
             doc_preview::poc_doc_preview_authorize_directory,

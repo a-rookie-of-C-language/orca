@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-restart-as-administrator"
+description = "Enables the poc_restart_as_administrator command without any pre-configured scope."
+commands.allow = ["poc_restart_as_administrator"]
+
+[[permission]]
+identifier = "deny-poc-restart-as-administrator"
+description = "Denies the poc_restart_as_administrator command without any pre-configured scope."
+commands.deny = ["poc_restart_as_administrator"]

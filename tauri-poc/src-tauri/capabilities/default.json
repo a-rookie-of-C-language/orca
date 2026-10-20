@@ -167,6 +167,16 @@
     "allow-poc-updater-list-builds",
     "allow-poc-updater-quit-and-install",
     "allow-poc-updater-dismiss-nudge",
-    "allow-poc-updater-dismiss-available-update"
+    "allow-poc-updater-dismiss-available-update",
+    "allow-poc-write-terminal-render-desync-evidence", 
+    "allow-poc-shell-availability",
+    "allow-poc-desktop-away-state",
+    "allow-poc-list-system-fonts",
+    "allow-poc-list-directory",
+    "allow-poc-restart-as-administrator",
+    "allow-poc-take-elevation-restart-request",
+    "allow-poc-read-keybindings-file",
+    "allow-poc-write-keybindings-file",
+    "allow-poc-memory-snapshot"
   ]
 }
