@@ -55,7 +55,8 @@ use second_instance::{
 };
 use window_state::WindowStateSaver;
 
-const MAX_SOUND_BYTES: u64 = 16 * 1024 * 1024;
+// Why 10 MiB: main caps custom notification sounds at MAX_NOTIFICATION_SOUND_BYTES.
+const MAX_SOUND_BYTES: u64 = 10 * 1024 * 1024;
 const NOTIFICATION_SOUND_EXTENSIONS: [&str; 6] = ["ogg", "mp3", "wav", "m4a", "aac", "flac"];
 
 /// Renderer-emitted events mirror the Electron IPC channel names so the shared
@@ -375,7 +376,9 @@ fn poc_read_file_data_url(path: String) -> Result<FileDataUrl, String> {
         return Err("Repo icons must be PNG files.".to_string());
     }
     let metadata = fs::metadata(source).map_err(|error| error.to_string())?;
-    if !metadata.is_file() || metadata.len() > MAX_ICON_BYTES {
+    // Why no is_file gate: Electron stats the size and lets readFile fail on a
+    // directory, so a crafted invoke surfaces the OS error instead of the size message.
+    if metadata.len() > MAX_ICON_BYTES {
         return Err("Repo icon image must be 256KB or smaller.".to_string());
     }
     let bytes = fs::read(source).map_err(|error| error.to_string())?;
@@ -557,11 +560,13 @@ fn poc_notification_sound_path(args: NotificationSoundPathArgs) -> NotificationS
     }
     let metadata = match fs::metadata(&path) {
         Ok(metadata) => metadata,
+        // Why read-failed, not missing-path: main's loadSound catch reports a
+        // deleted file as read-failed; missing-path is the unconfigured path.
         Err(_) => {
             return NotificationSoundPathResult {
                 ok: false,
                 path: None,
-                reason: Some("missing-path"),
+                reason: Some("read-failed"),
             }
         }
     };
@@ -587,7 +592,9 @@ fn poc_notification_sound_path(args: NotificationSoundPathArgs) -> NotificationS
 }
 
 /// Mirrors `validateNativeFileDropPaths` in the shared renderer contract: a
-/// bounded count and byte budget, no filesystem ownership widening.
+/// bounded count and byte budget, no filesystem ownership widening. The native
+/// boundary is strict on top: relative paths are refused, and empties and
+/// duplicates never seen in real OS drops are normalized instead of forwarded.
 #[tauri::command]
 fn poc_validate_dropped_paths(paths: Vec<String>) -> Result<Vec<String>, String> {
     const MAX_PATHS: usize = 256;
@@ -1403,8 +1410,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        close_should_hide_to_tray, poc_copy_file, poc_host_info, poc_paths_exist,
-        step_ui_zoom_level, zoom_factor_for_level, zoom_level_for_factor, NativeWindowState,
+        close_should_hide_to_tray, poc_copy_file, poc_host_info, poc_notification_sound_path,
+        poc_paths_exist, poc_read_file_data_url, poc_validate_dropped_paths, step_ui_zoom_level,
+        zoom_factor_for_level, zoom_level_for_factor, NativeWindowState, NotificationSoundPathArgs,
         PATH_EXISTENCE_BATCH_MAX, UI_ZOOM_MAX, UI_ZOOM_MIN,
     };
     use std::sync::atomic::Ordering;
@@ -1550,5 +1558,116 @@ mod tests {
         let verdicts = poc_paths_exist(vec!["C:\\definitely-missing-orca-probe".to_string()])
             .expect("small batch answers");
         assert_eq!(verdicts, vec![false]);
+    }
+
+    #[test]
+    fn shell_repo_icon_pins_extension_and_size_like_main() {
+        let dir =
+            std::env::temp_dir().join(format!("orca-tauri-icon-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let refused = poc_read_file_data_url(dir.join("icon.jpg").to_string_lossy().into_owned())
+            .expect_err("non-png must be refused");
+        assert_eq!(refused, "Repo icons must be PNG files.");
+        let no_ext = poc_read_file_data_url(dir.join("icon").to_string_lossy().into_owned())
+            .expect_err("extensionless must be refused");
+        assert_eq!(no_ext, "Repo icons must be PNG files.");
+        let big = dir.join("big.png");
+        std::fs::write(&big, vec![0u8; 257 * 1024]).expect("seed oversize icon");
+        let oversize = poc_read_file_data_url(big.to_string_lossy().into_owned())
+            .expect_err("oversize must be refused");
+        assert_eq!(oversize, "Repo icon image must be 256KB or smaller.");
+        let ok_path = dir.join("ICON.PNG");
+        std::fs::write(&ok_path, vec![1u8, 2u8, 3u8]).expect("seed tiny icon");
+        let loaded =
+            poc_read_file_data_url(ok_path.to_string_lossy().into_owned()).expect("tiny png loads");
+        assert_eq!(loaded.file_name, "ICON.PNG");
+        assert_eq!(loaded.data_url, "data:image/png;base64,AQID");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shell_repo_icon_directory_surfaces_os_error_like_main() {
+        let dir = std::env::temp_dir().join(format!("orca-tauri-icon-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let picked = dir.join("picked.png");
+        std::fs::create_dir_all(&picked).expect("scratch picked dir");
+        // Why: Electron lets readFile fail on a directory, so the OS error —
+        // not the size message — is what a crafted invoke observes.
+        let error = poc_read_file_data_url(picked.to_string_lossy().into_owned())
+            .expect_err("directory must fail");
+        assert_ne!(error, "Repo icon image must be 256KB or smaller.");
+        assert!(!error.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shell_notification_sound_gate_matches_main() {
+        let dir =
+            std::env::temp_dir().join(format!("orca-tauri-sound-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let refused = poc_notification_sound_path(NotificationSoundPathArgs {
+            path: "relative-sound.mp3".to_string(),
+        });
+        assert!(!refused.ok);
+        assert_eq!(refused.reason, Some("invalid-path"));
+        let bad_type = poc_notification_sound_path(NotificationSoundPathArgs {
+            path: dir.join("tone.txt").to_string_lossy().into_owned(),
+        });
+        assert!(!bad_type.ok);
+        assert_eq!(bad_type.reason, Some("unsupported-type"));
+        let missing = poc_notification_sound_path(NotificationSoundPathArgs {
+            path: dir.join("gone.mp3").to_string_lossy().into_owned(),
+        });
+        assert!(!missing.ok);
+        assert_eq!(missing.reason, Some("read-failed"));
+        let big = dir.join("big.mp3");
+        std::fs::write(&big, vec![0u8; 10 * 1024 * 1024 + 1]).expect("seed oversize sound");
+        let oversize = poc_notification_sound_path(NotificationSoundPathArgs {
+            path: big.to_string_lossy().into_owned(),
+        });
+        assert!(!oversize.ok);
+        assert_eq!(oversize.reason, Some("too-large"));
+        let tiny = dir.join("TONE.MP3");
+        std::fs::write(&tiny, vec![1u8, 2u8]).expect("seed tiny sound");
+        let tiny_path = tiny.to_string_lossy().into_owned();
+        let loaded = poc_notification_sound_path(NotificationSoundPathArgs {
+            path: tiny_path.clone(),
+        });
+        assert!(loaded.ok);
+        assert_eq!(loaded.path, Some(tiny_path));
+        assert_eq!(loaded.reason, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shell_dropped_paths_gate_bounds() {
+        // Why the cap counts every entry: the shared validator rejects on
+        // paths.length before the native boundary ever sees the batch.
+        let oversized = vec!["C:/a".to_string(); 257];
+        assert_eq!(
+            poc_validate_dropped_paths(oversized).expect_err("oversized drop must be refused"),
+            "too-many-paths"
+        );
+        assert_eq!(
+            poc_validate_dropped_paths(vec!["relative.txt".to_string()])
+                .expect_err("relative drop must be refused"),
+            "invalid-path"
+        );
+        // Why multibyte: the budget counts UTF-8 bytes like
+        // measureClipboardTextByteLength, so one wide char costs two.
+        let big = "C:/".to_string() + &"\u{00e9}".repeat(200 * 1024);
+        assert_eq!(
+            poc_validate_dropped_paths(vec![big]).expect_err("oversize drop must be refused"),
+            "paths-too-large"
+        );
+        let accepted = poc_validate_dropped_paths(vec![
+            "C:/b.txt".to_string(),
+            String::new(),
+            "C:/b.txt".to_string(),
+        ])
+        .expect("well-formed drop lands");
+        assert_eq!(accepted, vec!["C:/b.txt".to_string()]);
     }
 }

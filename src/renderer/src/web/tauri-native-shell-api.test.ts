@@ -34,11 +34,11 @@ import { createTauriNativeShellApi } from './tauri-native-shell-api'
 
 function requireShell() {
   const api = createTauriNativeShellApi()
-  const { openInFileManager, openPath, openFilePath, openFileUri, pathsExist } = api ?? {}
-  if (!openInFileManager || !openPath || !openFilePath || !openFileUri || !pathsExist) {
+  const { openInFileManager, openPath, openFilePath, openFileUri, openUrl, pathsExist } = api ?? {}
+  if (!openInFileManager || !openPath || !openFilePath || !openFileUri || !openUrl || !pathsExist) {
     throw new Error('expected tauri shell api')
   }
-  return { openInFileManager, openPath, openFilePath, openFileUri, pathsExist }
+  return { openInFileManager, openPath, openFilePath, openFileUri, openUrl, pathsExist }
 }
 
 const existing = new Set<string>()
@@ -172,15 +172,21 @@ describe('tauri native shell open ownership', () => {
     await expect(shell.openFilePath('C:\\dl\\a.txt', 'ssh:target')).resolves.toBe(false)
   })
 
-  it('openFileUri rejects remote hosts and missing files', async () => {
+  it('openFileUri stays silent on remote hosts, missing files and bad uris', async () => {
     existing.add('C:\\dl\\a.txt')
     const shell = requireShell()
     await shell.openFileUri('file://remote-host/C:/dl/a.txt', 'local')
     await shell.openFileUri('file:///C:/missing/a.txt', 'local')
+    await expect(shell.openFileUri('ftp://example.com/a.txt', 'local')).resolves.toBeUndefined()
+    await expect(shell.openFileUri('::not-a-uri::', 'local')).resolves.toBeUndefined()
     expect(native.plugin).not.toHaveBeenCalled()
-    await expect(shell.openFileUri('ftp://example.com/a.txt', 'local')).rejects.toThrow(
-      'Unsupported file URI protocol'
-    )
+  })
+
+  it('openUrl stays silent on disallowed or malformed urls', async () => {
+    const shell = requireShell()
+    await expect(shell.openUrl('ftp://example.com/a.txt')).resolves.toBeUndefined()
+    await expect(shell.openUrl('::not-a-uri::')).resolves.toBeUndefined()
+    expect(native.plugin).not.toHaveBeenCalled()
   })
 
   it('pathsExist enforces the shared batch cap', async () => {

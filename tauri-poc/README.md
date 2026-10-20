@@ -105,7 +105,7 @@ first native slice covers the low-risk operations that the renderer already expe
   so a draft only reattaches files still inside Orca's own paste folder;
 - native file and directory pickers for attachments, images, audio and folders;
 - opening approved external URL schemes, opening a local path, and revealing a path in the file manager (owner-enforced like main: local paths resolve as themselves, WSL hosts through their `\\wsl.localhost` spelling, every other owner refused with the same reason vocabulary; the legacy open call reveals like Electron instead of launching);
-- local path existence checks and non-overwriting file copies;
+- local path existence checks (shared 128-entry batch cap) and non-overwriting file copies (claimed atomically like COPYFILE_EXCL, half-written retries cleaned up); malformed or disallowed open URLs and file URIs stay silent like Electron main instead of throwing.
 - PNG repository icon loading with the same 256 KiB limit and error messages as Electron;
 - minimize, maximize/restore, fullscreen, zoom, and the existing guarded close handshake;
 - native context menu, window-state events, and the renderer's custom Windows/Linux titlebar;
@@ -348,7 +348,7 @@ Not migrated yet:
   fingerprinting, and the WebView2 round trip are proven live by `tauri-poc/scripts/check-browser-jar-names.mjs` (derived `persist:tauri-browser-v1-*` partitions, repeat-resolve stability, per-environment
   separation, CDP cookie write/read on the resolved partition). Cross-partition isolation stays
   Windows-blocked: Tauri documents `data_store_identifier` as macOS/iOS-only and drops it on
-  Windows (wry profile wiring is absent on Windows), so child webviews share one jar there. so child webviews share one jar there. Authority settle (note/import/close) and source-badge record/list are proven live by check-client-route-partition.mjs, with derivation, idempotent reload, traversal rejection, and LRU eviction covered by the store unit tests.
+  Windows (wry profile wiring is absent on Windows), so child webviews share one jar there. Authority settle (note/import/close) and source-badge record/list are proven live by check-client-route-partition.mjs, with derivation, idempotent reload, traversal rejection, and LRU eviction covered by the store unit tests.
   Local browser-profile cookie import is a separate
   implemented path, not evidence of remote client-host parity.
 - Native crash reports now persist renderer errors, breadcrumbs and dismissal state in the Tauri

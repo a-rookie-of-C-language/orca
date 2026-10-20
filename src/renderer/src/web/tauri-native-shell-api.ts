@@ -14,11 +14,16 @@ import { callRuntimeResult } from './preload-api/web-runtime-calls'
 import { getBrowserPlatform } from './preload-api/web-storage'
 import { invokeNative, invokePlugin, isTauriNativeHost } from './tauri-native-host'
 
-function assertExternalUrl(url: string): void {
-  const protocol = new URL(url).protocol
-  if (!['http:', 'https:', 'mailto:', 'tel:'].includes(protocol)) {
-    throw new Error(`Opening ${protocol} URLs is not allowed by the Tauri bridge.`)
+// Why silent: Electron drops malformed or disallowed URLs without throwing and
+// callers fire-and-forget, so a throw would surface as an unhandled rejection.
+function isAllowedExternalUrl(url: string): boolean {
+  let protocol: string
+  try {
+    protocol = new URL(url).protocol
+  } catch {
+    return false
   }
+  return ['http:', 'https:', 'mailto:', 'tel:'].includes(protocol)
 }
 
 function toPickedPaths(value: string | string[] | null): string[] {
@@ -203,7 +208,9 @@ export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['sh
       }
     },
     openUrl: async (url) => {
-      assertExternalUrl(url)
+      if (!isAllowedExternalUrl(url)) {
+        return
+      }
       await invokePlugin('opener', 'open_url', { url, with: null })
     },
     openFilePath: async (path, ownerHostId) => {
@@ -217,9 +224,14 @@ export function createTauriNativeShellApi(): NonNullable<Partial<PreloadApi>['sh
       if (parseRoutableExecutionHostId(ownerHostId)?.kind !== 'local') {
         return
       }
-      const parsed = new URL(uri)
+      let parsed: URL
+      try {
+        parsed = new URL(uri)
+      } catch {
+        return
+      }
       if (parsed.protocol !== 'file:') {
-        throw new Error(`Unsupported file URI protocol: ${parsed.protocol}`)
+        return
       }
       // Why: only this computer's files open here; a remote host's URI never resolves locally.
       if (parsed.hostname && parsed.hostname !== 'localhost') {

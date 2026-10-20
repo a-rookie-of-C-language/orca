@@ -117,11 +117,20 @@ export function createTauriNativeNotificationsApi(): PreloadApi['notifications']
       if (!configuredPath) {
         return { played: false, reason: 'missing-path' }
       }
-      const resolved = await invokeNative<{
+      // Why never throw: Electron playSound resolves playback-failed on any
+      // failure, and callers fire-and-forget, so a rejection would go unhandled.
+      let resolved: {
         ok: boolean
         path: string | null
         reason?: NotificationSoundResult['reason']
-      }>('poc_notification_sound_path', { args: { path: configuredPath } })
+      }
+      try {
+        resolved = await invokeNative('poc_notification_sound_path', {
+          args: { path: configuredPath }
+        })
+      } catch {
+        return { played: false, reason: 'playback-failed' }
+      }
       if (!resolved.ok || !resolved.path) {
         return { played: false, reason: resolved.reason ?? 'read-failed' }
       }

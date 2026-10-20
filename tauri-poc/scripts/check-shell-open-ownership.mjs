@@ -36,10 +36,13 @@ try {
   assert.equal(openSshDenied, false)
   await call('openPath', missing, 'local')
   await call('openFileUri', 'file://remote-host/C:/Windows', 'local')
-  await assert.rejects(
-    call('openFileUri', 'ftp://example.com/a.txt', 'local'),
-    /Unsupported file URI protocol/
-  )
+  // Why silent: Electron drops bad schemes and malformed URLs without
+  // throwing, and these calls are fire-and-forget, so a rejection here
+  // would be an unhandled live failure.
+  await call('openFileUri', 'ftp://example.com/a.txt', 'local')
+  await call('openFileUri', '::not-a-uri::', 'local')
+  await call('openUrl', 'ftp://example.com/a.txt')
+  await call('openUrl', '::not-a-uri::')
   await assert.rejects(
     call(
       'pathsExist',

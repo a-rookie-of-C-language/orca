@@ -74,4 +74,77 @@ describe('tauri native notifications', () => {
       scrollToBottomIfOutputSinceLastView: true
     })
   })
+
+  it('forwards the native sound-gate reasons and plays validated sounds', async () => {
+    let invokeSoundGateResult: unknown = { ok: false, path: null, reason: 'invalid-path' }
+    const invoke = vi.fn((command: string) => {
+      if (command === 'poc_notification_sound_path') {
+        return Promise.resolve(invokeSoundGateResult)
+      }
+      return Promise.resolve(undefined)
+    })
+    const played: { src: string; volume: number }[] = []
+    let playOutcome: 'resolve' | 'reject' = 'resolve'
+    class MockAudio {
+      src: string
+      volume = 1
+      constructor(src: string) {
+        this.src = src
+        played.push(this as unknown as { src: string; volume: number })
+      }
+      play(): Promise<void> {
+        return playOutcome === 'resolve' ? Promise.resolve() : Promise.reject(new Error('nope'))
+      }
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub supplies only the Tauri globals exercised by this unit test.
+    const windowStub = new EventTarget() as unknown as Window & typeof globalThis
+    Object.assign(windowStub, {
+      __TAURI_INTERNALS__: { invoke },
+      localStorage: {
+        getItem: () => JSON.stringify({ notifications: { customSoundPath: 'C:\\s\\tone.mp3' } })
+      }
+    })
+    vi.stubGlobal('window', windowStub)
+    vi.stubGlobal('Audio', MockAudio)
+    vi.stubGlobal('Notification', { permission: 'granted' })
+
+    const { createTauriNativeNotificationsApi } = await import('./tauri-native-notifications-api')
+    const notifications = createTauriNativeNotificationsApi()
+
+    await expect(notifications?.playSound?.({})).resolves.toEqual({
+      played: false,
+      reason: 'invalid-path'
+    })
+    expect(played).toEqual([])
+
+    invokeSoundGateResult = { ok: false, path: null, reason: 'read-failed' }
+    await expect(notifications?.playSound?.({})).resolves.toEqual({
+      played: false,
+      reason: 'read-failed'
+    })
+
+    invokeSoundGateResult = { ok: false, path: null, reason: 'too-large' }
+    await expect(notifications?.playSound?.({})).resolves.toEqual({
+      played: false,
+      reason: 'too-large'
+    })
+
+    invokeSoundGateResult = { ok: true, path: 'C:\\s\\tone.mp3', reason: null }
+    await expect(notifications?.playSound?.({ volume: 50 })).resolves.toEqual({ played: true })
+    expect(played).toEqual([{ src: 'file:///C:/s/tone.mp3', volume: 0.5 }])
+
+    playOutcome = 'reject'
+    await expect(notifications?.playSound?.({})).resolves.toEqual({
+      played: false,
+      reason: 'playback-failed'
+    })
+
+    // Why playback-failed: Electron never throws from playSound, so a native
+    // rejection resolves instead of surfacing as an unhandled rejection.
+    invoke.mockRejectedValueOnce(new Error('native down'))
+    await expect(notifications?.playSound?.({})).resolves.toEqual({
+      played: false,
+      reason: 'playback-failed'
+    })
+  })
 })
