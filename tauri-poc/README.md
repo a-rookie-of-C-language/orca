@@ -277,7 +277,7 @@ first native slice covers the low-risk operations that the renderer already expe
   byte-exact contents).
   On Windows, local development hosts also expose the certificate failure overlay and a
   page-scoped, certificate-fingerprint-bound Proceed Anyway flow, covered end to end
-  by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages); production policy remains to be completed.
+  by `tauri-poc/scripts/check-browser-certificate-exception.mjs` (-202 challenge, bogus-challenge rejection, proceed-and-load, page-scoped rechallenge with no bypass leak across pages). Production policy matches Electron: at most 32 pending challenges and 32 grants with oldest-first eviction, challenges only for https local hosts, a conflicting leaf for an approved endpoint fails closed instead of issuing or granting a challenge, and expired challenges are pruned.
 - the Workspace Space secondary window: native Tauri window creation/reuse/close, state and
   worktree-reveal event routing between the main renderer and the Space renderer, background
   launch behavior that never activates the window, local directory size analysis with progress,

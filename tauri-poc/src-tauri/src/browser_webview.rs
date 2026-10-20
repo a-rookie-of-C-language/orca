@@ -30,6 +30,8 @@ const EVENT_BROWSER_HANDLED_SHORTCUTS: &str = "browser:handled-shortcuts";
 const GUEST_SHORTCUT_MESSAGE_TAG: &str = "orca-guest-shortcut";
 const EVENT_CERTIFICATE_FAILURE: &str = "browser:certificate-failure-changed";
 const CERTIFICATE_CHALLENGE_TTL_MS: u64 = 5 * 60 * 1000;
+const MAX_PENDING_CERTIFICATE_CHALLENGES: usize = 32;
+const MAX_CERTIFICATE_GRANTS: usize = 32;
 
 #[derive(Debug, Clone, Copy)]
 struct AgentInputMark {
@@ -109,6 +111,7 @@ struct AcceptedCertificateIdentity {
     secure_endpoint: String,
     leaf_certificate_sha256: String,
     error: String,
+    accepted_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -480,12 +483,15 @@ fn navigation_failure_details(status: i32) -> Option<(i32, &'static str)> {
 }
 
 fn is_eligible_certificate_host(host: &str) -> bool {
-    let normalized = host
-        .trim()
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
+    // Why matched brackets only: Electron strips one [...] pair, so a stray
+    // bracket stays invalid instead of becoming localhost.
+    let trimmed = host.trim();
+    let unbracketed = if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    };
+    let normalized = unbracketed.trim_end_matches('.').to_ascii_lowercase();
     if normalized == "localhost" || normalized.ends_with(".localhost") || normalized == "::1" {
         return true;
     }
@@ -568,6 +574,70 @@ fn reset_certificate_page(app: &AppHandle, state: &BrowserWebviewState, page_id:
     }
     if let Ok(mut epochs) = state.navigation_epochs.lock() {
         epochs.remove(page_id);
+    }
+}
+
+fn oldest_certificate_challenge_page(
+    challenges: &HashMap<String, PendingCertificateChallenge>,
+) -> Option<String> {
+    challenges
+        .iter()
+        .min_by_key(|(_, challenge)| challenge.observed_at)
+        .map(|(page_id, _)| page_id.clone())
+}
+
+fn oldest_certificate_grant_key(
+    accepted: &HashMap<String, AcceptedCertificateIdentity>,
+) -> Option<String> {
+    accepted
+        .iter()
+        .min_by_key(|(_, identity)| identity.accepted_at)
+        .map(|(key, _)| key.clone())
+}
+
+fn prune_expired_certificate_challenges(app: &AppHandle, state: &BrowserWebviewState) {
+    let now = certificate_now_ms();
+    let expired: Vec<String> = state
+        .certificate_challenges
+        .lock()
+        .map(|challenges| {
+            challenges
+                .iter()
+                .filter(|(_, challenge)| challenge.expires_at <= now)
+                .map(|(page_id, _)| page_id.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    for page_id in expired {
+        clear_certificate_failure(app, state, &page_id);
+    }
+}
+
+fn enforce_certificate_challenge_bound(app: &AppHandle, state: &BrowserWebviewState) {
+    loop {
+        let oldest = state
+            .certificate_challenges
+            .lock()
+            .ok()
+            .and_then(|challenges| {
+                if challenges.len() <= MAX_PENDING_CERTIFICATE_CHALLENGES {
+                    return None;
+                }
+                oldest_certificate_challenge_page(&challenges)
+            });
+        let Some(page_id) = oldest else {
+            return;
+        };
+        clear_certificate_failure(app, state, &page_id);
+    }
+}
+
+fn enforce_certificate_grant_bound(accepted: &mut HashMap<String, AcceptedCertificateIdentity>) {
+    while accepted.len() > MAX_CERTIFICATE_GRANTS {
+        let Some(oldest) = oldest_certificate_grant_key(accepted) else {
+            return;
+        };
+        accepted.remove(&oldest);
     }
 }
 
@@ -654,8 +724,18 @@ fn record_certificate_failure(
     let Some(host) = url.host_str() else {
         return;
     };
-    if error_code != -202 || !is_eligible_certificate_host(host) {
+    if error_code != -202 || url.scheme() != "https" || !is_eligible_certificate_host(host) {
         return;
+    }
+    // Why fail closed on a second leaf: Chromium caches the TLS verdict per
+    // endpoint, so a conflicting identity can never proceed anyway.
+    let grant_key = accepted_certificate_key(page_id, &endpoint);
+    if let Ok(accepted) = state.accepted_certificates.lock() {
+        if let Some(existing) = accepted.get(&grant_key) {
+            if !certificate_identity_matches(existing, &endpoint, &leaf_sha256, error) {
+                return;
+            }
+        }
     }
     let observed_at = certificate_now_ms();
     let navigation_epoch = state
@@ -702,6 +782,8 @@ fn record_certificate_failure(
     } else {
         return;
     }
+    prune_expired_certificate_challenges(app, state);
+    enforce_certificate_challenge_bound(app, state);
     let _ = app.emit(
         EVENT_CERTIFICATE_FAILURE,
         serde_json::json!({ "browserPageId": page_id, "failure": failure }),
@@ -3214,14 +3296,32 @@ pub fn poc_browser_proceed_certificate(
     }
     let webview = child_webview(&app, &state, &args.browser_page_id)?;
     if let Ok(mut accepted) = state.accepted_certificates.lock() {
+        let grant_key = accepted_certificate_key(&args.browser_page_id, &pending.secure_endpoint);
+        if let Some(existing) = accepted.get(&grant_key) {
+            // Why fail closed here too: the loaded leaf changed after the
+            // grant, so success would be a lie the next error backs out.
+            if !certificate_identity_matches(
+                existing,
+                &pending.secure_endpoint,
+                &pending.leaf_certificate_sha256,
+                &pending.error,
+            ) {
+                return Ok(BrowserCertificateProceedResult::Failed {
+                    ok: false,
+                    reason: "ineligible".to_string(),
+                });
+            }
+        }
         accepted.insert(
-            accepted_certificate_key(&args.browser_page_id, &pending.secure_endpoint),
+            grant_key,
             AcceptedCertificateIdentity {
                 secure_endpoint: pending.secure_endpoint.clone(),
                 leaf_certificate_sha256: pending.leaf_certificate_sha256.clone(),
                 error: pending.error.clone(),
+                accepted_at: certificate_now_ms(),
             },
         );
+        enforce_certificate_grant_bound(&mut accepted);
     } else {
         return Err("browser webview state is poisoned".to_string());
     }
@@ -4008,11 +4108,14 @@ mod tests {
         browser_context_menu_script, browser_guest_shortcut_script, certificate_endpoint,
         certificate_error_details, certificate_identity_matches, certificate_leaf_sha256,
         is_agent_injected_input, is_eligible_certificate_host, is_guest_edit_command, is_valid_annotation_marker,
-        is_valid_annotation_token, label_for_page, navigation_failure_details,
-        normalize_context_menu_link, redact_kagi_session_token, store_identifier,
-        AcceptedCertificateIdentity, AgentInputMark, BrowserWebviewState, BASE64,
+        is_valid_annotation_token, label_for_page,
+        navigation_failure_details, normalize_context_menu_link, oldest_certificate_challenge_page,
+        oldest_certificate_grant_key, redact_kagi_session_token, store_identifier,
+        AcceptedCertificateIdentity, AgentInputMark, BrowserWebviewState,
+        PendingCertificateChallenge, BASE64,
     };
     use base64::Engine as _;
+    use std::collections::HashMap;
     use std::time::{Duration, Instant};
     use tauri::Url;
 
@@ -4205,6 +4308,9 @@ mod tests {
         assert!(is_eligible_certificate_host("127.0.0.1"));
         assert!(is_eligible_certificate_host("127.42.7.9"));
         assert!(is_eligible_certificate_host("::1"));
+        assert!(is_eligible_certificate_host("[::1]"));
+        assert!(!is_eligible_certificate_host("[localhost"));
+        assert!(!is_eligible_certificate_host("127.0.0.1]"));
         assert!(!is_eligible_certificate_host("128.0.0.1"));
         assert!(!is_eligible_certificate_host("192.168.1.10"));
         assert!(!is_eligible_certificate_host("example.com"));
@@ -4248,6 +4354,7 @@ mod tests {
             secure_endpoint: "https://localhost:443".to_string(),
             leaf_certificate_sha256: "abc".to_string(),
             error: "ERR_CERT_AUTHORITY_INVALID".to_string(),
+            accepted_at: 0,
         };
         assert!(certificate_identity_matches(
             &accepted,
@@ -4267,6 +4374,59 @@ mod tests {
             "different",
             "ERR_CERT_AUTHORITY_INVALID"
         ));
+    }
+
+    fn test_challenge(page_id: &str, observed_at: u64) -> PendingCertificateChallenge {
+        PendingCertificateChallenge {
+            challenge_id: format!("challenge-{page_id}"),
+            browser_page_id: page_id.to_string(),
+            navigation_url: "https://localhost/".to_string(),
+            secure_endpoint: "https://localhost:443".to_string(),
+            leaf_certificate_sha256: "abc".to_string(),
+            error: "ERR_CERT_AUTHORITY_INVALID".to_string(),
+            error_code: -202,
+            origin: "https://localhost".to_string(),
+            display_host: "localhost".to_string(),
+            observed_at,
+            expires_at: observed_at.saturating_add(300_000),
+            navigation_epoch: 0,
+        }
+    }
+
+    #[test]
+    fn certificate_bounds_evict_oldest_first() {
+        let mut challenges = HashMap::new();
+        challenges.insert("new".to_string(), test_challenge("new", 200));
+        challenges.insert("old".to_string(), test_challenge("old", 100));
+        assert_eq!(
+            oldest_certificate_challenge_page(&challenges),
+            Some("old".to_string())
+        );
+        let mut grants = HashMap::new();
+        grants.insert(
+            "new".to_string(),
+            AcceptedCertificateIdentity {
+                secure_endpoint: "https://localhost:443".to_string(),
+                leaf_certificate_sha256: "abc".to_string(),
+                error: "ERR_CERT_AUTHORITY_INVALID".to_string(),
+                accepted_at: 200,
+            },
+        );
+        grants.insert(
+            "old".to_string(),
+            AcceptedCertificateIdentity {
+                secure_endpoint: "https://localhost:443".to_string(),
+                leaf_certificate_sha256: "abc".to_string(),
+                error: "ERR_CERT_AUTHORITY_INVALID".to_string(),
+                accepted_at: 100,
+            },
+        );
+        assert_eq!(
+            oldest_certificate_grant_key(&grants),
+            Some("old".to_string())
+        );
+        assert_eq!(oldest_certificate_challenge_page(&HashMap::new()), None);
+        assert_eq!(oldest_certificate_grant_key(&HashMap::new()), None);
     }
 
     #[test]
