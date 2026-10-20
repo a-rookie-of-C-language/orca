@@ -30,6 +30,8 @@ fn main() {
             "poc_popup_menu",
             "poc_notification_sound_path",
             "poc_validate_dropped_paths",
+            "poc_window_get_bounds",
+            "poc_window_set_bounds",
             "poc_menu_set_appearance_checks",
             "poc_menu_set_hints",
             "poc_tray_ensure",

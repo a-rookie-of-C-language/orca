@@ -48,6 +48,8 @@
     "allow-poc-popup-menu",
     "allow-poc-notification-sound-path",
     "allow-poc-validate-dropped-paths",
+    "allow-poc-window-get-bounds",
+    "allow-poc-window-set-bounds",
     "allow-poc-menu-set-appearance-checks",
     "allow-poc-menu-set-hints",
     "allow-poc-tray-ensure",

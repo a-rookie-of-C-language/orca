@@ -44,6 +44,7 @@ mod runtime_readiness;
 mod second_instance;
 mod system_tray;
 mod updater;
+mod window_state;
 mod workspace_space;
 
 use application_menu_spec::{application_menu_bar, ids, MenuEntry, MenuPlatform};
@@ -51,6 +52,7 @@ use runtime_process::OrcadRuntime;
 use second_instance::{
     resolve_opened_documents, OpenedDocument, SecondInstancePayload, SecondInstanceState,
 };
+use window_state::WindowStateSaver;
 
 const MAX_SOUND_BYTES: u64 = 16 * 1024 * 1024;
 const NOTIFICATION_SOUND_EXTENSIONS: [&str; 6] = ["ogg", "mp3", "wav", "m4a", "aac", "flac"];
@@ -171,6 +173,9 @@ struct NativeWindowState {
     /// Renderer pushes the persisted `minimizeToTrayOnClose` setting here so
     /// the native close path can apply it without calling back into JS.
     minimize_to_tray: AtomicBool,
+    /// Set once the native window is destroyed so a racing debounce save
+    /// cannot resurrect bounds after teardown, like Electron freeze on quit.
+    window_closed: AtomicBool,
 }
 
 impl Default for NativeWindowState {
@@ -181,6 +186,7 @@ impl Default for NativeWindowState {
             last_maximized: AtomicBool::new(false),
             last_fullscreen: AtomicBool::new(false),
             minimize_to_tray: AtomicBool::new(false),
+            window_closed: AtomicBool::new(false),
         }
     }
 }
@@ -624,8 +630,13 @@ fn install_poc_badge(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn install_window_state_bridge(window: &WebviewWindow, state: Arc<NativeWindowState>) {
+fn install_window_state_bridge(
+    window: &WebviewWindow,
+    state: Arc<NativeWindowState>,
+    saver: Arc<WindowStateSaver>,
+) {
     let window_handle = window.clone();
+    let saver_handle = Arc::clone(&saver);
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { api, .. } => {
             if state.close_confirmed.swap(false, Ordering::SeqCst) {
@@ -659,6 +670,20 @@ fn install_window_state_bridge(window: &WebviewWindow, state: Arc<NativeWindowSt
             if state.last_fullscreen.swap(fullscreen, Ordering::SeqCst) != fullscreen {
                 let _ = window_handle.emit(EVENT_FULLSCREEN_CHANGED, fullscreen);
             }
+            let closing = state.close_confirmed.load(Ordering::SeqCst)
+                || state.window_closed.load(Ordering::SeqCst);
+            window_state::note_window_moved_or_resized(&saver_handle, &window_handle, closing);
+        }
+        WindowEvent::Moved(_) => {
+            // Why: Electron persists bounds on move and resize through a 500ms
+            // debounce, so the check command only observes a settled save.
+            let closing = state.close_confirmed.load(Ordering::SeqCst)
+                || state.window_closed.load(Ordering::SeqCst);
+            window_state::note_window_moved_or_resized(&saver_handle, &window_handle, closing);
+        }
+        WindowEvent::Destroyed => {
+            state.window_closed.store(true, Ordering::SeqCst);
+            saver_handle.mark_closed();
         }
         _ => {}
     });
@@ -1151,6 +1176,8 @@ fn main() {
             poc_minimize,
             poc_hide_to_tray,
             poc_toggle_maximize,
+            window_state::poc_window_get_bounds,
+            window_state::poc_window_set_bounds,
             poc_set_zoom,
             poc_get_zoom,
             poc_set_focus,
@@ -1323,7 +1350,17 @@ fn main() {
             apply_macos_window_chrome(&window);
             let state = Arc::new(NativeWindowState::default());
             app.manage(Arc::clone(&state));
-            install_window_state_bridge(&window, state);
+            let saver = Arc::new(WindowStateSaver::new(
+                window_state::state_file_path(&app.handle())
+                    .unwrap_or_else(|_| PathBuf::from("window-state.json")),
+            ));
+            install_window_state_bridge(&window, state, saver);
+            // Why: Electron creates hidden and reveals after applying saved bounds,
+            // so restore before the first show and keep background runs hidden.
+            window_state::restore_main_window(&window);
+            if std::env::var("ORCA_BACKGROUND_LAUNCH").as_deref() != Ok("1") {
+                let _ = window.show();
+            }
             install_application_menu(app.handle())?;
             install_poc_badge(app.handle())?;
             Ok(())
