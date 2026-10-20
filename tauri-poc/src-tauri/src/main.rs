@@ -313,9 +313,16 @@ fn poc_path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+/// Why the cap here too: the renderer validates first, but the native boundary
+/// refuses oversized batches itself, exactly like main's validatePathExistenceBatch.
+const PATH_EXISTENCE_BATCH_MAX: usize = 128;
+
 #[tauri::command]
-fn poc_paths_exist(paths: Vec<String>) -> Vec<bool> {
-    paths.iter().map(|path| Path::new(path).exists()).collect()
+fn poc_paths_exist(paths: Vec<String>) -> Result<Vec<bool>, String> {
+    if paths.len() > PATH_EXISTENCE_BATCH_MAX {
+        return Err("Invalid path existence batch".to_string());
+    }
+    Ok(paths.iter().map(|path| Path::new(path).exists()).collect())
 }
 
 #[tauri::command]
@@ -325,12 +332,34 @@ fn poc_copy_file(src_path: String, dest_path: String) -> Result<(), String> {
     if !source.is_absolute() || !destination.is_absolute() {
         return Err("Both source and destination must be absolute paths".to_string());
     }
-    if destination.exists() {
-        return Err("Destination file already exists.".to_string());
+    // Why create_new: claim the destination atomically like COPYFILE_EXCL, so a
+    // concurrent creation fails instead of being silently overwritten.
+    let mut staged = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                return "Destination file already exists.".to_string();
+            }
+            error.to_string()
+        })?;
+    let outcome: Result<(), String> = (|| {
+        // Why the cleanup below: a failed copy must not leave a half-written file.
+        let mut origin = fs::File::open(source).map_err(|error| error.to_string())?;
+        std::io::copy(&mut origin, &mut staged).map_err(|error| error.to_string())?;
+        let permissions = origin
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .permissions();
+        fs::set_permissions(destination, permissions).map_err(|error| error.to_string())?;
+        Ok(())
+    })();
+    drop(staged);
+    if outcome.is_err() {
+        let _ = fs::remove_file(destination);
     }
-    fs::copy(src_path, dest_path)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    outcome
 }
 
 #[tauri::command]
@@ -1374,8 +1403,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        close_should_hide_to_tray, poc_host_info, step_ui_zoom_level, zoom_factor_for_level,
-        zoom_level_for_factor, NativeWindowState, UI_ZOOM_MAX, UI_ZOOM_MIN,
+        close_should_hide_to_tray, poc_copy_file, poc_host_info, poc_paths_exist,
+        step_ui_zoom_level, zoom_factor_for_level, zoom_level_for_factor, NativeWindowState,
+        PATH_EXISTENCE_BATCH_MAX, UI_ZOOM_MAX, UI_ZOOM_MIN,
     };
     use std::sync::atomic::Ordering;
 
@@ -1460,5 +1490,65 @@ mod tests {
         state.minimize_to_tray.store(true, Ordering::SeqCst);
         state.confirm_close();
         assert!(!close_should_hide_to_tray(&state));
+    }
+
+    #[test]
+    fn shell_copy_rejects_relative_paths() {
+        let error = poc_copy_file("relative-src.txt".to_string(), "C:\\dest.txt".to_string())
+            .expect_err("relative source must be refused");
+        assert_eq!(error, "Both source and destination must be absolute paths");
+    }
+
+    #[test]
+    fn shell_copy_claims_destination_atomically() {
+        let dir =
+            std::env::temp_dir().join(format!("orca-tauri-shell-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let src = dir.join("src.txt");
+        let dest = dir.join("dest.txt");
+        std::fs::write(&src, b"shell-copy-bytes").expect("seed source");
+        poc_copy_file(
+            src.to_string_lossy().into_owned(),
+            dest.to_string_lossy().into_owned(),
+        )
+        .expect("first copy lands");
+        assert_eq!(
+            std::fs::read(&dest).expect("read copy"),
+            b"shell-copy-bytes"
+        );
+        let clash = poc_copy_file(
+            src.to_string_lossy().into_owned(),
+            dest.to_string_lossy().into_owned(),
+        )
+        .expect_err("second copy must not overwrite");
+        assert_eq!(clash, "Destination file already exists.");
+        assert_eq!(
+            std::fs::read(&dest).expect("read after clash"),
+            b"shell-copy-bytes"
+        );
+        // Why: a failed source read must not leave a half-written destination.
+        let missing_dest = dir.join("missing-dest.txt");
+        let missing_error = poc_copy_file(
+            dir.join("no-such-src.txt").to_string_lossy().into_owned(),
+            missing_dest.to_string_lossy().into_owned(),
+        )
+        .expect_err("missing source must fail");
+        assert!(!missing_error.is_empty());
+        assert!(!missing_dest.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shell_paths_exist_caps_batches_like_main() {
+        assert_eq!(PATH_EXISTENCE_BATCH_MAX, 128);
+        let oversized = vec!["C:\\a".to_string(); 129];
+        assert_eq!(
+            poc_paths_exist(oversized).expect_err("oversized batch must be refused"),
+            "Invalid path existence batch"
+        );
+        let verdicts = poc_paths_exist(vec!["C:\\definitely-missing-orca-probe".to_string()])
+            .expect("small batch answers");
+        assert_eq!(verdicts, vec![false]);
     }
 }

@@ -49,6 +49,29 @@ try {
   )
   const systemRootExists = await call('pathExists', 'C:\\Windows')
   assert.equal(systemRootExists, true)
+  // Why direct invoke: the checks above travel the renderer gate; these pin
+  // the native boundary itself for callers that bypass it.
+  const nativeBatch = await page.evaluate(() =>
+    window.__TAURI_INTERNALS__.invoke('poc_paths_exist', {
+      paths: Array.from({ length: 129 }, () => 'C:\\a')
+    }).then(
+      () => ({ ok: true }),
+      (error) => ({ ok: false, error: String(error) })
+    )
+  )
+  assert.equal(nativeBatch.ok, false)
+  assert.match(nativeBatch.error, /Invalid path existence batch/)
+  const nativeCopy = await page.evaluate(() =>
+    window.__TAURI_INTERNALS__.invoke('poc_copy_file', {
+      srcPath: 'C:\\Windows',
+      destPath: 'relative-dest.txt'
+    }).then(
+      () => ({ ok: true }),
+      (error) => ({ ok: false, error: String(error) })
+    )
+  )
+  assert.equal(nativeCopy.ok, false)
+  assert.match(nativeCopy.error, /absolute paths/)
   await assertReadyHidden(page, root)
   const evidence = { at: new Date().toISOString() }
   await writeFile(
