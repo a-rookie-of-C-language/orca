@@ -1,5 +1,6 @@
 import {
   SshLegacyRelayPane,
+  SshLegacyRelayPaneDetach,
   SshLegacyRelayPaneOutputPaused,
   SshLegacyRelayPaneResize,
   SshLegacyRelayPaneWrite
@@ -12,7 +13,7 @@ import {
   resizeLegacyRelayPane,
   setLegacyRelayPaneOutputPaused,
   writeLegacyRelayPane
-} from '../../../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
+} from '../../../ssh/legacy-relay/legacy-relay-bridge-registry'
 import { defineMethod } from '../core'
 
 // Why host-admin: every channel reaches a remote shell, so paired clients need the same
@@ -33,9 +34,11 @@ export const SSH_LEGACY_RELAY_BRIDGE_METHODS = [
   defineMethod({
     name: 'ssh.detachLegacyRelayBridgedPane',
     permission: 'host-admin',
-    params: SshLegacyRelayPane,
+    params: SshLegacyRelayPaneDetach,
     handler: (params) => {
-      detachLegacyRelayPane(params.ptyId)
+      if (params.acquisitionId !== undefined) {
+        detachLegacyRelayPane(params.ptyId, params.acquisitionId)
+      }
       return { detached: true }
     }
   }),

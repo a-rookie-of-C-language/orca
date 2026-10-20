@@ -1,6 +1,6 @@
 import { SshTarget } from '../../../../shared/rpc-contract/ssh-params'
 import { isSshCredentialDeclined } from '../../../ssh/ssh-credential-decline'
-import { getSshConnectionManager, listRegisteredSshTargets } from '../../../ssh/ssh-target-registry'
+import { getSshConnectionManager, listRegisteredSshTargets } from '../../../ssh/targets/ssh-target-registry'
 import { defineMethod } from '../core'
 
 export const SSH_NEEDS_PASSPHRASE_METHODS = [

@@ -164,6 +164,30 @@ async function startOrcadRuntime(
   await prepareOrcadSecretStoreAndMigrate(runtimeUserDataPath)
   const { store: profileStore, authority: profileStateAuthority } =
     await createOrcadProfileStateStartup(runtimeUserDataPath)
+  // Usage stores are runtime-owned in Tauri. Keep their cache paths explicit so this
+  // process never needs Electron's app.userData fallback.
+  const [{ ClaudeUsageStore }, { CodexUsageStore }, { OpenCodeUsageStore }, { MuseUsageStore }] =
+    await Promise.all([
+      import('../claude-usage/store'),
+      import('../codex-usage/store'),
+      import('../opencode-usage/store'),
+      import('../muse-usage/store')
+    ])
+  const usageStores = {
+    claude: new ClaudeUsageStore(profileStore, runtimeUserDataPath),
+    codex: new CodexUsageStore(profileStore, runtimeUserDataPath),
+    opencode: new OpenCodeUsageStore(profileStore, runtimeUserDataPath),
+    muse: new MuseUsageStore(profileStore, runtimeUserDataPath)
+  }
+  // Register after the profile flush so reverse teardown flushes usage caches first.
+  registerCleanup(async () => {
+    await Promise.all([
+      usageStores.claude.flush(),
+      usageStores.codex.flush(),
+      usageStores.opencode.flush(),
+      usageStores.muse.flush()
+    ])
+  })
   const observedPaneIdentities = new AgentStatusObservedPaneIdentities()
   const observedStatusCapture = new AgentStatusObservedPaneIdentityCapture(observedPaneIdentities)
   profileStoreForShutdown = profileStore
@@ -236,6 +260,7 @@ async function startOrcadRuntime(
     // what powers serve→desktop promotion. A Node host can never do that, and the
     // constructor's default would advertise it.
     getDesktopWindowStatus: () => 'blocked',
+    usageStores,
     // Why the dedupe here and not in the instance: `apply` closes and reconstructs
     // unconditionally, so an unchanged value would restart a healthy index.
     applySessionSearchSettings: (before, after) => {
@@ -344,7 +369,10 @@ async function startOrcadRuntime(
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
   await rpc.start()
-  startOrcadAutomations(runtime, profileStore, registerCleanup)
+  startOrcadAutomations(runtime, profileStore, registerCleanup, {
+    claudeUsage: usageStores.claude,
+    codexUsage: usageStores.codex
+  })
   const pushService = DesktopPushService.create({
     runtime,
     runtimeRpc: rpc,

@@ -39,7 +39,7 @@ const {
   setLegacyRelayPaneOutputPausedMock: vi.fn()
 }))
 
-vi.mock('../../../ssh/ssh-target-registry', () => ({
+vi.mock('../../../ssh/targets/ssh-target-registry', () => ({
   connectRegisteredSshTarget: connectRegisteredSshTargetMock,
   getRegisteredSshState: getRegisteredSshStateMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
@@ -53,7 +53,7 @@ vi.mock('../../../ssh/ssh-credential-decline', () => ({
   isSshCredentialDeclined: isSshCredentialDeclinedMock
 }))
 
-vi.mock('../../../ssh/legacy-relay-bridge/legacy-relay-bridge-registry', () => ({
+vi.mock('../../../ssh/legacy-relay/legacy-relay-bridge-registry', () => ({
   installLegacyRelayBridge: vi.fn(),
   terminalsBucket: vi.fn(),
   startLegacyRelayBridge: vi.fn(),
@@ -126,8 +126,8 @@ describe('ssh legacy relay bridge RPC methods', () => {
     })
     expect(setLegacyRelayPaneOutputPausedMock).toHaveBeenCalledWith('ssh:t@@r1', true)
     expect(paused).toMatchObject({ ok: true, result: { paused: true } })
-    const detached = await dispatch('ssh.detachLegacyRelayBridgedPane', { ptyId: 'ssh:t@@r1' })
-    expect(detachLegacyRelayPaneMock).toHaveBeenCalledWith('ssh:t@@r1')
+    const detached = await dispatch('ssh.detachLegacyRelayBridgedPane', { ptyId: 'ssh:t@@r1', acquisitionId: 7 })
+    expect(detachLegacyRelayPaneMock).toHaveBeenCalledWith('ssh:t@@r1', 7)
     expect(detached).toMatchObject({ ok: true, result: { detached: true } })
   })
 

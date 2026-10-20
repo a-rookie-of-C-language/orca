@@ -26,6 +26,8 @@ export type RuntimeClientSettings = Pick<
   | 'minimaxGroupId'
   | 'minimaxUsageModels'
   | 'minimaxEndpoint'
+  | 'computerAwakeMode'
+  | 'keepComputerAwakeWhileAgentsRun'
   | 'zcodePlanSite'
   | 'prBotAuthorOverrides'
   | 'artifactSharingEnabled'
@@ -34,6 +36,8 @@ export type RuntimeClientSettings = Pick<
   | 'machineName'
   | 'nativeChatPermissionMode'
   | 'agentNativeChatPermissionModes'
+  | 'computerAwakeMode'
+  | 'keepComputerAwakeWhileAgentsRun'
 > & {
   /** Older clients still read these; neither is persisted or accepted as an update. */
   openAgentTabsInChatByDefault?: boolean
@@ -68,6 +72,8 @@ export type RuntimeClientSettingsUpdate = Pick<
   | 'minimaxGroupId'
   | 'minimaxUsageModels'
   | 'minimaxEndpoint'
+  | 'computerAwakeMode'
+  | 'keepComputerAwakeWhileAgentsRun'
   | 'zcodePlanSite'
   | 'prBotAuthorOverrides'
   | 'worktreeVisibilityDefaults'

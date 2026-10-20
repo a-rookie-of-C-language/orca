@@ -3,9 +3,9 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { Store } from '../persistence'
 import type { SshConnectionState, SshTarget } from '../../shared/ssh-types'
 import { getPublicSshState } from '../runtime/public-ssh-state'
-import { SshConnectionManager } from '../ssh/ssh-connection-manager'
-import { SshConnectionStore } from '../ssh/ssh-connection-store'
-import { SshPortForwardManager } from '../ssh/ssh-port-forward'
+import { SshConnectionManager } from '../ssh/connection/ssh-connection-manager'
+import { SshConnectionStore } from '../ssh/connection/ssh-connection-store'
+import { SshPortForwardManager } from '../ssh/port-forwarding/ssh-port-forward'
 import {
   persistSshPortForwardsWithUnrestored,
   restoreSshPortForwards
@@ -21,9 +21,9 @@ import {
   setSshTargetRegistryHandlers,
   setSshTargetRegistryStore,
   setSshPortForwardManagerResolver
-} from '../ssh/ssh-target-registry'
-import { resolveHostServerOnConnect } from '../ssh/ssh-host-server-on-connect'
-import { createHostServerOnConnectDeps } from '../ssh/ssh-host-server-on-connect-wiring'
+} from '../ssh/targets/ssh-target-registry'
+import { resolveHostServerOnConnect, type HostServerOnConnectDeps } from '../ssh/ssh-host-server-on-connect'
+import { hostServerOnConnectDeps } from '../ipc/ssh/ssh-host-server-on-connect-wiring'
 import {
   clearSshHostServerStatus,
   getSshHostServerStatus,
@@ -35,7 +35,7 @@ import {
   installLegacyRelayBridge,
   startLegacyRelayBridge,
   stopLegacyRelayBridge
-} from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
+} from '../ssh/legacy-relay/legacy-relay-bridge-registry'
 import { installOrcadLegacyRelayBridgeHost } from './orcad-ssh-legacy-relay-bridge'
 
 function publicSshState(state: SshConnectionState): SshConnectionState {
@@ -85,6 +85,20 @@ function setupState(
   }
 }
 
+function hostServerOnConnectDepsForOrcad(
+  userDataPath: string,
+  runtime: OrcaRuntimeService,
+  manager: SshConnectionManager
+): HostServerOnConnectDeps {
+  const deps = hostServerOnConnectDeps(userDataPath)
+  return {
+    ...deps,
+    progress: (target, phase) => {
+      notifySshState(runtime, setupState(manager, target.id, phase))
+    }
+  }
+}
+
 async function connectTargetWithManagedServer(
   target: SshTarget,
   manager: SshConnectionManager,
@@ -98,12 +112,7 @@ async function connectTargetWithManagedServer(
     await manager.connect(target)
     const decision = await resolveHostServerOnConnect(
       target,
-      createHostServerOnConnectDeps(userDataPath, {
-        startLegacyRelayBridge,
-        progress: (targetId, phase) => {
-          notifySshState(runtime, setupState(manager, targetId, phase))
-        }
-      })
+      hostServerOnConnectDepsForOrcad(userDataPath, runtime, manager)
     )
 
     if (decision.route === 'managed') {

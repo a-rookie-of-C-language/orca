@@ -1,6 +1,6 @@
-import type { SshConnectionManager } from './ssh-connection-manager'
-import type { SshConnectionStore } from './ssh-connection-store'
-import type { SshPortForwardManager } from './ssh-port-forward'
+import type { SshConnectionManager } from './connection/ssh-connection-manager'
+import type { SshConnectionStore } from './connection/ssh-connection-store'
+import type { SshPortForwardManager } from './port-forwarding/ssh-port-forward'
 import type { SavedPortForward } from '../../shared/ssh-types'
 
 type PortForwardPersistenceDependencies = {

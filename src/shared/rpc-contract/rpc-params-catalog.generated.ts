@@ -35,15 +35,20 @@ import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-m
 import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
 import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
+import { pluginMarketplaceGitSourceSchema } from '../plugins/plugin-marketplace'
 import {
   AccountsUnsubscribeParams,
+  AddClaudeAccountParams,
   AddClaudeFromConfigDirParams,
+  AddCodexAccountParams,
   AddCodexFromHomeParams,
   AddDataAccountParams,
   BeginClaudeSignInParams,
   ConsumeCodexResetCreditParams,
   FinishClaudeSignInParams,
   ListAccountsParams,
+  ReauthenticateClaudeAccountParams,
+  ReauthenticateCodexAccountParams,
   RemoveAccountParams,
   RemoveDataAccountParams,
   SelectAccountParams,
@@ -63,9 +68,13 @@ import { CurrentRequestsParams } from './agent-session-current-requests-params'
 import { CreateAgentSessionParams, EnsureAgentSessionParams } from './agent-session-params'
 import { ReadVisualParams } from './agent-session-visual-params'
 import {
+  AiVaultDeleteSessionParams,
+  AiVaultFirstUserPromptParams,
   AiVaultListSessionsParams,
   AiVaultPrepareSessionResumeParams,
-  AiVaultSessionTitlesParams
+  AiVaultScanProgressParams,
+  AiVaultSessionTitlesParams,
+  AiVaultSubagentListParams
 } from './ai-vault-params'
 import {
   AntigravityAccountMutationParams,
@@ -76,8 +85,10 @@ import {
 import { ArtifactsDeleteParams, ListOptions, SourceRequest, WriteRequest } from './artifacts-params'
 import {
   AutomationCreate,
+  AutomationDispatchResult,
   AutomationId,
   AutomationList,
+  AutomationPrecheckRequest,
   AutomationRuns,
   AutomationUpdate
 } from './automation-params'
@@ -138,6 +149,7 @@ import {
 } from './browser-params'
 import { ScreencastUnsubscribe } from './browser-screencast-params'
 import { BrowserOpenUrlParams, BrowserTabCreateParams } from './browser-tab-create-params'
+import { CliWslInstall } from './cli-params'
 import { ClientEventsUnsubscribeParams } from './client-events-params'
 import {
   NativeChatSessionOptionsMutation,
@@ -169,6 +181,7 @@ import {
   SetValue,
   TypeText
 } from './computer-schemas-params'
+import { CredentialValueParams } from './credential-params'
 import {
   AttachParams as AttachParamsOfEmulatorParams,
   AxParams,
@@ -216,6 +229,11 @@ import {
 } from './files-params'
 import { FileOpen, FileWatch, WorktreeSelector } from './files-target-params'
 import { TerminalArtifactFile, TerminalArtifactFileWrite } from './files-terminal-artifact-params'
+import {
+  FloatingTerminalCwdRpcParams,
+  ResolveFloatingMarkdownDocumentParams,
+  TrustFloatingWorkspaceDirectoryParams
+} from './floating-workspace-params'
 import {
   FolderWorkspaceCreate,
   FolderWorkspacePathStatus,
@@ -458,8 +476,16 @@ import {
 import { WorkerStartParams } from './orchestration-worker-start-params'
 import { WorkerDispatchParams as WorkerDispatchParamsOfOrchestrationWorkerStopParams } from './orchestration-worker-stop-params'
 import {
+  PluginInstallParams,
   PluginInvokeCommandParams,
+  PluginLogsParams,
+  PluginMarketplaceInstallParams,
+  PluginMarketplaceInstalledPluginParams,
+  PluginMarketplacePluginParams,
+  PluginMarketplaceRefreshParams,
+  PluginMarketplaceSourceIdParams,
   PluginReadPanelEntryParams,
+  PluginRemoveParams,
   PluginSetEnabledParams,
   PluginsPanelActionParams
 } from './plugins-params'
@@ -492,6 +518,7 @@ import {
   RepoReorder,
   RepoSearchRefs,
   RepoSetBaseRef,
+  RepoSparsePresetRemove,
   RepoSparsePresetSave,
   RepoUpdate
 } from './repo-params'
@@ -517,6 +544,14 @@ import {
   SkillsGetInstallProgressParams
 } from './skills-params'
 import {
+  SpeechDesktopApiKey,
+  SpeechDesktopAudio,
+  SpeechDesktopEventsUnsubscribe,
+  SpeechDesktopModelAction,
+  SpeechDesktopSession,
+  SpeechDesktopStart
+} from './speech-desktop-params'
+import {
   DictationChunk,
   DictationHandle,
   DictationSetup,
@@ -526,7 +561,19 @@ import {
 import {
   RepoAddRemote,
   SshBrowseDir,
+  SshConfigHostList,
   SshConnect,
+  SshFileReadChunk,
+  SshFolderDownload,
+  SshImportConfig,
+  SshLegacyRelayPane,
+  SshLegacyRelayPaneDetach,
+  SshLegacyRelayPaneOutputPaused,
+  SshLegacyRelayPaneResize,
+  SshLegacyRelayPaneWrite,
+  SshResolveConfigHost,
+  SshResolveExternalEditorAuthority,
+  SshSubmitCredential,
   SshTarget,
   SshTargetAdd,
   SshTargetUpdate
@@ -565,7 +612,10 @@ import {
   QueuedMessageEditHoldParams,
   QueuedMessageUpdateParams
 } from './structured-agent-session-queued-edit-params'
-import { TerminalDaemonRestartSeveredParams } from './terminal-daemon-params'
+import {
+  TerminalDaemonKillOneParams,
+  TerminalDaemonRestartSeveredParams
+} from './terminal-daemon-params'
 import { TerminalAdoptOrphans } from './terminal-orphan-params'
 import { TerminalQuickCommandsUpdate } from './terminal-quick-command-params'
 import {
@@ -582,6 +632,7 @@ import {
   TerminalHandle,
   TerminalInspectProcess,
   TerminalListParams,
+  TerminalMoveLeaf,
   TerminalRead,
   TerminalReadKittyFile,
   TerminalRecoverPane,
@@ -608,6 +659,15 @@ import {
   UsageCredentialApiKeyParams,
   UsageCredentialSessionCookieParams
 } from './usage-credentials-params'
+import {
+  UsageBreakdownParams,
+  UsageProviderParams,
+  UsageQueryParams,
+  UsageRecentSessionsParams,
+  UsageRefreshParams,
+  UsageSetEnabledParams,
+  UsageSnapshotParams
+} from './usage-params'
 import {
   LayoutApplyParams,
   LayoutSubscribeParams,
@@ -636,6 +696,12 @@ import {
   WorktreeTeardownMissingTerminalsParams
 } from './worktree-params'
 import { WorktreeAdoptProvisionedRoot } from './worktree-provisioned-root-params'
+import {
+  WslHostAddParams,
+  WslHostConnectParams,
+  WslHostEnvironmentParams,
+  WslHostVisibleWorkParams
+} from './wsl-host-params'
 import { RepoIconDataUrlsParams } from '../sidebar-list/repo-icon-data-urls-contract'
 import { SidebarInputsReadParams } from '../sidebar-list/sidebar-inputs-feed-contract'
 import { SkillBundleInstallRequestSchema } from '../skill-bundle-install-contract'
@@ -655,7 +721,9 @@ import {
 // matches the dispatcher. Clients must import it for types only — parsing a params
 // schema client-side runs the coercing transforms and rewrites the wire bytes.
 export const RPC_PARAMS_BY_METHOD = {
+  'accounts.addClaude': AddClaudeAccountParams,
   'accounts.addClaudeFromConfigDir': AddClaudeFromConfigDirParams,
+  'accounts.addCodex': AddCodexAccountParams,
   'accounts.addCodexFromHome': AddCodexFromHomeParams,
   'accounts.addDataFromHome': AddDataAccountParams,
   'accounts.antigravityAddCurrent': AntigravityAccountTargetParams,
@@ -667,9 +735,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.antigravityRemove': AntigravityAccountMutationParams,
   'accounts.antigravitySelect': AntigravityAccountMutationParams,
   'accounts.beginClaudeSignIn': BeginClaudeSignInParams,
+  'accounts.cancelClaudePendingLogin': null,
   'accounts.cancelClaudeSignIn': FinishClaudeSignInParams,
+  'accounts.cancelCodexPendingLogin': null,
   'accounts.consumeCodexResetCredit': ConsumeCodexResetCreditParams,
   'accounts.finishClaudeSignIn': FinishClaudeSignInParams,
+  'accounts.getCodexPendingLoginUrl': null,
   'accounts.list': ListAccountsParams,
   'accounts.listData': null,
   'accounts.minimaxClearApiKey': null,
@@ -677,6 +748,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.minimaxCredentialsStatus': null,
   'accounts.minimaxSaveApiKey': UsageCredentialApiKeyParams,
   'accounts.minimaxSaveSessionCookie': UsageCredentialSessionCookieParams,
+  'accounts.reauthenticateClaude': ReauthenticateClaudeAccountParams,
+  'accounts.reauthenticateCodex': ReauthenticateCodexAccountParams,
   'accounts.removeClaude': RemoveAccountParams,
   'accounts.removeCodex': RemoveAccountParams,
   'accounts.removeData': RemoveDataAccountParams,
@@ -687,11 +760,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.setHostLaunchEnv': HostAccountLaunchEnvParams,
   'accounts.subscribe': null,
   'accounts.unsubscribe': AccountsUnsubscribeParams,
+  'accounts.waitForClaudeSignInLink': null,
   'accounts.zcodePlanClearApiKey': null,
   'accounts.zcodePlanCredentialsStatus': null,
   'accounts.zcodePlanSaveApiKey': UsageCredentialApiKeyParams,
   'agent.launch': AgentLaunch,
   'agent.launchReplay': AgentLaunchReplay,
+  'agentAwake.getStatus': null,
+  'agentAwake.subscribeStatus': null,
   'agentHooks.prepareCodexForWslPane': PrepareCodexForWslPaneParams,
   'agentSession.acknowledgeAttention': AcknowledgeAttentionParams,
   'agentSession.agents': AgentsParams,
@@ -741,7 +817,13 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSessionAttachment.uploadStart': AttachmentUploadStartParams,
   'agentTeams.prepareLaunch': AgentTeamsPrepareLaunch,
   'agentTeams.tmuxCompat': AgentTeamsTmuxCompat,
+  'aiVault.clearSearchIndex': null,
+  'aiVault.deleteSession': AiVaultDeleteSessionParams,
+  'aiVault.getFirstUserPrompt': AiVaultFirstUserPromptParams,
+  'aiVault.getScanProgress': AiVaultScanProgressParams,
   'aiVault.listSessions': AiVaultListSessionsParams,
+  'aiVault.listSubagentSessions': AiVaultSubagentListParams,
+  'aiVault.prepareSessionDelete': AiVaultDeleteSessionParams,
   'aiVault.prepareSessionResume': AiVaultPrepareSessionResumeParams,
   'aiVault.resolveSessionTitles': AiVaultSessionTitlesParams,
   'aiVault.searchSessions': AiVaultSearchRequestSchema,
@@ -757,7 +839,9 @@ export const RPC_PARAMS_BY_METHOD = {
   'automation.create': AutomationCreate,
   'automation.delete': AutomationId,
   'automation.list': AutomationList,
+  'automation.markDispatchResult': AutomationDispatchResult,
   'automation.runNow': AutomationId,
+  'automation.runPrecheck': AutomationPrecheckRequest,
   'automation.runs': AutomationRuns,
   'automation.show': AutomationId,
   'automation.update': AutomationUpdate,
@@ -852,6 +936,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'browser.upload': Upload,
   'browser.viewport': Viewport,
   'browser.wait': Wait,
+  'cli.getInstallStatus': null,
+  'cli.getWslInstallStatus': CliWslInstall,
+  'cli.install': null,
+  'cli.installWsl': CliWslInstall,
+  'cli.remove': null,
+  'cli.removeWsl': CliWslInstall,
   'clipboard.abortImageUpload': AbortImageUpload,
   'clipboard.appendImageUploadChunk': AppendImageUploadChunk,
   'clipboard.commitImageUpload': CommitImageUpload,
@@ -872,6 +962,19 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'credentials.clearMiniMaxApiKey': null,
+  'credentials.clearMiniMaxCookie': null,
+  'credentials.clearOpenCodeGoApiKey': null,
+  'credentials.clearZcodePlanApiKey': null,
+  'credentials.getCursorStatus': null,
+  'credentials.getGrokStatus': null,
+  'credentials.getMiniMaxStatus': null,
+  'credentials.getOpenCodeGoStatus': null,
+  'credentials.getZcodePlanStatus': null,
+  'credentials.saveMiniMaxApiKey': CredentialValueParams,
+  'credentials.saveMiniMaxCookie': CredentialValueParams,
+  'credentials.saveOpenCodeGoApiKey': CredentialValueParams,
+  'credentials.saveZcodePlanApiKey': CredentialValueParams,
   'desktopBrowserBridge.attach': DesktopBrowserBridgeAttachParams,
   'desktopBrowserBridge.result': DesktopBrowserBridgeResultParams,
   'diagnostics.memory': null,
@@ -1039,7 +1142,12 @@ export const RPC_PARAMS_BY_METHOD = {
   'gitlab.updateMRState': UpdateMrState,
   'gitlab.workItemByPath': WorkItemByPath,
   'gitlab.workItemDetails': WorkItemDetails,
+  'host.floating.getMarkdownDirectory': null,
+  'host.floating.getTerminalCwd': FloatingTerminalCwdRpcParams,
+  'host.floating.resolveMarkdownDocument': ResolveFloatingMarkdownDocumentParams,
+  'host.floating.trustDirectory': TrustFloatingWorkspaceDirectoryParams,
   'host.gitBash.isAvailable': null,
+  'host.niubash.isAvailable': null,
   'host.platform': null,
   'host.pwsh.isAvailable': null,
   'host.wsl.isAvailable': null,
@@ -1206,11 +1314,24 @@ export const RPC_PARAMS_BY_METHOD = {
   'pairing.getEndpoints': PairingGetEndpointsParamsSchema,
   'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,
+  'plugins.addMarketplace': pluginMarketplaceGitSourceSchema,
   'plugins.consent': pluginConsentRequestSchema,
+  'plugins.getLogs': PluginLogsParams,
+  'plugins.install': PluginInstallParams,
+  'plugins.installMarketplacePlugin': PluginMarketplaceInstallParams,
   'plugins.invokeCommand': PluginInvokeCommandParams,
   'plugins.list': null,
+  'plugins.listLanguagePacks': null,
+  'plugins.listMarketplacePlugins': null,
+  'plugins.listMarketplaces': null,
   'plugins.panelAction': PluginsPanelActionParams,
+  'plugins.previewMarketplacePlugin': PluginMarketplacePluginParams,
+  'plugins.previewMarketplaceUpdate': PluginMarketplaceInstalledPluginParams,
   'plugins.readPanelEntry': PluginReadPanelEntryParams,
+  'plugins.refreshMarketplaces': PluginMarketplaceRefreshParams,
+  'plugins.remove': PluginRemoveParams,
+  'plugins.removeMarketplace': PluginMarketplaceSourceIdParams,
+  'plugins.rollbackMarketplacePlugin': PluginMarketplaceInstalledPluginParams,
   'plugins.setEnabled': PluginSetEnabledParams,
   'preflight.check': PreflightCheck,
   'preflight.detectAgents': PreflightAgentDetection,
@@ -1246,6 +1367,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'repo.issueCommandRead': RepoSelector,
   'repo.issueCommandWrite': RepoIssueCommandWrite,
   'repo.list': null,
+  'repo.removeSparsePreset': RepoSparsePresetRemove,
   'repo.reorder': RepoReorder,
   'repo.rm': RepoSelector,
   'repo.saveSparsePreset': RepoSparsePresetSave,
@@ -1307,6 +1429,19 @@ export const RPC_PARAMS_BY_METHOD = {
   'skills.removeInstall': SkillRemoveRequestSchema,
   'skills.share': AgentSkillShareRequestSchema,
   'skills.uploadChunk': SkillUploadChunkRequestSchema,
+  'speech.desktop.cancelDownload': SpeechDesktopModelAction,
+  'speech.desktop.clearOpenAiApiKey': null,
+  'speech.desktop.deleteModel': SpeechDesktopModelAction,
+  'speech.desktop.downloadModel': SpeechDesktopModelAction,
+  'speech.desktop.events': null,
+  'speech.desktop.events.unsubscribe': SpeechDesktopEventsUnsubscribe,
+  'speech.desktop.feedAudio': SpeechDesktopAudio,
+  'speech.desktop.getCatalog': null,
+  'speech.desktop.getModelStates': null,
+  'speech.desktop.getOpenAiApiKeyStatus': null,
+  'speech.desktop.saveOpenAiApiKey': SpeechDesktopApiKey,
+  'speech.desktop.startDictation': SpeechDesktopStart,
+  'speech.desktop.stopDictation': SpeechDesktopSession,
   'speech.dictation.cancel': DictationHandle,
   'speech.dictation.chunk': DictationChunk,
   'speech.dictation.finish': DictationHandle,
@@ -1316,15 +1451,32 @@ export const RPC_PARAMS_BY_METHOD = {
   'speech.models.download': SpeechModelAction,
   'speech.models.list': null,
   'ssh.addTarget': SshTargetAdd,
+  'ssh.attachLegacyRelayBridgedPane': SshLegacyRelayPane,
   'ssh.browseDir': SshBrowseDir,
+  'ssh.closeLegacyRelayBridgedPane': SshLegacyRelayPane,
   'ssh.connect': SshConnect,
+  'ssh.detachLegacyRelayBridgedPane': SshLegacyRelayPaneDetach,
+  'ssh.disconnect': SshTarget,
+  'ssh.downloadFolder': SshFolderDownload,
   'ssh.getState': SshTarget,
+  'ssh.importConfig': SshImportConfig,
+  'ssh.listConfigHosts': SshConfigHostList,
   'ssh.listEditableTargets': null,
+  'ssh.listLegacyRelayBridgedPanes': null,
   'ssh.listRemovedTargetLabels': null,
   'ssh.listTargetSummaries': null,
   'ssh.listTargets': null,
+  'ssh.needsPassphrasePrompt': SshTarget,
+  'ssh.readFileChunk': SshFileReadChunk,
   'ssh.removeTarget': SshTarget,
+  'ssh.resizeLegacyRelayBridgedPane': SshLegacyRelayPaneResize,
+  'ssh.resolveConfigHost': SshResolveConfigHost,
+  'ssh.resolveExternalEditorAuthority': SshResolveExternalEditorAuthority,
+  'ssh.setLegacyRelayBridgedPaneOutputPaused': SshLegacyRelayPaneOutputPaused,
+  'ssh.submitCredential': SshSubmitCredential,
+  'ssh.testConnection': SshTarget,
   'ssh.updateTarget': SshTargetUpdate,
+  'ssh.writeLegacyRelayBridgedPane': SshLegacyRelayPaneWrite,
   'stats.summary': null,
   'status.get': null,
   'terminal.adoptOrphans': TerminalAdoptOrphans,
@@ -1335,6 +1487,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.closeTab': TerminalHandle,
   'terminal.create': TerminalCreateParams,
   'terminal.createAgentSession': CreateAgentSessionParams,
+  'terminal.cwd': TerminalHandle,
   'terminal.ensureAgentSession': EnsureAgentSessionParams,
   'terminal.focus': TerminalFocus,
   'terminal.getAutoRestoreFit': TerminalGetAutoRestoreFitParams,
@@ -1342,6 +1495,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.inspectProcess': TerminalInspectProcess,
   'terminal.isRunningAgent': TerminalHandle,
   'terminal.list': TerminalListParams,
+  'terminal.moveLeafToNewTab': TerminalMoveLeaf,
   'terminal.multiplex': TerminalMultiplex,
   'terminal.read': TerminalRead,
   'terminal.readKittyFile': TerminalReadKittyFile,
@@ -1368,6 +1522,11 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.unsubscribe': TerminalUnsubscribe,
   'terminal.updateViewport': TerminalUpdateViewport,
   'terminal.wait': TerminalWait,
+  'terminalDaemon.asyncIoHealth': null,
+  'terminalDaemon.killAll': null,
+  'terminalDaemon.killOne': TerminalDaemonKillOneParams,
+  'terminalDaemon.listSessions': null,
+  'terminalDaemon.restart': null,
   'terminalDaemon.restartSevered': TerminalDaemonRestartSeveredParams,
   'terminalDaemon.severedStatus': null,
   'ui.get': null,
@@ -1382,6 +1541,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'updater.download': null,
   'updater.getStatus': null,
   'updater.install': null,
+  'usage.getBreakdown': UsageBreakdownParams,
+  'usage.getDaily': UsageQueryParams,
+  'usage.getRecentSessions': UsageRecentSessionsParams,
+  'usage.getScanState': UsageProviderParams,
+  'usage.getSnapshot': UsageSnapshotParams,
+  'usage.getSummary': UsageQueryParams,
+  'usage.refresh': UsageRefreshParams,
+  'usage.setEnabled': UsageSetEnabledParams,
   'workspacePorts.kill': WorkspacePortKillParams,
   'workspacePorts.killHost': WorkspacePortKillHostParams,
   'workspacePorts.scan': WorkspacePortScanParams,
@@ -1403,7 +1570,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'worktree.set': WorktreeSet,
   'worktree.show': WorktreeSelectorOfWorktreeParams,
   'worktree.sleep': WorktreeSelectorOfWorktreeParams,
-  'worktree.teardownMissingTerminals': WorktreeTeardownMissingTerminalsParams
+  'worktree.teardownMissingTerminals': WorktreeTeardownMissingTerminalsParams,
+  'wslHosts.add': WslHostAddParams,
+  'wslHosts.connect': WslHostConnectParams,
+  'wslHosts.getCapability': null,
+  'wslHosts.getStatuses': null,
+  'wslHosts.listDistros': null,
+  'wslHosts.remove': WslHostEnvironmentParams,
+  'wslHosts.setVisibleWork': WslHostVisibleWorkParams
 } as const
 
 // Why: these methods bind a schema the shared contract cannot hold because its value

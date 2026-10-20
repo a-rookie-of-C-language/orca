@@ -1,10 +1,8 @@
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { Store } from '../persistence'
-import type { SshConnectionManager } from '../ssh/ssh-connection-manager'
-import {
-  installLegacyRelayBridge,
-  terminalsBucket
-} from '../ssh/legacy-relay-bridge/legacy-relay-bridge-registry'
+import type { SshConnectionManager } from '../ssh/connection/ssh-connection-manager'
+import { installLegacyRelayBridge } from '../ssh/legacy-relay/legacy-relay-bridge-registry'
+import { terminalsBucket } from '../ssh/legacy-relay/legacy-relay-daily-activity'
 import { knownSshHostPlatform } from '../ssh/ssh-host-platform-memo'
 import { hostProps } from '../ssh/ssh-host-server-telemetry'
 import { track } from '../telemetry/client'
@@ -19,8 +17,10 @@ export function installOrcadLegacyRelayBridgeHost(args: {
   const { runtime, store, manager } = args
   installLegacyRelayBridge({
     leases: (targetId) => store.getSshRemotePtyLeases(targetId),
-    retireLease: (targetId, relayPtyId) =>
-      store.markSshRemotePtyLease(targetId, relayPtyId, 'terminated'),
+    retireLease: (targetId, relayPtyId, evidence) =>
+      store.markSshRemotePtyLease(targetId, relayPtyId, evidence),
+    recordStop: (targetId, relayPtyId, pendingKill) =>
+      store.setSshRemotePtyLeasePendingKill(targetId, relayPtyId, pendingKill),
     connection: (targetId) => manager.getConnection(targetId) ?? null,
     remoteCli: {
       runtime: () => runtime,

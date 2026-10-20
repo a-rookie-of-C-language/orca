@@ -3,8 +3,8 @@ import { mkdtemp, open, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RuntimeFileReadChunkResult } from '../../shared/runtime-file-contracts'
-import { downloadFileViaSystemSsh } from './ssh-system-fallback'
-import type { SshFileTransferHost, SshRemoteFileOptions } from './ssh-connection-file-transfers'
+import { downloadFileViaSystemSsh } from './system-transport/system-ssh-file-binary-transfer'
+import type { SshFileTransferHost, SshRemoteFileOptions } from './connection/ssh-connection-file-transfers'
 
 export type SshRemoteFileReadChunkResult = RuntimeFileReadChunkResult & {
   size: number

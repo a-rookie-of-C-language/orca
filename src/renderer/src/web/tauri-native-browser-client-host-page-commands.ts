@@ -297,4 +297,5 @@ export async function executeTauriBrowserClientHostPageCommand(
       errorCode: error instanceof Error ? error.message : 'browser_client_page_command_failed'
     }
   }
+  return { status: 'failed', errorCode: 'browser_client_page_command_unhandled' }
 }

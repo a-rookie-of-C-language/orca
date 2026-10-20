@@ -10,7 +10,7 @@ import {
   getSshConnectionManager,
   getSshPortForwardManager,
   getSshTargetRegistryStore
-} from '../../../ssh/ssh-target-registry'
+} from '../../../ssh/targets/ssh-target-registry'
 import { defineMethod } from '../core'
 
 function notifySshPortForwardsChanged(

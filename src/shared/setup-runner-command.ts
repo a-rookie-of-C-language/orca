@@ -69,7 +69,7 @@ export function resolveSetupRunnerCommand(
       if (shell?.executable && isNiubashShell(shell.executable)) {
         const nativePath = runnerScriptPath.replaceAll('\\', '/')
         return {
-          command: `${quotePosixArg(shell.executable.replaceAll('\\', '/'))} ${quotePosixArg(nativePath)}`,
+          command: `${quotePosixShellUnlessPlainNoAt(shell.executable.replaceAll('\\', '/'))} ${quotePosixShellUnlessPlainNoAt(nativePath)}`,
           runnerScriptPathForShell: nativePath,
           shell: 'posix'
         }

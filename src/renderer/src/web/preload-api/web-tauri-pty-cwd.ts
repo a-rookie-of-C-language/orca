@@ -1,5 +1,6 @@
 import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-import { hasRuntimeRpcErrorCode, unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
+import { unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
+import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 import { callEnvironmentEnvelope } from './web-runtime-calls'
 import type { TauriPtyState } from './web-tauri-pty-state'
 

@@ -306,6 +306,7 @@ export function createRuntimeEnvironmentsApi(): NonNullable<
         )
         return { kind: 'server' as const }
       }
+    },
     call: ({
       selector,
       method,

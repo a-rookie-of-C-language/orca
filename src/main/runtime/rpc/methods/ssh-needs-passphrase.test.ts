@@ -13,7 +13,7 @@ const { listRegisteredSshTargetsMock, getSshConnectionManagerMock, isSshCredenti
     isSshCredentialDeclinedMock: vi.fn()
   }))
 
-vi.mock('../../../ssh/ssh-target-registry', () => ({
+vi.mock('../../../ssh/targets/ssh-target-registry', () => ({
   connectRegisteredSshTarget: vi.fn(),
   getRegisteredSshState: vi.fn(),
   listRegisteredSshTargets: listRegisteredSshTargetsMock,

@@ -5,7 +5,7 @@ import {
   listRegisteredSshTargets,
   markSshTestProbe,
   unmarkSshTestProbe
-} from '../../../ssh/ssh-target-registry'
+} from '../../../ssh/targets/ssh-target-registry'
 import { getPublicSshState } from '../../public-ssh-state'
 import { defineMethod } from '../core'
 

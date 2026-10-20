@@ -122,6 +122,10 @@ export const SshPortForwardList = z.object({ targetId: boundedText(200).optional
 export const SshLegacyRelayPane = z.object({
   ptyId: boundedText(4096)
 })
+export const SshLegacyRelayPaneDetach = SshLegacyRelayPane.extend({
+  // Why optional: clients older than viewer-scoped detach omit it; those viewers cannot be released safely.
+  acquisitionId: z.number().int().optional()
+})
 export const SshLegacyRelayPaneWrite = SshLegacyRelayPane.extend({
   // Do not trim: terminal input may legitimately be whitespace.
   data: z.string().max(1_048_576)
