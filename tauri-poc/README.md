@@ -416,7 +416,9 @@ Not migrated yet:
   mirroring Electron's `dom-ready` → `webContents.setZoomLevel(uiZoomLevel)`
   replay. The renderer's own startup hydration also calls
   `window.api.ui.setZoomLevel(uiZoomLevel)` once `ui.get` lands, so a Tauri
-  relaunch does not silently reset zoom to 100%.
+  relaunch does not silently reset zoom to 100%. `poc_get_zoom` answers with
+  the last applied factor (100% when unset) instead of the monitor DPI, matching
+  Electron's `webFrame.getZoomFactor()`, proven live by `tauri-poc/scripts/check-window-zoom.mjs`.
   `performNativePaste`/`performNativeSelectionAction` resolve through
   `document.execCommand` in the main renderer — the app-menu paste path already
   owns Orca-aware targets before it falls back, so the native call only needs

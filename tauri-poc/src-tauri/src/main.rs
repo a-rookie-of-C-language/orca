@@ -89,6 +89,20 @@ fn step_ui_zoom_level(current: f64, direction: &str) -> f64 {
     };
     next.clamp(UI_ZOOM_MIN, UI_ZOOM_MAX)
 }
+/// Recover the log-scale level for a raw zoom factor, so `poc_set_zoom` calls
+/// that only carry the factor still keep the per-window map current.
+fn zoom_level_for_factor(scale_factor: f64) -> Option<f64> {
+    if !scale_factor.is_finite() || scale_factor <= 0.0 {
+        return None;
+    }
+    Some(scale_factor.ln() / UI_ZOOM_BASE.ln())
+}
+
+/// The zoom factor a window is currently showing: the tracked level mapped
+/// through the shared base, 100% when nothing was ever set.
+fn zoom_factor_for_level(level: f64) -> f64 {
+    UI_ZOOM_BASE.powf(level)
+}
 
 /// Apply a menu zoom step to whichever window currently has focus, matching
 /// Electron's `zoomDashboardPopoutIfFocused`/`zoomWorkspaceSpaceWindowIfFocused`
@@ -381,14 +395,16 @@ fn poc_set_zoom(
         return Err("Zoom scale factor is outside the supported range.".to_string());
     }
     // Why: the renderer knows the log-scale level it just applied; tracking it
-    // here keeps `route_menu_zoom`'s per-window map in step with explicit
-    // `window.api.ui.setZoomLevel` calls from secondary windows.
-    if let Some(level) = zoom_level {
-        if level.is_finite() {
-            let map = window_zoom_levels();
-            if let Ok(mut levels) = map.lock() {
-                levels.insert(window.label().to_string(), level);
-            }
+    // here keeps the per-window map in step with explicit
+    // `window.api.ui.setZoomLevel` calls from secondary windows. A bare factor
+    // still records its derived level so `poc_get_zoom` round-trips.
+    let tracked = match zoom_level {
+        Some(level) if level.is_finite() => Some(level),
+        _ => zoom_level_for_factor(scale_factor),
+    };
+    if let Some(level) = tracked {
+        if let Ok(mut levels) = window_zoom_levels().lock() {
+            levels.insert(window.label().to_string(), level);
         }
     }
     window
@@ -398,7 +414,16 @@ fn poc_set_zoom(
 
 #[tauri::command]
 fn poc_get_zoom(window: WebviewWindow) -> Result<f64, String> {
-    window.scale_factor().map_err(|error| error.to_string())
+    // Why: Tauri exposes no webview zoom getter and `scale_factor()` reports
+    // the monitor DPI, not the zoom `set_zoom` applied — so the command
+    // answers from the per-window level both setters keep current, defaulting
+    // to 100% like Electron's `webFrame.getZoomFactor()`.
+    let level = window_zoom_levels()
+        .lock()
+        .ok()
+        .and_then(|levels| levels.get(window.label()).copied())
+        .unwrap_or(0.0);
+    Ok(zoom_factor_for_level(level))
 }
 
 /// Matches Electron's `ui:window-revealed`: repaint the webview without
@@ -1307,7 +1332,10 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{poc_host_info, step_ui_zoom_level, UI_ZOOM_MAX, UI_ZOOM_MIN};
+    use super::{
+        poc_host_info, step_ui_zoom_level, zoom_factor_for_level, zoom_level_for_factor,
+        UI_ZOOM_MAX, UI_ZOOM_MIN,
+    };
 
     #[test]
     fn host_info_identifies_the_tauri_transport() {
@@ -1352,5 +1380,24 @@ mod tests {
         assert_eq!(step_ui_zoom_level(1.5, "reset"), 0.0);
         assert_eq!(step_ui_zoom_level(UI_ZOOM_MAX, "in"), UI_ZOOM_MAX);
         assert_eq!(step_ui_zoom_level(UI_ZOOM_MIN, "out"), UI_ZOOM_MIN);
+    }
+
+    #[test]
+    fn zoom_factor_round_trips_through_the_shared_base() {
+        assert_eq!(zoom_factor_for_level(0.0), 1.0);
+        assert!((zoom_factor_for_level(1.0) - 1.2).abs() < 1e-12);
+        for level in [-3.0, -0.5, 0.5, 2.0, 5.0] {
+            let back =
+                zoom_level_for_factor(zoom_factor_for_level(level)).expect("factor maps back");
+            assert!((back - level).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn zoom_level_rejects_non_positive_factors() {
+        assert!(zoom_level_for_factor(0.0).is_none());
+        assert!(zoom_level_for_factor(-1.2).is_none());
+        assert!(zoom_level_for_factor(f64::NAN).is_none());
+        assert!(zoom_level_for_factor(f64::INFINITY).is_none());
     }
 }
