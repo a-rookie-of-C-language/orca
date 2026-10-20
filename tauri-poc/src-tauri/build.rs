@@ -10,6 +10,7 @@ fn main() {
             "poc_read_file_data_url",
             "poc_platform_info",
             "poc_app_identity",
+            "poc_get_windows_administrator_status",
             "poc_is_maximized",
             "poc_is_minimized",
             "poc_hide_to_tray",

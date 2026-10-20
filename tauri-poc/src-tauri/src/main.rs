@@ -46,6 +46,7 @@ mod second_instance;
 mod system_tray;
 mod updater;
 mod window_state;
+mod windows_admin;
 mod workspace_space;
 
 use application_menu_spec::{application_menu_bar, ids, MenuEntry, MenuPlatform};
@@ -1208,6 +1209,7 @@ fn main() {
             poc_read_file_data_url,
             poc_platform_info,
             poc_app_identity,
+            windows_admin::poc_get_windows_administrator_status,
             poc_is_maximized,
             poc_is_minimized,
             poc_minimize,

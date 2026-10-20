@@ -28,6 +28,7 @@
     "allow-poc-read-file-data-url",
     "allow-poc-platform-info",
     "allow-poc-app-identity",
+    "allow-poc-get-windows-administrator-status",
     "allow-poc-is-maximized",
     "allow-poc-is-minimized",
     "allow-poc-hide-to-tray",

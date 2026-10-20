@@ -195,6 +195,11 @@ export function createTauriNativeAppApi(): Partial<AppApi> {
   return {
     ...createWebAppApi().app,
     getIdentity: () => invokeNative<TauriNativeAppIdentity>('poc_app_identity'),
+    // Why native: Settings shows the same elevation row as Electron. The
+    // Rust command runs the same bundled launcher probe, so the web null
+    // fallback only applies off the Tauri host.
+    getWindowsAdministratorStatus: () =>
+      invokeNative<boolean | null>('poc_get_windows_administrator_status'),
     // Tauri owns a local orcad runtime through the same RPC boundary as a
     // paired desktop. Query its durable inventory so existing Codex/Claude
     // chats are restored even when the new-chat preference is disabled.
@@ -224,6 +229,8 @@ export function createTauriNativeAppNamespaceApi(): Pick<PreloadApi, 'app'> {
     app: {
       ...fallback,
       getIdentity: api.getIdentity ?? fallback.getIdentity,
+      getWindowsAdministratorStatus:
+        api.getWindowsAdministratorStatus ?? fallback.getWindowsAdministratorStatus,
       holdsStructuredAgentSessions:
         api.holdsStructuredAgentSessions ?? fallback.holdsStructuredAgentSessions,
       onStructuredAgentSessionsHeldChanged:

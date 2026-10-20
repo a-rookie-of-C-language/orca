@@ -126,6 +126,10 @@ first native slice covers the low-risk operations that the renderer already expe
 - single-instance enforcement: a second launch reuses the existing Tauri process instead of
   starting another `orcad` owner, and forwards skill-share links plus supported local documents
   to the existing renderer window. Proven live by `tauri-poc/scripts/check-second-instance.mjs`.
+- Windows administrator status through the same bundled launcher probe Electron
+  main runs (orca.exe --orca-administrator-status, 3s budget, true/false/null
+  vocabulary), so Settings shows the identical elevation row. Proven live by
+  	auri-poc/scripts/check-admin-status.mjs.
 - native desktop notifications through Tauri's notification plugin; the existing renderer
   notification contract remains the compatibility layer, including notification ids, dismissal,
   and click-to-focus routing back into the workspace. Registration plus a labeled
