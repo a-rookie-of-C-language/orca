@@ -134,6 +134,12 @@ first native slice covers the low-risk operations that the renderer already expe
   repo copy over Vite's /@fs route in dev, the staged resources bundle as a
   ile:// URL when packaged. Proven live by
   	auri-poc/scripts/check-feature-wall-assets.mjs.
+- floating terminal cwd, floating markdown directory, picker trust and markdown
+  resolution through the owned orcad runtime (`host.floating.*`), reusing the same
+  headless-safe resolvers Electron main calls. Native dialogs stay in the renderer
+  (Tauri dialog plugin) while trust and document resolution run in orcad. The two
+  reads are proven live by
+  tauri-poc/scripts/check-floating-workspace.mjs.
 - native desktop notifications through Tauri's notification plugin; the existing renderer
   notification contract remains the compatibility layer, including notification ids, dismissal,
   and click-to-focus routing back into the workspace. Registration plus a labeled

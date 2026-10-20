@@ -8,7 +8,8 @@ import { createWebAppApi } from './preload-api/web-app-api'
 import { createWebRuntimeApi } from './preload-api/web-runtime-api'
 import { callRuntimeResult } from './preload-api/web-runtime-calls'
 import { getBrowserPlatform } from './preload-api/web-storage'
-import { invokeNative, isTauriNativeHost } from './tauri-native-host'
+import type { MarkdownDocument } from '../../../shared/filesystem-entry-types'
+import { invokeNative, invokePlugin, isTauriNativeHost } from './tauri-native-host'
 import { prepareAndInvokeAppRestart } from '../../../preload/renderer-restart-wiring'
 
 type TauriNativePlatformInfo = Awaited<ReturnType<PlatformApi['get']>>
@@ -204,6 +205,46 @@ export function createTauriNativeAppApi(): Partial<AppApi> {
     // Rust answers the same /@fs dev and file:// packaged shapes as
     // Electron, so the web / fallback only applies off the Tauri host.
     getFeatureWallAssetBaseUrl: () => invokeNative<string>('poc_get_feature_wall_asset_base_url'),
+    // Why orcad: floating cwd, markdown directory and trust live in the owned runtime like
+    // Electron main, so the web empty-string/null fallbacks only apply off the Tauri host.
+    getFloatingTerminalCwd: (args) =>
+      callRuntimeResult<string>('host.floating.getTerminalCwd', args ?? {}),
+    getFloatingMarkdownDirectory: () =>
+      callRuntimeResult<string>('host.floating.getMarkdownDirectory'),
+    pickFloatingMarkdownDocument: async () => {
+      const directory = await callRuntimeResult<string>('host.floating.getMarkdownDirectory')
+      const picked = await invokePlugin<string | string[] | null>('dialog', 'open', {
+        options: {
+          title: 'Select markdown document',
+          defaultPath: directory,
+          multiple: false,
+          filters: [{ name: 'Markdown', extensions: ['md', 'mdx', 'markdown'] }]
+        }
+      })
+      const filePath = Array.isArray(picked) ? picked[0] : picked
+      if (!filePath) {
+        return null
+      }
+      return callRuntimeResult<MarkdownDocument>('host.floating.resolveMarkdownDocument', {
+        filePath,
+        directory
+      })
+    },
+    pickFloatingWorkspaceDirectory: async () => {
+      const picked = await invokePlugin<string | string[] | null>('dialog', 'open', {
+        options: {
+          title: 'Select floating workspace directory',
+          directory: true,
+          multiple: false
+        }
+      })
+      const dirPath = Array.isArray(picked) ? picked[0] : picked
+      if (!dirPath) {
+        return null
+      }
+      await callRuntimeResult<void>('host.floating.trustDirectory', { dirPath })
+      return dirPath
+    },
     // Tauri owns a local orcad runtime through the same RPC boundary as a
     // paired desktop. Query its durable inventory so existing Codex/Claude
     // chats are restored even when the new-chat preference is disabled.
@@ -241,6 +282,13 @@ export function createTauriNativeAppNamespaceApi(): Pick<PreloadApi, 'app'> {
         api.holdsStructuredAgentSessions ?? fallback.holdsStructuredAgentSessions,
       onStructuredAgentSessionsHeldChanged:
         api.onStructuredAgentSessionsHeldChanged ?? fallback.onStructuredAgentSessionsHeldChanged,
+      getFloatingTerminalCwd: api.getFloatingTerminalCwd ?? fallback.getFloatingTerminalCwd,
+      getFloatingMarkdownDirectory:
+        api.getFloatingMarkdownDirectory ?? fallback.getFloatingMarkdownDirectory,
+      pickFloatingMarkdownDocument:
+        api.pickFloatingMarkdownDocument ?? fallback.pickFloatingMarkdownDocument,
+      pickFloatingWorkspaceDirectory:
+        api.pickFloatingWorkspaceDirectory ?? fallback.pickFloatingWorkspaceDirectory,
       reload: api.reload ?? fallback.reload,
       relaunch: api.relaunch ?? fallback.relaunch,
       restart: api.restart ?? fallback.restart

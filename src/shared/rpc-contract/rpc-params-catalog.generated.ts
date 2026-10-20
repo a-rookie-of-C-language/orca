@@ -225,6 +225,11 @@ import {
 import { FileOpen, WorktreeSelector } from './files-target-params'
 import { TerminalArtifactFile, TerminalArtifactFileWrite } from './files-terminal-artifact-params'
 import {
+  FloatingTerminalCwdRpcParams,
+  ResolveFloatingMarkdownDocumentParams,
+  TrustFloatingWorkspaceDirectoryParams
+} from './floating-workspace-params'
+import {
   FolderWorkspaceCreate,
   FolderWorkspacePathStatus,
   FolderWorkspaceSelector,
@@ -1102,6 +1107,10 @@ export const RPC_PARAMS_BY_METHOD = {
   'gitlab.updateMRState': UpdateMrState,
   'gitlab.workItemByPath': WorkItemByPath,
   'gitlab.workItemDetails': WorkItemDetails,
+  'host.floating.getMarkdownDirectory': null,
+  'host.floating.getTerminalCwd': FloatingTerminalCwdRpcParams,
+  'host.floating.resolveMarkdownDocument': ResolveFloatingMarkdownDocumentParams,
+  'host.floating.trustDirectory': TrustFloatingWorkspaceDirectoryParams,
   'host.gitBash.isAvailable': null,
   'host.niubash.isAvailable': null,
   'host.platform': null,

@@ -29,6 +29,18 @@ import type { RuntimeReferenceFindParams } from '../../shared/runtime-reference-
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 import type { LayoutApplyReply } from '../../shared/workspace-layout/workspace-layout-command-types'
 import { rekeyMovedPaneOwners } from './moved-pane-owner-rekey'
+import type { Store } from '../persistence'
+import type { FloatingTerminalCwdRequest } from '../../shared/ui-chrome-types'
+import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
+import {
+  ensureDefaultFloatingWorkspacePath,
+  resolveFloatingTerminalCwd as resolveFloatingTerminalCwdForStore,
+  trustFloatingWorkspaceDirectory as trustFloatingWorkspaceDirectoryForStore
+} from '../ipc/floating-workspace-directory'
+import {
+  isMarkdownDocumentName,
+  markdownDocumentFromFilePath
+} from '../../shared/markdown-document-paths'
 import { applyWindowLayoutCommand, type WindowLayoutCommand } from './runtime-layout-apply'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
 import type { WslHostStatus } from '../../shared/wsl-host-types'
@@ -224,6 +236,37 @@ class OrcaRuntimeService extends OrcaRuntimeWithMigrationCatalog {
   /** The launch record when it is already open, for a reader that must not wait for it. */
   openedAgentSessionRecordStore(): AgentSessionRecordStore | null {
     return peekOpenedAgentSessionRecordStore()
+  }
+
+  /** Resolves the launch directory for global Floating Terminal tabs, like Electron main. */
+  async getFloatingTerminalCwd(args?: FloatingTerminalCwdRequest): Promise<string> {
+    return resolveFloatingTerminalCwdForStore(this.requireStore(), args)
+  }
+
+  /** Resolves the app-owned directory for auto-created Floating Workspace markdown notes. */
+  async getFloatingMarkdownDirectory(): Promise<string> {
+    return ensureDefaultFloatingWorkspacePath()
+  }
+
+  /** Trusts a picker-approved directory for future floating terminal cwds. */
+  async trustFloatingWorkspaceDirectory(dirPath: string): Promise<void> {
+    const store = this.requireStore()
+    if (!store.updateSettings) {
+      throw new Error('Floating workspace trust requires settings writes on this host.')
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: orcad persists the full settings document; the runtime store only narrows the read view.
+    const fullStore = store as unknown as Pick<Store, 'getSettings' | 'updateSettings'>
+    await trustFloatingWorkspaceDirectoryForStore(fullStore, dirPath)
+  }
+
+  /** Resolves a picked file into the markdown document Electron would return. */
+  resolveFloatingMarkdownDocument(filePath: string, directory: string): MarkdownDocument {
+    if (!isMarkdownDocumentName(filePath)) {
+      throw new Error('Selected file is not a markdown document.')
+    }
+    return markdownDocumentFromFilePath(directory, filePath, {
+      outsideRootRelativePath: 'basename'
+    })
   }
 }
 // Linear installs these methods on the final runtime prototype below.

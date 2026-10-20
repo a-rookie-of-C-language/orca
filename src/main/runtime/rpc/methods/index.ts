@@ -46,6 +46,7 @@ import { PLUGIN_METHODS } from './plugins'
 import { SKILL_METHODS } from './skills'
 import { CLIPBOARD_METHODS } from './clipboard'
 import { HOST_CAPABILITY_METHODS } from './host-capabilities'
+import { HOST_FLOATING_METHODS } from './host-floating'
 import { WSL_HOST_METHODS } from './wsl-hosts'
 import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
 import { RUNTIME_CLIENT_CAPABILITY_METHODS } from './runtime-client-capabilities'
@@ -132,6 +133,7 @@ export const ALL_RPC_METHODS = [
   ...SKILL_METHODS,
   ...CLIPBOARD_METHODS,
   ...HOST_CAPABILITY_METHODS,
+  ...HOST_FLOATING_METHODS,
   ...WSL_HOST_METHODS,
   ...MOBILE_WEB_BUNDLE_METHODS,
   ...RUNTIME_CLIENT_CAPABILITY_METHODS,
