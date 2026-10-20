@@ -416,6 +416,10 @@ Not migrated yet:
   and returns status to idle like Electron, while plain signed-feed cards keep
   dismissing renderer-locally (resolver unit tests; proven live by
   `tauri-poc/scripts/check-updater-dismiss.mjs`: pinned check, dismiss, idle, pin cleared).
+  The release list itself is cached per channel like Electron's
+  `ReleaseBuildListCache` (5-minute TTL, `force` refresh, one shared in-flight
+  fetch, failed loads never cached), so picker mounts and modifier checks cost
+  one GitHub request per channel instead of one per mount.
   The Window menu gains the macOS-only `Zoom` entry (Electron `role: 'zoom'`),
   routed to the same maximize/restore pair the renderer uses, and the Quit item
   keeps Electron's platform convention: `Cmd+Q` on macOS, `Ctrl+Q` on Linux,

@@ -1,12 +1,16 @@
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 use url::Url;
 
 const GITHUB_RELEASES_PER_PAGE: u32 = 100;
 const GITHUB_API_TIMEOUT_SECS: u64 = 8;
+/// Mirrors Electron's release-list cache TTL: a few minutes of picker
+/// browsing costs one request per channel instead of one per mount.
+const RELEASE_BUILD_CACHE_TTL_MS: u64 = 5 * 60_000;
 
 pub const EVENT_UPDATER_STATUS: &str = "updater:status";
 
@@ -70,7 +74,7 @@ pub struct UpdaterBuildListArgs {
     pub force: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeReleaseBuild {
     pub tag: String,
@@ -111,6 +115,7 @@ pub struct UpdaterState {
     pending_bytes: Mutex<Option<Vec<u8>>>,
     status: Mutex<NativeUpdaterStatus>,
     pending_channel_build: Mutex<Option<ChannelBuildInstall>>,
+    release_build_cache: ReleaseBuildListCache,
 }
 
 impl Default for UpdaterState {
@@ -120,6 +125,7 @@ impl Default for UpdaterState {
             pending_bytes: Mutex::new(None),
             status: Mutex::new(NativeUpdaterStatus::Idle),
             pending_channel_build: Mutex::new(None),
+            release_build_cache: ReleaseBuildListCache::new(RELEASE_BUILD_CACHE_TTL_MS),
         }
     }
 }
@@ -132,6 +138,86 @@ pub struct ChannelBuildInstall {
     version: String,
     installer_url: Option<String>,
     release_url: String,
+}
+
+fn updater_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
+#[derive(Debug, Clone)]
+struct CachedReleaseBuildEntry {
+    started_at_ms: u64,
+    cell: Arc<tokio::sync::OnceCell<Result<Vec<NativeReleaseBuild>, String>>>,
+}
+
+/// Per-channel cache of listed release builds, mirroring Electron's
+/// `ReleaseBuildListCache`: repeats inside the TTL share one entry, a forced
+/// refresh starts a new load, concurrent callers share the in-flight fetch,
+/// and a failed load never poisons the next call.
+pub struct ReleaseBuildListCache {
+    ttl_ms: u64,
+    clock: Box<dyn Fn() -> u64 + Send + Sync>,
+    entries: Mutex<HashMap<String, CachedReleaseBuildEntry>>,
+}
+
+impl ReleaseBuildListCache {
+    fn new(ttl_ms: u64) -> Self {
+        Self::with_clock(ttl_ms, Box::new(updater_now_ms))
+    }
+
+    fn with_clock(ttl_ms: u64, clock: Box<dyn Fn() -> u64 + Send + Sync>) -> Self {
+        Self {
+            ttl_ms,
+            clock,
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn list<F, Fut>(
+        &self,
+        channel: &str,
+        force: bool,
+        load: F,
+    ) -> Result<Vec<NativeReleaseBuild>, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<Vec<NativeReleaseBuild>, String>>,
+    {
+        if !force {
+            let fresh = self.entries.lock().ok().and_then(|entries| {
+                entries.get(channel).cloned().filter(|entry| {
+                    entry.started_at_ms.saturating_add(self.ttl_ms) > (self.clock)()
+                })
+            });
+            if let Some(entry) = fresh {
+                return entry.cell.get_or_init(load).await.clone();
+            }
+        }
+        let entry = CachedReleaseBuildEntry {
+            started_at_ms: (self.clock)(),
+            cell: Arc::new(tokio::sync::OnceCell::new()),
+        };
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.insert(channel.to_string(), entry.clone());
+        }
+        let result = entry.cell.get_or_init(load).await.clone();
+        if result.is_err() {
+            // Why only our own entry: a forced reload may have replaced it
+            // while this load was in flight; that entry stays servable.
+            if let Ok(mut entries) = self.entries.lock() {
+                let ours = entries
+                    .get(channel)
+                    .is_some_and(|current| Arc::ptr_eq(&current.cell, &entry.cell));
+                if ours {
+                    entries.remove(channel);
+                }
+            }
+        }
+        result
+    }
 }
 
 fn configured_update_source() -> Result<(Vec<Url>, String), String> {
@@ -373,7 +459,13 @@ async fn check_github_channel_build(
     } else {
         channel.as_str()
     };
-    let builds = match list_github_builds(channel_name).await {
+    // Why cached: the picker and modifier checks re-list on every mount,
+    // and each list was one GitHub API request against the shared quota.
+    let builds = match state
+        .release_build_cache
+        .list(channel_name, false, || list_github_builds(channel_name))
+        .await
+    {
         Ok(builds) => builds,
         Err(message) => {
             let status = NativeUpdaterStatus::Error {
@@ -505,15 +597,20 @@ pub async fn poc_updater_check(
 }
 
 /// Lists published builds for the settings picker without coupling Tauri to the
-/// Electron updater's in-process release cache.
+/// Electron updater's in-process release cache: repeats inside the TTL share
+/// one entry and only `force` starts a new load.
 #[tauri::command]
-pub async fn poc_updater_list_builds(args: UpdaterBuildListArgs) -> NativeReleaseBuildListResult {
-    // Tauri does not keep a process-global release cache yet, so every request
-    // is already equivalent to Electron's forced refresh path.
-    let _force = args.force.unwrap_or(false);
+pub async fn poc_updater_list_builds(
+    state: State<'_, UpdaterState>,
+    args: UpdaterBuildListArgs,
+) -> Result<NativeReleaseBuildListResult, String> {
     let channel = args.channel;
-    let result = list_github_builds(&channel).await;
-    match result {
+    let force = args.force.unwrap_or(false);
+    let result = state
+        .release_build_cache
+        .list(&channel, force, || list_github_builds(&channel))
+        .await;
+    Ok(match result {
         Ok(builds) => NativeReleaseBuildListResult {
             ok: true,
             channel,
@@ -526,7 +623,7 @@ pub async fn poc_updater_list_builds(args: UpdaterBuildListArgs) -> NativeReleas
             builds: None,
             message: Some(message),
         },
-    }
+    })
 }
 
 async fn list_github_builds(channel: &str) -> Result<Vec<NativeReleaseBuild>, String> {
@@ -705,9 +802,11 @@ mod tests {
         channel_check_kind, compare_release_versions, has_installable_asset,
         is_perf_prerelease_version, is_supported_release_version, release_channel_for_version,
         resolve_channel_build, should_abandon_channel_card, ChannelCheckKind, NativeReleaseBuild,
-        NativeUpdaterStatus, UpdaterCheckArgs,
+        NativeUpdaterStatus, ReleaseBuildListCache, UpdaterCheckArgs, RELEASE_BUILD_CACHE_TTL_MS,
     };
     use std::cmp::Ordering;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering as AtomicOrdering};
+    use std::sync::Arc;
 
     fn channel_build(tag: &str, version: &str) -> NativeReleaseBuild {
         NativeReleaseBuild {
@@ -719,6 +818,17 @@ mod tests {
             release_url: format!("https://github.com/stablyai/orca/releases/tag/{tag}"),
             installer_url: None,
         }
+    }
+
+    fn build_list_cache(now: Arc<AtomicU64>) -> ReleaseBuildListCache {
+        ReleaseBuildListCache::with_clock(
+            RELEASE_BUILD_CACHE_TTL_MS,
+            Box::new(move || now.load(AtomicOrdering::SeqCst)),
+        )
+    }
+
+    fn rc_builds() -> Vec<NativeReleaseBuild> {
+        vec![channel_build("v1.4.214-rc.1", "1.4.214-rc.1")]
     }
 
     fn check_args(
@@ -913,6 +1023,203 @@ mod tests {
             },
             true
         ));
+    }
+
+    #[test]
+    fn release_build_cache_serves_repeats_within_the_ttl() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = build_list_cache(Arc::clone(&now));
+        let loads = Arc::new(AtomicUsize::new(0));
+        for _ in 0..2 {
+            let counter = Arc::clone(&loads);
+            let builds = tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+            .expect("cached list");
+            assert_eq!(builds.len(), 1);
+        }
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn release_build_cache_reloads_after_the_ttl() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = build_list_cache(Arc::clone(&now));
+        let loads = Arc::new(AtomicUsize::new(0));
+        for _ in 0..2 {
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+            .expect("cached list");
+            now.fetch_add(RELEASE_BUILD_CACHE_TTL_MS + 1, AtomicOrdering::SeqCst);
+        }
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 2);
+    }
+
+    #[test]
+    fn release_build_cache_reloads_on_force_inside_the_ttl() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = build_list_cache(Arc::clone(&now));
+        let loads = Arc::new(AtomicUsize::new(0));
+        for force in [false, true] {
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", force, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+            .expect("cached list");
+        }
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 2);
+    }
+
+    #[test]
+    fn release_build_cache_keys_by_channel() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = build_list_cache(Arc::clone(&now));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        for channel in ["rc", "hourly", "rc"] {
+            let seen_channels = Arc::clone(&seen);
+            tauri::async_runtime::block_on(cache.list(channel, false, || async move {
+                seen_channels
+                    .lock()
+                    .ok()
+                    .map(|mut channels| channels.push(channel.to_string()));
+                Ok(rc_builds())
+            }))
+            .expect("cached list");
+        }
+        assert_eq!(
+            seen.lock().ok().map(|channels| channels.clone()),
+            Some(vec!["rc".to_string(), "hourly".to_string()])
+        );
+    }
+
+    #[test]
+    fn release_build_cache_does_not_keep_failed_loads() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = build_list_cache(Arc::clone(&now));
+        let loads = Arc::new(AtomicUsize::new(0));
+        let first = {
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Err("GitHub rate limit reached.".to_string())
+            }))
+        };
+        assert!(first.is_err());
+        let second = {
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+        };
+        assert_eq!(second.expect("retry lists").len(), 1);
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 2);
+    }
+
+    #[test]
+    fn release_build_cache_shares_one_in_flight_load() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = Arc::new(build_list_cache(Arc::clone(&now)));
+        let loads = Arc::new(AtomicUsize::new(0));
+        let entered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        std::thread::scope(|scope| {
+            let thread_cache = Arc::clone(&cache);
+            let thread_loads = Arc::clone(&loads);
+            let thread_entered = Arc::clone(&entered);
+            let thread_barrier = Arc::clone(&barrier);
+            scope.spawn(move || {
+                thread_barrier.wait();
+                tauri::async_runtime::block_on(thread_cache.list("rc", false, || async move {
+                    thread_entered.store(true, AtomicOrdering::SeqCst);
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    thread_loads.fetch_add(1, AtomicOrdering::SeqCst);
+                    Ok(rc_builds())
+                }))
+                .expect("shared load");
+            });
+            barrier.wait();
+            // Why spin: the second caller must arrive while the first fetch
+            // is in flight, or it would legitimately start its own load.
+            for _ in 0..5_000 {
+                if entered.load(AtomicOrdering::SeqCst) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            assert!(entered.load(AtomicOrdering::SeqCst));
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+            .expect("shared load");
+        });
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn release_build_cache_keeps_a_forced_reload_over_a_failing_entry() {
+        let now = Arc::new(AtomicU64::new(1_000_000));
+        let cache = Arc::new(build_list_cache(Arc::clone(&now)));
+        let loads = Arc::new(AtomicUsize::new(0));
+        let entered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (fail_tx, fail_rx) = tokio::sync::oneshot::channel::<String>();
+        let fail_rx = Arc::new(std::sync::Mutex::new(Some(fail_rx)));
+        std::thread::scope(|scope| {
+            let (thread_cache, thread_loads, thread_entered, thread_fail_rx) = (
+                Arc::clone(&cache),
+                Arc::clone(&loads),
+                Arc::clone(&entered),
+                Arc::clone(&fail_rx),
+            );
+            scope.spawn(move || {
+                tauri::async_runtime::block_on(thread_cache.list(
+                    "rc",
+                    false,
+                    move || async move {
+                        thread_loads.fetch_add(1, AtomicOrdering::SeqCst);
+                        thread_entered.store(true, AtomicOrdering::SeqCst);
+                        let receiver = thread_fail_rx
+                            .lock()
+                            .ok()
+                            .and_then(|mut receiver| receiver.take())
+                            .expect("failing load owns the receiver");
+                        Err(receiver.await.unwrap_or_else(|_| "timed out".to_string()))
+                    },
+                ))
+                .expect_err("first load fails");
+            });
+            for _ in 0..5_000 {
+                if entered.load(AtomicOrdering::SeqCst) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            assert!(entered.load(AtomicOrdering::SeqCst));
+            let counter = Arc::clone(&loads);
+            tauri::async_runtime::block_on(cache.list("rc", true, || async move {
+                counter.fetch_add(1, AtomicOrdering::SeqCst);
+                Ok(rc_builds())
+            }))
+            .expect("forced reload");
+            let _ = fail_tx.send("timed out".to_string());
+        });
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 2);
+        // The surviving forced entry serves the next call without a third load.
+        let counter = Arc::clone(&loads);
+        let builds = tauri::async_runtime::block_on(cache.list("rc", false, || async move {
+            counter.fetch_add(1, AtomicOrdering::SeqCst);
+            Ok(rc_builds())
+        }))
+        .expect("forced entry serves");
+        assert_eq!(builds.len(), 1);
+        assert_eq!(loads.load(AtomicOrdering::SeqCst), 2);
     }
 }
 
