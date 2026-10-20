@@ -7,6 +7,7 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import type { RuntimeFileOperationArgs } from './runtime-file-client-types'
 import { chatScratchFileAddress } from './runtime-chat-scratch-file-address'
+import { isTauriNativeHost } from '@/web/tauri-native-host'
 
 export function assertExternalSshReadOwnership(
   target: RuntimeClientTarget,
@@ -49,11 +50,19 @@ export function getRuntimeFileReadScope(
   return target.kind === 'environment' ? `runtime:${target.environmentId}` : connectionId
 }
 
+/** Tauri's local runtime owns direct SSH reads; Electron keeps its preload transport. */
+export function isTauriDirectSshFileContext(context: {
+  target: RuntimeClientTarget
+  connectionId?: string
+}): boolean {
+  return isTauriNativeHost() && context.target.kind === 'local' && Boolean(context.connectionId)
+}
+
 export function isRemoteRuntimeFileOperation(
   context: RuntimeFileOperationArgs,
   path: string
 ): boolean {
-  return getRemoteFileArgs(context, path) !== null
+  return getRemoteFileMutationArgs(context, path) !== null
 }
 
 export function canReadRelativeRuntimeFile(
@@ -79,6 +88,43 @@ export function getRemoteFileArgs(
   if (target.kind !== 'environment' || !context.worktreeId) {
     return null
   }
+  return getRemoteFileRoute(context, absolutePath, target)
+}
+
+/** Routes mutations through the local runtime for direct SSH worktrees. */
+export function getRemoteFileMutationArgs(
+  context: RuntimeFileOperationArgs,
+  absolutePath: string
+): {
+  target: RuntimeClientTarget
+  worktreeId: string
+  worktreeSelector: string
+  relativePath: string
+} | null {
+  const target = context.target
+  if (
+    !context.worktreeId ||
+    (target.kind !== 'environment' &&
+      !(target.kind === 'local' && context.connectionId && isTauriNativeHost()))
+  ) {
+    return null
+  }
+  return getRemoteFileRoute(context, absolutePath, target)
+}
+
+function getRemoteFileRoute<TTarget extends RuntimeClientTarget>(
+  context: RuntimeFileOperationArgs,
+  absolutePath: string,
+  target: TTarget
+): {
+  target: TTarget
+  worktreeId: string
+  worktreeSelector: string
+  relativePath: string
+} | null {
+  if (!context.worktreeId) {
+    return null
+  }
   const relativePath = getRelativePathInsideWorktree(context.worktreePath, absolutePath)
   // Outside every workspace, a chat's scratch file is addressed by its folder on the host.
   const address =
@@ -97,7 +143,13 @@ export function getRemoteFileArgs(
 }
 
 export function hasRemoteRuntimeOwner(context: RuntimeFileOperationArgs): boolean {
-  return context.target.kind === 'environment' && Boolean(context.worktreeId)
+  return (
+    (context.target.kind === 'environment' ||
+      (context.target.kind === 'local' &&
+        context.connectionId !== undefined &&
+        isTauriNativeHost())) &&
+    Boolean(context.worktreeId)
+  )
 }
 
 export function assertLocalFilesystemFallbackAllowed(context: RuntimeFileOperationArgs): void {

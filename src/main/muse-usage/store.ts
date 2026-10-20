@@ -1,5 +1,6 @@
-import { app } from 'electron'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import type {
   MuseUsageBreakdownKind,
   MuseUsageBreakdownRow,
@@ -26,12 +27,33 @@ import type { MuseUsageDailyAggregate, MuseUsagePersistedState, MuseUsageSession
 
 let museUsageFile: string | null = null
 
-export function initMuseUsagePath(): void {
-  museUsageFile = join(app.getPath('userData'), 'orca-muse-usage.json')
+const require = createRequire(import.meta.url)
+
+function defaultUserDataPath(): string {
+  if (hasAppEnvironment()) {
+    return getAppEnvironment().getPath('userData')
+  }
+  const electron: unknown = require('electron')
+  if (
+    typeof electron === 'object' &&
+    electron !== null &&
+    'app' in electron &&
+    typeof electron.app === 'object' &&
+    electron.app !== null &&
+    'getPath' in electron.app &&
+    typeof electron.app.getPath === 'function'
+  ) {
+    return electron.app.getPath('userData')
+  }
+  throw new Error('Electron app environment is unavailable')
+}
+
+export function initMuseUsagePath(userDataPath?: string): void {
+  museUsageFile = join(userDataPath ?? defaultUserDataPath(), 'orca-muse-usage.json')
 }
 
 function getMuseUsageFile(): string {
-  museUsageFile ??= join(app.getPath('userData'), 'orca-muse-usage.json')
+  museUsageFile ??= join(defaultUserDataPath(), 'orca-muse-usage.json')
   return museUsageFile
 }
 
@@ -40,10 +62,11 @@ export class MuseUsageStore extends UsageProviderStoreLifecycle<
   MuseUsagePersistedState,
   'hasAnyMuseData'
 > {
-  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>) {
+  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>, userDataPath?: string) {
+    const cacheFile = userDataPath ? join(userDataPath, 'orca-muse-usage.json') : getMuseUsageFile()
     super(store, {
       logTag: '[muse-usage]',
-      resolveCacheFile: getMuseUsageFile,
+      resolveCacheFile: () => cacheFile,
       createDefaultState: getDefaultMuseUsageState,
       normalizeState: normalizeMuseUsageState,
       sourceKey: 'processedFiles',

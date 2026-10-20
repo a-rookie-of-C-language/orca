@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, truncateSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import { SPEECH_MODEL_CATALOG } from './model-catalog'
 import { ModelManager } from './model-manager'
 
@@ -46,6 +47,7 @@ describe('ModelManager Windows model path handling', () => {
     appGetPathMock.mockReset()
     netRequestMock.mockReset()
     appGetPathMock.mockImplementation(() => join(tmpdir(), 'orca-speech-models-test'))
+    installFakeAppEnvironment({ getPath: (name) => appGetPathMock(name) })
   })
 
   afterEach(() => {

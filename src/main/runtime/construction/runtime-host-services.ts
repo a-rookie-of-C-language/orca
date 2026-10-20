@@ -369,7 +369,10 @@ export abstract class OrcaRuntimeWithPreservedBranchCleanup extends OrcaRuntimeW
     getCachedWorktrees: () => this.resolvedWorktrees.peek()?.worktrees ?? null
   })
 
-  protected readonly aiVault = new RuntimeAiVaultCommands(() => this.prepareAiVaultSessionResumeFn)
+  protected readonly aiVault = new RuntimeAiVaultCommands(
+    () => this.prepareAiVaultSessionResumeFn,
+    (event) => this.clientEvents.emit(event)
+  )
 
   protected readonly claudeAgentTeams = new ClaudeAgentTeamsService()
 

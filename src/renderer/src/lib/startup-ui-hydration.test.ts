@@ -71,4 +71,32 @@ describe('startup UI hydration fallback', () => {
     expect(uiHydrated).toBe(false)
     expect(hydratePersistedUI).not.toHaveBeenCalled()
   })
+
+  it('replays the persisted zoom level through the native window API', () => {
+    const setZoomLevel = vi.fn()
+    const previous = globalThis.window?.api
+    try {
+      // Why: the test environment may or may not have a window; install a
+      // minimal `api.ui` surface so the assertion covers the Tauri path.
+      if (globalThis.window === undefined) {
+        ;(globalThis as { window?: unknown }).window = {}
+      }
+      ;(globalThis.window as { api?: unknown }).api = {
+        ui: { setZoomLevel }
+      }
+      const hydratePersistedUI = vi.fn()
+
+      hydratePersistedUIAfterStartupRead({
+        persistedUI: makePersistedUI({ uiZoomLevel: 2.5 }),
+        cancelled: false,
+        hydratePersistedUI
+      })
+
+      expect(setZoomLevel).toHaveBeenCalledWith(2.5)
+    } finally {
+      if (globalThis.window) {
+        ;(globalThis.window as { api?: unknown }).api = previous
+      }
+    }
+  })
 })

@@ -1,17 +1,19 @@
 import { createWriteStream, rmSync } from 'node:fs'
 import { pipeline } from 'node:stream/promises'
-import { net } from 'electron'
 import {
   DOWNLOAD_IDLE_TIMEOUT_MS,
   getHeaderValue,
   parseContentRange,
   parseRetryAfterMs,
+  type DownloadRequest,
   type DownloadIncomingMessage,
   type DownloadTotals
 } from './speech-model-download-response'
 import type { HttpStatusError } from '../network/transient-download-error'
 
 export abstract class SpeechModelHttpDownload {
+  protected abstract createDownloadRequest(url: URL): DownloadRequest
+
   protected abstract reportDownloadProgress(modelId: string, progress: number): void
 
   protected downloadFile(
@@ -45,7 +47,7 @@ export abstract class SpeechModelHttpDownload {
       }
 
       let settled = false
-      let request: Electron.ClientRequest | null = null
+      let request: DownloadRequest | null = null
       let idleTimeout: ReturnType<typeof setTimeout> | null = null
       const onSignalAbort = (): void => {
         const activeRequest = request
@@ -142,8 +144,7 @@ export abstract class SpeechModelHttpDownload {
           .then(resolveOnce)
           .catch(rejectOnce)
       }
-      const onResponse = (incoming: Electron.IncomingMessage): void => {
-        const response = incoming as DownloadIncomingMessage
+      const onResponse = (response: DownloadIncomingMessage): void => {
         const contentLength = response.headers['content-length']
         const headerLength = Number.parseInt(getHeaderValue(contentLength) || '0', 10)
         const parsedLength =
@@ -242,7 +243,7 @@ export abstract class SpeechModelHttpDownload {
           })
       }
 
-      request = net.request({ method: 'GET', url: parsedUrl.toString() })
+      request = this.createDownloadRequest(parsedUrl)
       if (resumeOffset > 0) {
         request.setHeader('Range', `bytes=${resumeOffset}-`)
       }

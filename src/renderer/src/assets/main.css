@@ -177,6 +177,28 @@
     'SF Mono', SFMono-Regular, ui-monospace, 'Cascadia Code', Menlo, Consolas, 'Liberation Mono',
     monospace;
   --radius: 0.625rem;
+  /* Editorial surfaces used by the Claude-inspired visual refresh. */
+  --cds-surface-0: #f5f5f3;
+  --cds-surface-1: #fcfcfb;
+  --cds-surface-2: #ffffff;
+  --cds-surface-3: #ffffff;
+  --cds-surface-popover: #ffffff;
+  --cds-clay: #d97757;
+  --cds-clay-hover: #cc5a36;
+  --cds-on-clay: #ffffff;
+  --cds-text-primary: #151515;
+  --cds-text-secondary: #525252;
+  --cds-text-muted: #8a8a8a;
+  --cds-border: color-mix(in srgb, var(--cds-text-primary) 10%, transparent);
+  --cds-border-strong: color-mix(in srgb, var(--cds-text-primary) 20%, transparent);
+  --cds-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05), 0 2px 8px rgb(0 0 0 / 0.08);
+  --cds-shadow-md: 0 2px 4px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.08);
+  --cds-shadow-composer: 0 4px 20px rgb(0 0 0 / 0.035), inset 0 0 0 1px var(--cds-border);
+  --cds-shadow-composer-hover:
+    0 4px 24px rgb(0 0 0 / 0.06), inset 0 0 0 1px var(--cds-border-strong);
+  --cds-radius-panel: 10px;
+  --cds-radius-bubble: 18px;
+  --cds-radius-composer: 20px;
   --orca-security-background: #fff;
   --orca-security-foreground: #0a0a0a;
   --orca-security-card: #fff;
@@ -296,6 +318,24 @@
 /* ── Dark Mode ───────────────────────────────────────── */
 
 .dark {
+  --cds-surface-0: #0b0b0a;
+  --cds-surface-1: #151515;
+  --cds-surface-2: #1a1a19;
+  --cds-surface-3: #20201e;
+  --cds-surface-popover: #222220;
+  --cds-clay: #d97757;
+  --cds-clay-hover: #e08264;
+  --cds-on-clay: #ffffff;
+  --cds-text-primary: #f5f5f5;
+  --cds-text-secondary: #a3a3a3;
+  --cds-text-muted: #666666;
+  --cds-border: rgb(255 255 255 / 0.09);
+  --cds-border-strong: rgb(255 255 255 / 0.18);
+  --cds-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.4);
+  --cds-shadow-md: 0 2px 4px rgb(0 0 0 / 0.4), 0 6px 16px rgb(0 0 0 / 0.4);
+  --cds-shadow-composer: 0 4px 20px rgb(0 0 0 / 0.4), inset 0 0 0 1px var(--cds-border);
+  --cds-shadow-composer-hover:
+    0 4px 24px rgb(0 0 0 / 0.55), inset 0 0 0 1px var(--cds-border-strong);
   --orca-security-background: #0a0a0a;
   --orca-security-foreground: #fafafa;
   --orca-security-card: #171717;
@@ -888,6 +928,74 @@ body:has(> [data-slot='dialog-overlay'], > [data-slot='sheet-overlay']) {
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
+  background: var(--cds-surface-1);
+}
+
+/* Landing follows the same quiet surface ladder as chat, with the clay action
+   reserved for the one affirmative entry point. */
+.landing-screen {
+  background:
+    radial-gradient(
+      circle at 50% 34%,
+      color-mix(in srgb, var(--cds-clay) 7%, transparent),
+      transparent 36%
+    ),
+    var(--cds-surface-0);
+}
+
+.landing-mark {
+  background: var(--cds-surface-3);
+}
+
+.landing-title {
+  letter-spacing: -0.03em;
+}
+
+.landing-action {
+  box-shadow: var(--cds-shadow-sm);
+  transition:
+    background-color 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 150ms ease,
+    transform 100ms ease,
+    box-shadow 150ms ease;
+}
+
+.landing-action:active {
+  transform: scale(0.98);
+}
+
+.landing-action-primary {
+  border-color: var(--cds-clay);
+  background: var(--cds-clay);
+  color: var(--cds-on-clay);
+}
+
+.landing-action-primary:hover {
+  border-color: var(--cds-clay-hover);
+  background: var(--cds-clay-hover);
+}
+
+.orca-workspace-sidebar {
+  background: var(--cds-surface-0);
+  border-right-color: var(--cds-border);
+}
+
+.orca-workspace-sidebar [data-sidebar-section-title] {
+  color: var(--cds-text-muted);
+  letter-spacing: 0.08em;
+}
+
+.orca-workspace-sidebar [data-contextual-tour-target='sidebar-navigation'] > button:first-child {
+  border: 1px solid var(--cds-border);
+  background: var(--cds-surface-1);
+  box-shadow: var(--cds-shadow-sm);
+}
+
+.orca-workspace-sidebar
+  [data-contextual-tour-target='sidebar-navigation']
+  > button:first-child:hover {
+  border-color: var(--cds-border-strong);
+  background: var(--cds-surface-2);
 }
 
 /* Why: native windows have a stable content box and need no wake-time viewport reflow. */
@@ -966,8 +1074,8 @@ html.native-shell .app-layout {
   display: flex;
   flex-direction: row;
   align-items: center;
-  background: var(--bg-titlebar, var(--card));
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--cds-surface-2) 72%, var(--bg-titlebar, var(--card)));
+  border-bottom: 1px solid var(--cds-border);
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -987,7 +1095,7 @@ html.native-shell .app-layout {
   flex-shrink: 0;
   /* Why: in workspace view this strip sits directly above the worktree
      sidebar — match its surface so the left column reads as one panel. */
-  background: var(--worktree-sidebar);
+  background: var(--cds-surface-0);
   /* Why: draw the divider via inset shadow instead of border-bottom so the
      flex content area spans the full 36px. With border-bottom + border-box,
      the content area shrinks to 35px and flex-centered controls land at
@@ -1004,7 +1112,7 @@ html.native-shell .app-layout {
 /* Why: when the sidebar is collapsed this header floats over the tab strip,
    so keep the standard titlebar surface instead of the sidebar tint. */
 .titlebar-left-floating {
-  background: var(--bg-titlebar, var(--card));
+  background: var(--cds-surface-2);
 }
 
 .titlebar-traffic-light-pad {

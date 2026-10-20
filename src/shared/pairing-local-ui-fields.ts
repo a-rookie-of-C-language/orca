@@ -27,7 +27,10 @@ export const PAIRING_LOCAL_UI_FIELDS = [
   'agentsReadFilter',
   'agentsGroupBy',
   'activityClearedAtByPaneKey',
-  'manuallyUnreadTurnsByPaneKey'
+  'manuallyUnreadTurnsByPaneKey',
+  // Windows-only one-shot tray notice; each window answers from its own state,
+  // so a host value must never overwrite the local one in either direction.
+  'trayMinimizeNoticeShown'
 ] as const satisfies readonly (keyof PersistedUIState)[]
 
 export type PairingLocalUiField = (typeof PAIRING_LOCAL_UI_FIELDS)[number]

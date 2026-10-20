@@ -33,7 +33,9 @@ const tooltipContentVariants = cva('pointer-events-none z-[90] rounded-md text-x
   variants: {
     variant: {
       default:
-        'w-fit origin-(--radix-tooltip-content-transform-origin) animate-in bg-foreground px-3 py-1.5 text-balance text-background fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+        'w-fit origin-(--radix-tooltip-content-transform-origin) animate-in border border-border bg-popover px-3 py-1.5 text-balance text-popover-foreground shadow-floating fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
+      surface:
+        'w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover px-3 py-1.5 text-popover-foreground shadow-floating motion-safe:animate-in motion-safe:fade-in-0 data-[state=closed]:animate-none',
       'tab-preview':
         'w-64 max-w-[calc(100vw-1rem)] border border-border bg-popover p-3 text-popover-foreground shadow-floating motion-safe:animate-in motion-safe:fade-in-0 data-[state=closed]:animate-none'
     }
@@ -62,7 +64,7 @@ function TooltipContent({
       >
         {children}
         {showArrow ? (
-          <TooltipPrimitive.Arrow className="size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground" />
+          <TooltipPrimitive.Arrow className="size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-popover fill-popover" />
         ) : null}
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>

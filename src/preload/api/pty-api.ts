@@ -81,6 +81,7 @@ export type PtyApi = {
     snapshotKittyKeyboardFlags?: number
     snapshotTerminalOwner?: 'shell'
     snapshotSeq?: number
+    pendingEscapeTailAnsi?: string
     isReattach?: boolean
     isAlternateScreen?: boolean
     replay?: string

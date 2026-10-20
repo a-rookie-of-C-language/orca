@@ -42,7 +42,7 @@ export function resolveGroupOrder(args: {
         tabOrder.push(tabId)
       }
     }
-    groups.push({ id: stored.id, tabOrder })
+    groups.push({ id: stored.id, tabOrder, ...(stored.isChatPanel ? { isChatPanel: true } : {}) })
   }
   const unplaced = args.candidates.filter((candidate) => !placed.has(candidate.id))
   for (const candidate of [...unplaced].sort(compareUnplaced)) {

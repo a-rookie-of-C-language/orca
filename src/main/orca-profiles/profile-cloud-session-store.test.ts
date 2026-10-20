@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OrcaCloudSession } from './profile-cloud-session-store'
+import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 
 const safeStorageMock = vi.hoisted(() => ({
   decryptString: vi.fn((value: Buffer) => value.toString('utf-8')),
@@ -67,11 +68,18 @@ describe('Orca cloud session store', () => {
     safeStorageMock.encryptString.mockClear()
     safeStorageMock.isEncryptionAvailable.mockClear()
     safeStorageMock.isEncryptionAvailable.mockReturnValue(true)
+    setSecretStore({
+      isEncryptionAvailable: safeStorageMock.isEncryptionAvailable,
+      encryptString: safeStorageMock.encryptString,
+      decryptString: safeStorageMock.decryptString,
+      describeProtectionGap: () => null
+    })
   })
 
   afterEach(() => {
     rmSync(userDataPath, { recursive: true, force: true })
     vi.unstubAllEnvs()
+    _resetSecretStoreForTests()
   })
 
   it('persists encrypted sessions and reports encrypted persistence from memory and disk', async () => {

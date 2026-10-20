@@ -1,8 +1,8 @@
-import { app } from 'electron'
 import {
   cleanCloudServiceUrl as cleanUrl,
   cleanCloudServiceOrigin as cleanOrigin
 } from '../../shared/cloud-service-url'
+import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import { resolvePushGatewayOrigin } from '../runtime/push/push-gateway-origin'
 
 export type OrcaCloudAuthConfig = {
@@ -29,7 +29,7 @@ const PRODUCTION_RELAY_DIRECTOR_URL = 'https://relay.onorca.dev'
 // only reliable production signal for gating dev-only auth escape hatches.
 function isPackagedOrcaBuild(): boolean {
   try {
-    return app?.isPackaged === true
+    return hasAppEnvironment() && getAppEnvironment().isPackaged()
   } catch {
     return false
   }

@@ -1,7 +1,7 @@
-import { app } from 'electron'
 import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs'
 import { rename, rm } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { join } from 'node:path'
+import { getAppEnvironment } from '../../shared/app-environment'
 import type {
   SpeechModelManifest,
   SpeechModelState,
@@ -9,22 +9,28 @@ import type {
 } from '../../shared/speech-types'
 import { SPEECH_MODEL_CATALOG, getCatalogModel, isLocalSpeechModel } from './model-catalog'
 import { hasOpenAiSpeechApiKey } from './openai-api-key-store'
-import {
-  getSpeechModelCacheDirCandidates,
-  migrateSpeechModelCacheIfNeeded,
-  type SpeechModelCacheDir
-} from './model-cache-path'
+import { migrateSpeechModelCacheIfNeeded } from './model-cache-path'
+import { getSafeSpeechModelDir, prepareSpeechModelsDir } from './speech-model-manager-paths'
 import { SpeechModelDownloadTransport } from './speech-model-download-transport'
 import {
   removeModelDownloadFiles,
   removeModelDownloadStaging
 } from './speech-model-download-cleanup'
+import { createNodeSpeechModelDownloadRequest } from './node-speech-model-download-request'
+import type {
+  DownloadRequest,
+  SpeechModelDownloadRequestFactory
+} from './speech-model-download-response'
 
 type DownloadHandle = {
   abort: () => void
 }
 
 type ProgressCallback = (modelId: string, progress: number) => void
+
+function resolveDefaultModelsDir(): string {
+  return join(getAppEnvironment().getPath('userData'), 'speech-models')
+}
 
 export class ModelManager extends SpeechModelDownloadTransport {
   private modelsDir: string
@@ -34,10 +40,13 @@ export class ModelManager extends SpeechModelDownloadTransport {
   private modelStates = new Map<string, SpeechModelState>()
   private progressCallbacks = new Set<ProgressCallback>()
 
-  constructor(customModelsDir?: string) {
+  constructor(
+    customModelsDir?: string,
+    private readonly downloadRequestFactory: SpeechModelDownloadRequestFactory = createNodeSpeechModelDownloadRequest
+  ) {
     super()
-    const requestedModelsDir = customModelsDir || join(app.getPath('userData'), 'speech-models')
-    const prepared = this.prepareModelsDir(requestedModelsDir)
+    const requestedModelsDir = customModelsDir || resolveDefaultModelsDir()
+    const prepared = prepareSpeechModelsDir(requestedModelsDir)
     this.modelsDir = prepared.modelsDir
     this.migrationSourceDir = prepared.migrationSourceDir
     // Why: migration copies large model files, so run it async and gate state reads on it to keep the UI responsive.
@@ -57,23 +66,6 @@ export class ModelManager extends SpeechModelDownloadTransport {
 
   getModelsDir(): string {
     return this.modelsDir
-  }
-
-  private prepareModelsDir(requestedModelsDir: string): SpeechModelCacheDir {
-    let lastError: unknown = null
-    for (const candidate of getSpeechModelCacheDirCandidates(requestedModelsDir)) {
-      try {
-        mkdirSync(candidate.modelsDir, { recursive: true })
-        return candidate
-      } catch (error) {
-        lastError = error
-        if (candidate.migrationSourceDir) {
-          console.warn('[speech] Failed to prepare ASCII speech model cache:', error)
-        }
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error(String(lastError))
   }
 
   async getModelStates(): Promise<SpeechModelState[]> {
@@ -115,21 +107,7 @@ export class ModelManager extends SpeechModelDownloadTransport {
   }
 
   getModelDir(modelId: string): string {
-    return this.getSafeModelDir(modelId)
-  }
-
-  private getSafeModelDir(modelId: string, root: string = this.modelsDir): string {
-    const manifest = getCatalogModel(modelId)
-    if (!manifest) {
-      throw new Error(`Unknown model: ${modelId}`)
-    }
-    const modelsRoot = resolve(root)
-    const modelDir = resolve(modelsRoot, modelId)
-    const rel = relative(modelsRoot, modelDir)
-    if (rel.startsWith('..') || rel === '' || rel.includes('..') || resolve(rel) === rel) {
-      throw new Error(`Invalid model id: ${modelId}`)
-    }
-    return modelDir
+    return getSafeSpeechModelDir(modelId, this.modelsDir)
   }
 
   private validateModelFiles(manifest: SpeechModelManifest, modelDir: string): boolean {
@@ -250,7 +228,7 @@ export class ModelManager extends SpeechModelDownloadTransport {
     await rm(join(this.modelsDir, `${modelId}.tar.bz2`), { force: true })
     // Why: also delete the pre-migration copy, or the next launch re-migrates it and resurrects the model.
     if (this.migrationSourceDir) {
-      const sourceModelDir = this.getSafeModelDir(modelId, this.migrationSourceDir)
+      const sourceModelDir = getSafeSpeechModelDir(modelId, this.modelsDir, this.migrationSourceDir)
       if (existsSync(sourceModelDir)) {
         await rm(sourceModelDir, { recursive: true, force: true })
       }
@@ -334,5 +312,9 @@ export class ModelManager extends SpeechModelDownloadTransport {
 
   protected reportDownloadProgress(modelId: string, progress: number): void {
     this.updateState(modelId, 'downloading', progress)
+  }
+
+  protected createDownloadRequest(url: URL): DownloadRequest {
+    return this.downloadRequestFactory(url)
   }
 }

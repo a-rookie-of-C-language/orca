@@ -6,6 +6,7 @@ import { useReadOnScreenAttention } from '../hooks/useReadOnScreenAttention'
 import { useEditorExternalWatch } from '../hooks/useEditorExternalWatch'
 import { useAppMenuPaste } from '../hooks/useAppMenuPaste'
 import { useAppMenuSelectionActions } from '../hooks/useAppMenuSelectionActions'
+import { useAppMenuEditActions } from '../hooks/useAppMenuEditActions'
 import { useLargeTextControlPaste } from '../hooks/useLargeTextControlPaste'
 import {
   resolvePrimarySelectionMiddleClickPaste,
@@ -61,6 +62,7 @@ export function useAppShellServices(): void {
   useReadOnScreenAttention()
   useAppMenuPaste()
   useAppMenuSelectionActions()
+  useAppMenuEditActions()
   useLargeTextControlPaste()
   usePrimarySelectionPaste(primarySelectionMiddleClickPaste)
   useOsc52ClipboardDefaultOnNotice(persistedUIReady)

@@ -1,5 +1,5 @@
 import React from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DropdownMenuSubContent, DropdownMenuSubTrigger } from '@/components/ui/dropdown-menu'
 import {
   getWorktreeOpenInEntries,
@@ -9,6 +9,7 @@ import {
   openWorktreePath,
   WorktreeOpenInSubMenu
 } from './WorktreeOpenInMenu'
+import { registerWindowsPathAccessEnvironments } from '@/lib/windows-path-access'
 
 type ReactElementLike = {
   type: unknown
@@ -28,7 +29,18 @@ const {
       activeRuntimeEnvironmentId: null as string | null,
       openInApplications: [] as { id: string; label: string; command: string }[]
     },
-    routeState: {}
+    routeState: {},
+    runtimeEnvironments: [
+      {
+        id: 'wsl-1',
+        orcadDeployment: {
+          kind: 'wsl' as const,
+          distro: 'Ubuntu',
+          localPort: 4100,
+          remotePort: 4200
+        }
+      }
+    ]
   },
   openInExternalEditorMock: vi.fn(),
   openInFileManagerMock: vi.fn(),
@@ -97,6 +109,10 @@ describe('WorktreeOpenInMenu', () => {
     openSettingsTargetMock.mockReset()
     openInFileManagerMock.mockResolvedValue({ ok: true })
     openInExternalEditorMock.mockResolvedValue({ ok: true })
+    registerWindowsPathAccessEnvironments(() => mockState.runtimeEnvironments)
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    })
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
@@ -108,6 +124,10 @@ describe('WorktreeOpenInMenu', () => {
         }
       }
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('maps file manager labels by platform', () => {
@@ -231,6 +251,23 @@ describe('WorktreeOpenInMenu', () => {
       command: 'cursor',
       connectionId: null,
       ownerHostId: 'local'
+    })
+  })
+
+  it('forwards the WSL distro for runtime-owned Linux paths', async () => {
+    await openWorktreePath({
+      target: 'external-editor',
+      worktreePath: '/home/ada/project',
+      runtimeEnvironmentId: 'wsl-1',
+      command: 'zed'
+    })
+
+    expect(openInExternalEditorMock).toHaveBeenCalledWith({
+      path: '/home/ada/project',
+      command: 'zed',
+      connectionId: undefined,
+      wslDistro: 'Ubuntu',
+      ownerHostId: 'runtime:wsl-1'
     })
   })
 

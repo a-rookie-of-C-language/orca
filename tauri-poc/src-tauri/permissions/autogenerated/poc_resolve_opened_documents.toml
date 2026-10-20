@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-resolve-opened-documents"
+description = "Enables the poc_resolve_opened_documents command without any pre-configured scope."
+commands.allow = ["poc_resolve_opened_documents"]
+
+[[permission]]
+identifier = "deny-poc-resolve-opened-documents"
+description = "Denies the poc_resolve_opened_documents command without any pre-configured scope."
+commands.deny = ["poc_resolve_opened_documents"]

@@ -38,7 +38,11 @@ export function resolveEditorOpenTargetGroupId(
   worktreeId: string,
   explicitTargetGroupId?: string
 ): string | undefined {
-  if (explicitTargetGroupId) {
+  if (
+    explicitTargetGroupId &&
+    !state.groupsByWorktree?.[worktreeId]?.find((group) => group.id === explicitTargetGroupId)
+      ?.isChatPanel
+  ) {
     return explicitTargetGroupId
   }
 
@@ -55,9 +59,13 @@ export function resolveEditorOpenTargetGroupId(
     (state.unifiedTabsByWorktree?.[worktreeId] ?? []).map((tab) => [tab.id, tab])
   )
   const activeGroup =
-    groups.find((group) => group.id === state.activeGroupIdByWorktree?.[worktreeId]) ??
-    fallbackGroup
+    groups.find(
+      (group) => group.id === (explicitTargetGroupId ?? state.activeGroupIdByWorktree?.[worktreeId])
+    ) ?? fallbackGroup
   const activeTab = getGroupActiveTab(activeGroup, tabsById)
+  if (activeGroup.isChatPanel) {
+    return groups.find((group) => !group.isChatPanel)?.id ?? activeGroup.id
+  }
   // Why: only a focused agent *terminal* should defer to an existing editor pane
   // (#6891). Editor, browser, and simulator panes open the file in the focused
   // group so it lands where the user is looking instead of a stale editor pane.

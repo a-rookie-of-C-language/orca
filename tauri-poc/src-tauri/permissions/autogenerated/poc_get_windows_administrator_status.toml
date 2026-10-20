@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-get-windows-administrator-status"
+description = "Enables the poc_get_windows_administrator_status command without any pre-configured scope."
+commands.allow = ["poc_get_windows_administrator_status"]
+
+[[permission]]
+identifier = "deny-poc-get-windows-administrator-status"
+description = "Denies the poc_get_windows_administrator_status command without any pre-configured scope."
+commands.deny = ["poc_get_windows_administrator_status"]

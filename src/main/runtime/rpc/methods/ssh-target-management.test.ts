@@ -237,6 +237,36 @@ describe('server SSH target management RPC', () => {
     expect(response).toMatchObject({ ok: false, error: { message: 'SSH target not found: gone' } })
   })
 
+  it('resolves a validated authority for a remote editor', async () => {
+    mocks.listRegisteredSshTargets.mockReturnValue([
+      {
+        ...storedTarget,
+        host: 'build.internal',
+        port: 22,
+        username: 'ci',
+        source: 'manual'
+      }
+    ])
+
+    await expect(
+      dispatch('ssh.resolveExternalEditorAuthority', { targetId: 'ssh-1' })
+    ).resolves.toMatchObject({
+      ok: true,
+      result: { ok: true, authority: 'ci@build.internal' }
+    })
+  })
+
+  it('does not expose an authority for an unknown target', async () => {
+    mocks.listRegisteredSshTargets.mockReturnValue([])
+
+    await expect(
+      dispatch('ssh.resolveExternalEditorAuthority', { targetId: 'gone' })
+    ).resolves.toMatchObject({
+      ok: true,
+      result: { ok: false, reason: 'ssh-target-not-found' }
+    })
+  })
+
   it('removes through the shared mutation and surfaces its refusal', async () => {
     mocks.mutations.remove.mockResolvedValueOnce(undefined)
     await expect(dispatch('ssh.removeTarget', { targetId: 'ssh-1' })).resolves.toMatchObject({

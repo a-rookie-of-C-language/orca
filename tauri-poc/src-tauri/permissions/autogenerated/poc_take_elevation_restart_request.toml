@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-take-elevation-restart-request"
+description = "Enables the poc_take_elevation_restart_request command without any pre-configured scope."
+commands.allow = ["poc_take_elevation_restart_request"]
+
+[[permission]]
+identifier = "deny-poc-take-elevation-restart-request"
+description = "Denies the poc_take_elevation_restart_request command without any pre-configured scope."
+commands.deny = ["poc_take_elevation_restart_request"]

@@ -1,0 +1,143 @@
+// @vitest-environment happy-dom
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Tab } from '../../../../shared/tab-types'
+import { TooltipProvider } from '../ui/tooltip'
+import { ChatPanelHeader } from './ChatPanelHeader'
+
+const state = vi.hoisted(() => ({
+  settings: { tabAutoGenerateTitle: false }
+}))
+vi.mock('../../store', () => ({
+  useAppStore: (selector: (value: typeof state) => unknown) => selector(state)
+}))
+
+const chat: Tab = {
+  id: 'chat-1',
+  entityId: 'session-1',
+  groupId: 'chat-group',
+  worktreeId: 'workspace',
+  contentType: 'agent-session',
+  agentSessionAgent: 'claude',
+  label: 'Fix build errors',
+  customLabel: null,
+  color: null,
+  sortOrder: 0,
+  createdAt: 1
+}
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+describe('fixed chat panel header', () => {
+  it('does not show a different provider icon when the agent is unknown', () => {
+    const { container } = render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[{ ...chat, agentSessionAgent: 'future-agent' }]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </TooltipProvider>
+    )
+    expect(
+      container.querySelector('[data-chat-panel-header] > [data-agent-icon]')?.textContent
+    ).toBe('?')
+  })
+  it.each(['claude', 'codex', 'opencode'] as const)(
+    'uses the existing %s provider icon in the header',
+    (agent) => {
+      const { container } = render(
+        <TooltipProvider>
+          <ChatPanelHeader
+            chats={[{ ...chat, agentSessionAgent: agent }]}
+            activeTabId={chat.id}
+            onActivate={vi.fn()}
+            onClose={vi.fn()}
+          />
+        </TooltipProvider>
+      )
+      expect(
+        container.querySelector(`[data-chat-panel-header] > [data-agent-icon="${agent}"] svg`)
+      ).toBeTruthy()
+      expect(container.querySelector('.lucide-message-square')).toBeNull()
+    }
+  )
+
+  it('updates the provider icon when the active conversation changes', async () => {
+    const chats = [
+      chat,
+      { ...chat, id: 'chat-2', label: 'Review changes', agentSessionAgent: 'codex' as const }
+    ]
+    const props = { chats, onActivate: vi.fn(), onClose: vi.fn() }
+    const view = render(
+      <TooltipProvider>
+        <ChatPanelHeader {...props} activeTabId={chat.id} />
+      </TooltipProvider>
+    )
+    expect(
+      view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="claude"]')
+    ).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Chat' }))
+    })
+    expect(
+      screen
+        .getByRole('option', { name: 'Review changes' })
+        .querySelector('[data-agent-icon="codex"] svg')
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('option', { name: 'Review changes' }))
+    expect(props.onActivate).toHaveBeenCalledWith('chat-2')
+    view.rerender(
+      <TooltipProvider>
+        <ChatPanelHeader {...props} activeTabId="chat-2" />
+      </TooltipProvider>
+    )
+    expect(
+      view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="codex"] svg')
+    ).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Chat' }).textContent).toBe('Review changes')
+  })
+
+  it('shows the conversation title instead of a tab, with only a close action', () => {
+    const close = vi.fn()
+    render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[chat]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={close}
+        />
+      </TooltipProvider>
+    )
+    expect(screen.getByText('Fix build errors')).toBeTruthy()
+    expect(screen.queryByRole('tab')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Restore chat tab bar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Dock chat panel' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close chat' }))
+    expect(close).toHaveBeenCalledWith(chat.id)
+  })
+
+  it('lets the reader switch conversations without a chat tab strip', async () => {
+    const activate = vi.fn()
+    render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[chat, { ...chat, id: 'chat-2', label: 'Review changes' }]}
+          activeTabId={chat.id}
+          onActivate={activate}
+          onClose={vi.fn()}
+        />
+      </TooltipProvider>
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Chat' }))
+    })
+    fireEvent.click(await screen.findByRole('option', { name: 'Review changes' }))
+    expect(activate).toHaveBeenCalledWith('chat-2')
+  })
+})

@@ -27,6 +27,9 @@ describe('terminal.create RPC idempotency', () => {
         worktree: 'id:worktree-1',
         clientMutationId: 'mutation-1',
         command: 'pwsh',
+        cwd: 'C:\\repo\\packages\\app',
+        cols: 80,
+        rows: 24,
         resumeProviderSession: {
           key: 'session_id',
           id: 'session-1',
@@ -52,6 +55,8 @@ describe('terminal.create RPC idempotency', () => {
       'id:worktree-1',
       expect.objectContaining({
         command: 'pwsh',
+        cwd: 'C:\\repo\\packages\\app',
+        initialSize: { cols: 80, rows: 24 },
         preAllocatedHandle: 'term_stable',
         resumeProviderSession: {
           key: 'session_id',
@@ -104,6 +109,10 @@ describe('terminal.create RPC idempotency', () => {
         focus: false,
         activate: false
       })
+    )
+    expect(createTerminal).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ initialSize: expect.anything() })
     )
   })
 

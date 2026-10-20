@@ -8,13 +8,14 @@ import {
   getRuntimeEnvironmentRevision
 } from './runtime-environment-revision'
 import { getRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
-type RuntimeFileMutationTarget = { kind: 'environment'; environmentId: string }
+type RuntimeFileMutationTarget = RuntimeClientTarget
 export type RuntimeFileImportSession = {
   target: RuntimeFileMutationTarget
   expectedEnvironmentPairingRevision: number | undefined
-  expectedEnvironmentConnectionGeneration: number
-  expectedEnvironmentRuntimeId: string
+  expectedEnvironmentConnectionGeneration: number | undefined
+  expectedEnvironmentRuntimeId: string | undefined
   assertCurrent: () => void
 }
 
@@ -73,11 +74,17 @@ export async function callRuntimeFileMutationWithCapabilities<TResult>(
   timeoutMs: number,
   expectedEnvironmentPairingRevision?: number
 ): Promise<TResult> {
-  const requestRevision = captureRuntimeEnvironmentRequestRevision(
-    target.environmentId,
-    expectedEnvironmentPairingRevision
-  )
-  const connectionGeneration = getRuntimeEnvironmentConnectionGeneration(target.environmentId)
+  const requestRevision =
+    target.kind === 'environment'
+      ? captureRuntimeEnvironmentRequestRevision(
+          target.environmentId,
+          expectedEnvironmentPairingRevision
+        )
+      : undefined
+  const connectionGeneration =
+    target.kind === 'environment'
+      ? getRuntimeEnvironmentConnectionGeneration(target.environmentId)
+      : undefined
   const status = await getRuntimeFileMutationStatus(target, requestRevision)
   const planned = await plan(status.capabilities ?? [])
   if ('result' in planned) {
@@ -89,6 +96,7 @@ export async function callRuntimeFileMutationWithCapabilities<TResult>(
     expectedEnvironmentRuntimeId: status.runtimeId,
     beforeSend: () => {
       if (
+        target.kind === 'environment' &&
         getRuntimeEnvironmentConnectionGeneration(target.environmentId) !== connectionGeneration
       ) {
         throw new RuntimeConnectionChangedError()
@@ -104,11 +112,14 @@ export async function callRuntimeFileMutation<TResult>(
   timeoutMs: number,
   expectedEnvironmentPairingRevision?: number
 ): Promise<TResult> {
-  const requestRevision = captureRuntimeEnvironmentRequestRevision(
-    target.environmentId,
-    expectedEnvironmentPairingRevision
-  )
-  await getRuntimeFileMutationStatus(target, requestRevision)
+  const requestRevision =
+    target.kind === 'environment'
+      ? captureRuntimeEnvironmentRequestRevision(
+          target.environmentId,
+          expectedEnvironmentPairingRevision
+        )
+      : undefined
+  await assertRuntimeFileMutationCapability(target, requestRevision)
   return callRuntimeRpc<TResult>(target, method, params, {
     timeoutMs,
     expectedEnvironmentPairingRevision: requestRevision
@@ -116,21 +127,25 @@ export async function callRuntimeFileMutation<TResult>(
 }
 
 export function createRuntimeImportSessionGuard(
-  environmentId: string,
+  target: RuntimeFileMutationTarget,
   expectedEnvironmentPairingRevision: number | undefined,
-  expectedEnvironmentConnectionGeneration: number,
+  expectedEnvironmentConnectionGeneration: number | undefined,
   assertCallerCurrent?: () => void
 ): () => void {
   return () => {
-    if (getRuntimeEnvironmentRevision(environmentId) !== expectedEnvironmentPairingRevision) {
-      throw new Error('Runtime pairing changed; retry the import.')
-    }
-    // Why: a replacement runtime keeps the pairing but invalidates its predecessor's capability proof.
-    if (
-      getRuntimeEnvironmentConnectionGeneration(environmentId) !==
-      expectedEnvironmentConnectionGeneration
-    ) {
-      throw new Error('Runtime connection changed; retry the import.')
+    if (target.kind === 'environment') {
+      if (
+        getRuntimeEnvironmentRevision(target.environmentId) !== expectedEnvironmentPairingRevision
+      ) {
+        throw new Error('Runtime pairing changed; retry the import.')
+      }
+      // Why: a replacement runtime keeps the pairing but invalidates its predecessor's capability proof.
+      if (
+        getRuntimeEnvironmentConnectionGeneration(target.environmentId) !==
+        expectedEnvironmentConnectionGeneration
+      ) {
+        throw new Error('Runtime connection changed; retry the import.')
+      }
     }
     assertCallerCurrent?.()
   }

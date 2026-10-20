@@ -37,6 +37,17 @@ const PROFILES = WORKSPACE_LAYOUT_PROFILES.map(
 )
 
 describe('workspace layout Loader and Serializer', () => {
+  it('preserves fixed chat panels through the layout model', () => {
+    const stored = localDesktopSession()
+    const group = Object.values(stored.tabGroups ?? {})[0]?.[0]
+    if (!group) {
+      throw new Error('expected a stored group')
+    }
+    group.isChatPanel = true
+    const { saved } = roundTrip(LOCAL_EXECUTION_HOST_ID, stored)
+    expect(Object.values(saved.tabGroups ?? {})[0]?.[0]?.isChatPanel).toBe(true)
+    expect(onDisk(saved)).toEqual(onDisk(stored))
+  })
   it.each(PROFILES)(
     '%s: save(load(stored)) writes exactly what was stored',
     (_name, hostId, build) => {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-reload"
+description = "Enables the poc_browser_reload command without any pre-configured scope."
+commands.allow = ["poc_browser_reload"]
+
+[[permission]]
+identifier = "deny-poc-browser-reload"
+description = "Denies the poc_browser_reload command without any pre-configured scope."
+commands.deny = ["poc_browser_reload"]

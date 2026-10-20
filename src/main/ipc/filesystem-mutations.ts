@@ -229,6 +229,9 @@ export function registerFilesystemMutationHandlers(store: Store): void {
   ipcMain.handle(
     'fs:uploadExternalFileToRuntime',
     async (event, args: RuntimeUploadFileStreamRequest): Promise<{ byteLength: number }> => {
+      if (!args.environmentId) {
+        throw new Error('A paired runtime is required for Electron file uploads.')
+      }
       const userDataPath = app.getPath('userData')
       // Why: the streamer's manual-disconnect check keys on the environment id,
       // and the renderer may pass any selector the store resolves.

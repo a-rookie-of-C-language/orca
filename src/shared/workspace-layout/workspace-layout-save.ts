@@ -78,6 +78,7 @@ function saveWorkspace(
       const activeTabId = selection?.activeTabId
       return {
         id: group.id,
+        ...(group.isChatPanel ? { isChatPanel: true } : {}),
         worktreeId,
         activeTabId: activeTabId && group.tabOrder.includes(activeTabId) ? activeTabId : null,
         tabOrder: group.tabOrder,

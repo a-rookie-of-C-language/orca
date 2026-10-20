@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-navigate"
+description = "Enables the poc_browser_navigate command without any pre-configured scope."
+commands.allow = ["poc_browser_navigate"]
+
+[[permission]]
+identifier = "deny-poc-browser-navigate"
+description = "Denies the poc_browser_navigate command without any pre-configured scope."
+commands.deny = ["poc_browser_navigate"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-app-identity"
+description = "Enables the poc_app_identity command without any pre-configured scope."
+commands.allow = ["poc_app_identity"]
+
+[[permission]]
+identifier = "deny-poc-app-identity"
+description = "Denies the poc_app_identity command without any pre-configured scope."
+commands.deny = ["poc_app_identity"]

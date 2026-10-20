@@ -91,6 +91,11 @@ export type UiCommandEventApi = {
   onOpenSetupGuide: (callback: () => void) => () => void
   onOpenFeatureTour: (callback: () => void) => () => void
   onOpenCrashReport: (callback: () => void) => () => void
+  onToggleAppearance?: (
+    callback: (
+      key: 'showTasksButton' | 'showAutomationsButton' | 'showMobileButton' | 'showTitlebarAppName'
+    ) => void
+  ) => () => void
   onToggleLeftSidebar: (callback: () => void) => () => void
   onToggleRightSidebar: (callback: () => void) => () => void
   onToggleWorktreePalette: (callback: () => void) => () => void
@@ -171,6 +176,8 @@ export type UiCommandEventApi = {
   onExportPdfRequested: (callback: () => void) => () => void
   onAppMenuPaste: (callback: () => void) => () => void
   onAppMenuSelectionAction: (callback: (action: 'copy' | 'select-all') => void) => () => void
+  onAppMenuEditAction: (callback: (action: 'undo' | 'redo') => void) => () => void
+  performNativeEditAction: (action: 'undo' | 'redo') => void
   onEditableContextPaste: (callback: (data: { plainTextOnly: boolean }) => void) => () => void
   onActivateWorktree: (
     callback: (data: {

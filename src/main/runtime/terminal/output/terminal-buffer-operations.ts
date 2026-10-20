@@ -151,6 +151,36 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
     return { handle, reset: true }
   }
 
+  async sendTerminalSignal(
+    handle: string,
+    signal: string
+  ): Promise<{ handle: string; signaled: boolean }> {
+    const leaf = this.resolveLeafForHandle(handle)
+    if (!leaf?.ptyId) {
+      throw new Error('terminal_not_found')
+    }
+    // Why fail-closed: a paired host that predates the controller method keeps
+    // its legacy behavior, so the caller can fall back instead of losing Ctrl+C.
+    if (!this.ptyController?.signal) {
+      return { handle, signaled: false }
+    }
+    await this.ptyController.signal(leaf.ptyId, signal)
+    return { handle, signaled: true }
+  }
+
+  async confirmTerminalForegroundProcess(
+    handle: string
+  ): Promise<{ handle: string; process: string | null }> {
+    const leaf = this.resolveLeafForHandle(handle)
+    if (!leaf?.ptyId) {
+      throw new Error('terminal_not_found')
+    }
+    // Why null-tolerant: a provider without confirm support answers null, which
+    // callers read as "no new evidence", never as a shell confirmation.
+    const processName = await this.ptyController?.confirmForegroundProcess?.(leaf.ptyId)
+    return { handle, process: processName ?? null }
+  }
+
   getTerminalSize(ptyId: string): { cols: number; rows: number } | null {
     return this.ptyController?.getSize?.(ptyId) ?? null
   }

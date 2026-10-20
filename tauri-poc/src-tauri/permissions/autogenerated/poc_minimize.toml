@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-minimize"
+description = "Enables the poc_minimize command without any pre-configured scope."
+commands.allow = ["poc_minimize"]
+
+[[permission]]
+identifier = "deny-poc-minimize"
+description = "Denies the poc_minimize command without any pre-configured scope."
+commands.deny = ["poc_minimize"]

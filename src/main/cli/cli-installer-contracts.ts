@@ -8,6 +8,8 @@ export type CliInstallerOptions = {
   resourcesPath?: string
   execPath?: string
   appPath?: string
+  /** Host-provided launcher path for Node/Tauri runtimes without Electron's resources directory. */
+  launcherPathOverride?: string | null
   homePath?: string
   localAppDataPath?: string
   processPathEnv?: string | null

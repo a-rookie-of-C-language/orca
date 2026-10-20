@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-get-zoom"
+description = "Enables the poc_get_zoom command without any pre-configured scope."
+commands.allow = ["poc_get_zoom"]
+
+[[permission]]
+identifier = "deny-poc-get-zoom"
+description = "Denies the poc_get_zoom command without any pre-configured scope."
+commands.deny = ["poc_get_zoom"]

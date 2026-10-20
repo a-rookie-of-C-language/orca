@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-runtime-pairing"
+description = "Enables the poc_runtime_pairing command without any pre-configured scope."
+commands.allow = ["poc_runtime_pairing"]
+
+[[permission]]
+identifier = "deny-poc-runtime-pairing"
+description = "Denies the poc_runtime_pairing command without any pre-configured scope."
+commands.deny = ["poc_runtime_pairing"]

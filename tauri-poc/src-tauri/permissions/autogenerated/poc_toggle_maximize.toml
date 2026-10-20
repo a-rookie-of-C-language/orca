@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-toggle-maximize"
+description = "Enables the poc_toggle_maximize command without any pre-configured scope."
+commands.allow = ["poc_toggle_maximize"]
+
+[[permission]]
+identifier = "deny-poc-toggle-maximize"
+description = "Denies the poc_toggle_maximize command without any pre-configured scope."
+commands.deny = ["poc_toggle_maximize"]

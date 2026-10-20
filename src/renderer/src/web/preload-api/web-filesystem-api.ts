@@ -22,6 +22,17 @@ import {
 } from './web-runtime-session'
 import { isMissingPathError, resolveRuntimeFilePath } from './web-runtime-worktree-catalog'
 import { noopUnsubscribe } from './web-storage'
+import { isTauriNativeHost } from '../tauri-native-host'
+
+const SSH_DOWNLOAD_CHUNK_BYTES = 384 * 1024
+
+type SshFileReadChunk = {
+  contentBase64: string
+  bytesRead: number
+  eof: boolean
+  size: number
+  mtime: number
+}
 
 export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
   const searches = new Map<string, AbortController>()
@@ -60,7 +71,10 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
     },
     stopLocalLogTail: async () => {},
     onLocalLogTailChanged: () => noopUnsubscribe,
-    downloadFile: async () => {
+    downloadFile: async ({ filePath, connectionId }) => {
+      if (isTauriNativeHost() && connectionId) {
+        return downloadTauriSshFile(filePath, connectionId)
+      }
       throw new Error('Remote file download is unavailable in paired web clients.')
     },
     downloadFolder: async () => {
@@ -174,6 +188,56 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
     unwatchWorktree: () => Promise.resolve(),
     onFsChanged: () => noopUnsubscribe
   }
+}
+
+async function downloadTauriSshFile(
+  filePath: string,
+  connectionId: string
+): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> {
+  const suggestedName = fileNameFromRemotePath(filePath)
+  const started = await window.api.fs.startDownloadedFile({ suggestedName })
+  if (started.canceled) {
+    return started
+  }
+
+  let finished = false
+  try {
+    let offset = 0
+    for (;;) {
+      const chunk = await callRuntimeResult<SshFileReadChunk>('ssh.readFileChunk', {
+        targetId: connectionId,
+        filePath,
+        offset,
+        length: SSH_DOWNLOAD_CHUNK_BYTES
+      })
+      if (chunk.bytesRead > 0) {
+        await window.api.fs.appendDownloadedFileChunk({
+          transferId: started.transferId,
+          contentBase64: chunk.contentBase64
+        })
+      }
+      if (chunk.eof) {
+        break
+      }
+      if (chunk.bytesRead <= 0 || offset + chunk.bytesRead > chunk.size) {
+        throw new Error('Remote file download stalled before reaching EOF')
+      }
+      offset += chunk.bytesRead
+    }
+    const result = await window.api.fs.finishDownloadedFile({ transferId: started.transferId })
+    finished = true
+    return result
+  } finally {
+    if (!finished) {
+      await window.api.fs.cancelDownloadedFile({ transferId: started.transferId }).catch(() => {})
+    }
+  }
+}
+
+function fileNameFromRemotePath(filePath: string): string {
+  const normalized = filePath.replace(/[\\/]+$/u, '')
+  const separator = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'))
+  return normalized.slice(separator + 1) || 'download'
 }
 
 export function captureWebFileMutationSession(): {

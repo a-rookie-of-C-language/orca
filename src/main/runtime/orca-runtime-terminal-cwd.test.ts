@@ -31,7 +31,31 @@ function stubLaunchScope(runtime: OrcaRuntimeService, path = '/repo/app'): void 
 }
 
 describe('OrcaRuntimeService terminal startup cwd', () => {
-  it('spawns terminals inside the requested worktree subdirectory', async () => {
+  it('reads changes from the PTY provider and prefers the latest OSC7 directory', async () => {
+    const runtime = new OrcaRuntimeService()
+    stubLaunchScope(runtime)
+    const getCwd = vi.fn(async () => '/repo/app')
+    runtime.setPtyController({
+      spawn: vi.fn().mockResolvedValue({ id: 'pty-cwd' }),
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null,
+      getCwd
+    })
+    const terminal = await runtime.createTerminal('id:wt-1')
+    await expect(runtime.resolveTerminalCwd(terminal.handle)).resolves.toBe('/repo/app')
+    getCwd.mockResolvedValue('/repo/app/src')
+    await expect(runtime.resolveTerminalCwd(terminal.handle)).resolves.toBe('/repo/app/src')
+
+    const uri = process.platform === 'win32' ? 'file:///C:/repo/current' : 'file:///repo/current'
+    runtime.onPtyData('pty-cwd', `\x1b]7;${uri}\x07`, Date.now())
+    await expect(runtime.resolveTerminalCwd(terminal.handle)).resolves.toBe(
+      process.platform === 'win32' ? 'C:/repo/current' : '/repo/current'
+    )
+    expect(getCwd).toHaveBeenCalledTimes(2)
+  })
+
+  it('spawns terminals with the requested cwd and initial grid', async () => {
     const runtime = new OrcaRuntimeService()
     stubLaunchScope(runtime)
     const spawn = vi.fn().mockResolvedValue({ id: 'pty-1' })
@@ -42,11 +66,16 @@ describe('OrcaRuntimeService terminal startup cwd', () => {
       getForegroundProcess: async () => null
     })
 
-    await runtime.createTerminal('id:wt-1', { cwd: '/repo/app/packages/web' })
+    await runtime.createTerminal('id:wt-1', {
+      cwd: '/repo/app/packages/web',
+      initialSize: { cols: 80, rows: 24 }
+    })
 
     expect(spawn).toHaveBeenCalledWith(
       expect.objectContaining({
         cwd: '/repo/app/packages/web',
+        cols: 80,
+        rows: 24,
         worktreeId: 'wt-1'
       })
     )

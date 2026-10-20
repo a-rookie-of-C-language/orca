@@ -20,7 +20,7 @@ type SpeechModelDeletionStore = {
   getSettings: () => {
     voice?: VoiceSettings
   }
-  updateSettings: (
+  updateSettings?: (
     updates: {
       voice: VoiceSettings
     },
@@ -66,7 +66,7 @@ export async function deleteLocalSpeechModel({
 
   const currentVoice = store.getSettings().voice ?? getDefaultVoiceSettings()
   if (currentVoice.sttModel === modelId) {
-    store.updateSettings(
+    store.updateSettings?.(
       {
         voice: {
           ...currentVoice,

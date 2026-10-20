@@ -183,6 +183,87 @@ export const AutomationRuns = z.object({
   cursor: OptionalString
 })
 
+export const AutomationPrecheckRequest = z.object({
+  automationId: requiredString('Missing automation id'),
+  runId: requiredString('Missing automation run id')
+})
+
+const AutomationRunStatus = z.enum([
+  'pending',
+  'dispatching',
+  'dispatched',
+  'completed',
+  'skipped_precheck',
+  'skipped_missed',
+  'skipped_unavailable',
+  'skipped_needs_interactive_auth',
+  'dispatch_failed'
+])
+
+const AutomationPrecheckResult = z.object({
+  command: z.string(),
+  exitCode: z.number().int().nullable(),
+  timedOut: z.boolean(),
+  durationMs: z.number().finite(),
+  stdout: z.string(),
+  stderr: z.string(),
+  stdoutTruncated: z.boolean(),
+  stderrTruncated: z.boolean(),
+  error: z.string().nullable(),
+  startedAt: z.number().finite(),
+  completedAt: z.number().finite()
+})
+
+const AutomationRunOutputSnapshot = z.object({
+  format: z.literal('plain_text'),
+  content: z.string(),
+  capturedAt: z.number().finite(),
+  truncated: z.boolean()
+})
+
+const AutomationRunUsage = z.object({
+  status: z.enum(['known', 'unavailable']),
+  provider: z.enum(['claude', 'codex']).nullable(),
+  model: z.string().nullable(),
+  inputTokens: z.number().int().nullable(),
+  outputTokens: z.number().int().nullable(),
+  cacheReadTokens: z.number().int().nullable(),
+  cacheWriteTokens: z.number().int().nullable(),
+  reasoningOutputTokens: z.number().int().nullable(),
+  totalTokens: z.number().int().nullable(),
+  estimatedCostUsd: z.number().nullable(),
+  estimatedCostSource: z.literal('api_equivalent').nullable(),
+  providerSessionId: z.string().nullable(),
+  attribution: z.literal('provider_session_time_window').nullable(),
+  collectedAt: z.number().finite(),
+  unavailableReason: z
+    .enum([
+      'run_not_finished',
+      'provider_unsupported',
+      'remote_usage_unavailable',
+      'usage_not_enabled',
+      'scan_failed',
+      'no_matching_session',
+      'ambiguous_session'
+    ])
+    .nullable(),
+  unavailableMessage: z.string().nullable()
+})
+
+export const AutomationDispatchResult = z.object({
+  runId: requiredString('Missing automation run id'),
+  status: AutomationRunStatus,
+  workspaceId: z.string().nullable().optional(),
+  workspaceDisplayName: z.string().nullable().optional(),
+  terminalSessionId: z.string().nullable().optional(),
+  terminalPaneKey: z.string().nullable().optional(),
+  terminalPtyId: z.string().nullable().optional(),
+  outputSnapshot: AutomationRunOutputSnapshot.nullable().optional(),
+  precheckResult: AutomationPrecheckResult.nullable().optional(),
+  usage: AutomationRunUsage.nullable().optional(),
+  error: z.string().nullable().optional()
+})
+
 // Why strict: null or a non-string must fail rather than fall back to "omitted", which preserves.
 const ExtraAgentArgs = z.string({ message: 'Extra agent arguments must be text.' }).optional()
 

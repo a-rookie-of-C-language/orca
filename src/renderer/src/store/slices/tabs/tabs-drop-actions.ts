@@ -36,6 +36,13 @@ export function createTabsDropActions(
         const { tab, worktreeId } = foundTab
         const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
         const targetGroup = foundTarget.group
+        if (
+          !target.splitDirection &&
+          targetGroup.isChatPanel &&
+          tab.contentType !== 'agent-session'
+        ) {
+          return state
+        }
         if (!sourceGroup) {
           return state
         }

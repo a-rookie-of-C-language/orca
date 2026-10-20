@@ -7,11 +7,16 @@ import type {
   AiVaultPrepareSessionResumeRequest,
   AiVaultPrepareSessionResumeResult
 } from '../../../../shared/ai-vault-resume-preparation'
-import type { AiVaultDeleteSessionArgs } from '../../../../shared/ai-vault-session-deletion'
+import type {
+  AiVaultDeleteSessionArgs,
+  AiVaultDeleteSessionResult,
+  AiVaultSessionDeleteValidationResult
+} from '../../../../shared/ai-vault-session-deletion'
 import type {
   AiVaultSessionTitlesArgs,
   AiVaultSessionTitlesResult
 } from '../../../../shared/ai-vault-session-title'
+import type { AiVaultSearchStatus } from '../../../../shared/ai-vault-search-types'
 import type { AiVaultListArgs, AiVaultListResult } from '../../../../shared/ai-vault-types'
 import {
   normalizeExecutionHostId,
@@ -23,6 +28,9 @@ import { callRuntimeResult } from './web-runtime-calls'
 import { requireActiveEnvironment } from './web-runtime-session'
 import { noopUnsubscribe } from './web-storage'
 import { translate } from '@/i18n/i18n'
+import { onAiVaultScanProgress } from './web-ai-vault-runtime-events'
+import { invokeNative, isTauriNativeHost } from '../tauri-native-host'
+import { isWslUncPath } from '../../../../shared/wsl-paths'
 
 export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault']> {
   const search = createSessionSearchClient(
@@ -39,11 +47,19 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
       addressesOwnRuntime(executionHostScope)
         ? search.searchStatus()
         : Promise.resolve(unavailableSessionSearchStatus()),
-    // Why refused and not forwarded: consent for a host's index is an operator action,
-    // and the browser client has no desktop settings surface to reconcile it against.
-    setSearchEnabled: () => Promise.reject(new Error('unsupported')),
-    clearSearchIndex: () =>
-      Promise.reject(new Error('Clearing Agent Session History is unavailable in the browser.')),
+    // Runtime-backed web clients can change consent only for their active paired host.
+    setSearchEnabled: (executionHostId, enabled): Promise<AiVaultSearchStatus> => {
+      const environment = requireActiveEnvironment()
+      const ownRuntimeId = toRuntimeExecutionHostId(environment.id)
+      if (normalizeExecutionHostId(executionHostId) !== ownRuntimeId) {
+        return Promise.reject(new Error('Agent Session History is not available for this host.'))
+      }
+      return callRuntimeResult<AiVaultSearchStatus>('aiVault.setSearchEnabled', { enabled })
+    },
+    clearSearchIndex: () => {
+      requireActiveEnvironment()
+      return callRuntimeResult<void>('aiVault.clearSearchIndex')
+    },
     listSessions: (args?: AiVaultListArgs) => {
       const environment = requireActiveEnvironment()
       const executionHostId = toRuntimeExecutionHostId(environment.id)
@@ -84,23 +100,70 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
     cancelListSessions: () => Promise.resolve(),
     prepareSessionResume: (args: AiVaultPrepareSessionResumeRequest) =>
       callRuntimeResult<AiVaultPrepareSessionResumeResult>('aiVault.prepareSessionResume', args),
-    // Why: no server-side RPC for subagent transcript listing yet, so report an empty (not erroring) result.
-    listSubagentSessions: () => Promise.resolve({ sessions: [], issues: [] }),
-    // Why: full first-prompt re-parse is local-FS only; web/runtime falls back to preview text.
-    getFirstUserPrompt: () => Promise.resolve({ prompt: null }),
-    // Why: session deletion is local-only and has no runtime RPC; a web
-    // client's sessions are runtime-hosted, so report the same non-local
-    // rejection the UI already gates on rather than pretend to delete.
-    deleteSession: (args: AiVaultDeleteSessionArgs) =>
-      Promise.resolve({
-        outcome: 'rejected',
-        agent: args.agent,
-        reason: 'non-local-host' as const
-      }),
+    listSubagentSessions: (args) => {
+      const environment = requireActiveEnvironment()
+      const executionHostId = toRuntimeExecutionHostId(environment.id)
+      if (normalizeExecutionHostId(args.executionHostId ?? executionHostId) !== executionHostId) {
+        return Promise.resolve({ sessions: [], issues: [] })
+      }
+      return callRuntimeResult('aiVault.listSubagentSessions', {
+        ...args,
+        executionHostId
+      })
+    },
+    getFirstUserPrompt: (args) => {
+      const environment = requireActiveEnvironment()
+      const executionHostId = toRuntimeExecutionHostId(environment.id)
+      if (normalizeExecutionHostId(args.executionHostId ?? executionHostId) !== executionHostId) {
+        return Promise.resolve({ prompt: null })
+      }
+      return callRuntimeResult('aiVault.getFirstUserPrompt', {
+        ...args,
+        executionHostId
+      })
+    },
+    deleteSession: async (args: AiVaultDeleteSessionArgs): Promise<AiVaultDeleteSessionResult> => {
+      if (!isTauriNativeHost()) {
+        // A browser must not turn a session delete into a runtime-side hard delete.
+        return { outcome: 'rejected', agent: args.agent, reason: 'non-local-host' }
+      }
+      const environment = requireActiveEnvironment()
+      const runtimeArgs = {
+        ...args,
+        executionHostId: toRuntimeExecutionHostId(environment.id)
+      }
+      const validation = await callRuntimeResult<AiVaultSessionDeleteValidationResult>(
+        'aiVault.prepareSessionDelete',
+        runtimeArgs
+      )
+      if (!validation.allowed) {
+        return { outcome: 'rejected', agent: validation.agent, reason: validation.reason }
+      }
+
+      if (validation.removals.some((removal) => isWslUncPath(removal.path))) {
+        return callRuntimeResult<AiVaultDeleteSessionResult>('aiVault.deleteSession', runtimeArgs)
+      }
+
+      try {
+        await invokeNative('poc_trash_ai_vault_session', { plan: validation })
+      } catch (error) {
+        return {
+          outcome: 'failed',
+          agent: validation.agent,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      }
+      // Native trashing owns the filesystem mutation. The runtime call only
+      // invalidates its scan/parse caches (and remains idempotent if the path
+      // disappeared between the two calls).
+      return callRuntimeResult<AiVaultDeleteSessionResult>('aiVault.deleteSession', runtimeArgs)
+    },
     onWindowFocused: () => noopUnsubscribe,
-    // Why: the runtime RPC has no progress stream, so the panel keeps its plain spinner here.
-    getScanProgress: () => Promise.resolve(null),
-    onScanProgress: () => noopUnsubscribe
+    getScanProgress: (scanKey) => {
+      requireActiveEnvironment()
+      return callRuntimeResult('aiVault.getScanProgress', { scanKey })
+    },
+    onScanProgress: (callback) => onAiVaultScanProgress(callback)
   }
 }
 

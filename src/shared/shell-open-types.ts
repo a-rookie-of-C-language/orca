@@ -4,6 +4,10 @@ export type ShellOpenExternalEditorRequest = {
   path: string
   command?: string
   connectionId?: string | null
+  /** Runtime-resolved VS Code Remote SSH authority; only the Tauri bridge supplies this. */
+  sshAuthority?: string
+  /** Windows WSL distro for a runtime-owned Linux path; only the Tauri bridge supplies this. */
+  wslDistro?: string | null
   /** Host that owns `path`; main refuses unless it is `local`, a WSL host (Windows), or, with `connectionId`, that SSH host or a server running on it. */
   ownerHostId: ExecutionHostId
 }

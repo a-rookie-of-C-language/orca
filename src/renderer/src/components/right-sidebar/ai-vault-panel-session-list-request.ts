@@ -10,10 +10,26 @@ import { selectAiVaultPanelWorkspace } from './ai-vault-panel-workspace'
 import type { AiVaultSessionListRequest } from './ai-vault-session-list-request'
 import { readAiVaultViewOptions } from './ai-vault-view-options-persistence'
 
+type AiVaultPanelSessionListState = Pick<
+  AppState,
+  | 'activeRepoId'
+  | 'activeWorktreeId'
+  | 'activeWorkspaceExecutionHostId'
+  | 'detectedWorktreesByRepo'
+  | 'floatingWorkspacePath'
+  | 'folderWorkspaces'
+  | 'projectGroups'
+  | 'projectHostSetups'
+  | 'projects'
+  | 'repos'
+  | 'settings'
+  | 'worktreesByRepo'
+>
+
 /** The request the panel sends by default while `workspaceId` is the active workspace, read from
  *  the store through the same selectors and derivations the panel's hooks use. */
 export function resolveAiVaultPanelSessionListRequest(
-  state: AppState,
+  state: AiVaultPanelSessionListState,
   workspaceId: string
 ): AiVaultSessionListRequest {
   const { worktree, repo } = selectAiVaultPanelWorkspace(state, { worktreeId: workspaceId })

@@ -146,6 +146,15 @@ export type SshTargetSummary = Pick<SshTarget, 'id' | 'label' | 'generation'> & 
   connectionStatus?: SshConnectionStatus
 }
 
+/** The validated authority a desktop editor uses for an SSH worktree. */
+export type SshExternalEditorAuthorityResult =
+  | { ok: true; authority: string }
+  | {
+      ok: false
+      reason: 'ssh-target-not-found' | 'ssh-target-invalid' | 'remote-runtime-unsupported'
+    }
+  | { ok: false; reason: 'ssh-alias-required'; host: string; port: number }
+
 /** Identity of a removed SSH target, recorded so that re-adding the same host
  *  can re-point orphaned repos/worktrees from the old (deleted) target id to
  *  the new one. Repos store only the target id, so without this record the old

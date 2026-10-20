@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-updater-quit-and-install"
+description = "Enables the poc_updater_quit_and_install command without any pre-configured scope."
+commands.allow = ["poc_updater_quit_and_install"]
+
+[[permission]]
+identifier = "deny-poc-updater-quit-and-install"
+description = "Denies the poc_updater_quit_and_install command without any pre-configured scope."
+commands.deny = ["poc_updater_quit_and_install"]

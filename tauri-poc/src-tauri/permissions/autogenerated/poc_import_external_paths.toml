@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-import-external-paths"
+description = "Enables the poc_import_external_paths command without any pre-configured scope."
+commands.allow = ["poc_import_external_paths"]
+
+[[permission]]
+identifier = "deny-poc-import-external-paths"
+description = "Denies the poc_import_external_paths command without any pre-configured scope."
+commands.deny = ["poc_import_external_paths"]

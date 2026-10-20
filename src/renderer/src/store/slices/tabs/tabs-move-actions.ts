@@ -30,6 +30,9 @@ export function createTabsMoveActions(
         }
         const sourceGroup = findGroupForTab(state.groupsByWorktree, worktreeId, tab.groupId)
         const targetGroup = foundTarget.group
+        if (targetGroup.isChatPanel && tab.contentType !== 'agent-session') {
+          return state
+        }
         if (!sourceGroup) {
           return state
         }

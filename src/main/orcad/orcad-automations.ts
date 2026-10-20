@@ -4,6 +4,8 @@
  */
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { ClaudeUsageStore } from '../claude-usage/store'
+import type { CodexUsageStore } from '../codex-usage/store'
 import { createRuntimeAutomationService } from '../automations/runtime-automation-service'
 import { isFinalAutomationRunStatus } from '../../shared/automations-types'
 
@@ -14,9 +16,15 @@ let stopScheduler: (() => void) | null = null
 export function startOrcadAutomations(
   runtime: OrcaRuntimeService,
   store: Store,
-  registerCleanup: (cleanup: () => void) => void
+  registerCleanup: (cleanup: () => void | Promise<void>) => void,
+  usage?: { claudeUsage: ClaudeUsageStore; codexUsage: CodexUsageStore }
 ): void {
-  const service = createRuntimeAutomationService({ store, runtime, headless: true })
+  const service = createRuntimeAutomationService({
+    store,
+    runtime,
+    headless: true,
+    ...usage
+  })
   stopScheduler = () => service.stop()
   // Stops before the store flushes, so no run is written after the final profile save.
   registerCleanup(() => service.stop())

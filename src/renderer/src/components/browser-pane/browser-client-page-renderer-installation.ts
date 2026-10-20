@@ -7,6 +7,12 @@ import {
   type BrowserClientPageRendererMemoryProfile,
   type BrowserClientPageVisibleAttachment
 } from './browser-client-page-retained-registry'
+import type { BrowserClientPageWebviewFactory } from './browser-client-page-retained-elements'
+import {
+  createTauriNativeBrowserWebview,
+  isTauriNativeHost,
+  syncTauriNativeBrowserWebviewBounds
+} from '@/web/tauri-native-bridge'
 
 type RendererPageRegistry = {
   attachPage?(
@@ -48,11 +54,13 @@ export function installBrowserClientPageRenderer(
     document?: Document
     registry?: RendererPageRegistry
     subscribe?: RendererRequestSubscriber
+    createWebview?: BrowserClientPageWebviewFactory
   } = {}
 ): BrowserClientPageRendererInstallation | null {
   if (
     typeof window !== 'undefined' &&
-    (window as unknown as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ === true
+    Reflect.get(window, '__ORCA_WEB_CLIENT__') === true &&
+    !isTauriNativeHost()
   ) {
     return null
   }
@@ -66,7 +74,22 @@ export function installBrowserClientPageRenderer(
   }
   const registry =
     options.registry ??
-    new BrowserClientPageRetainedRegistry({ document: options.document ?? document })
+    new BrowserClientPageRetainedRegistry({
+      document: options.document ?? document,
+      createWebview:
+        options.createWebview ??
+        (isTauriNativeHost()
+          ? ({ browserPageId, partition, host }) =>
+              createTauriNativeBrowserWebview({
+                browserPageId,
+                container: host,
+                partition,
+                visible: false,
+                appendToContainer: false
+              })
+          : undefined),
+      onWebviewMounted: isTauriNativeHost() ? syncTauriNativeBrowserWebviewBounds : undefined
+    })
   const unsubscribe = subscribe((request) => handleRequest(registry, request))
   activeRendererPageRegistry = registry
   let disposed = false

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-agent-awake-set-active"
+description = "Enables the poc_agent_awake_set_active command without any pre-configured scope."
+commands.allow = ["poc_agent_awake_set_active"]
+
+[[permission]]
+identifier = "deny-poc-agent-awake-set-active"
+description = "Denies the poc_agent_awake_set_active command without any pre-configured scope."
+commands.deny = ["poc_agent_awake_set_active"]

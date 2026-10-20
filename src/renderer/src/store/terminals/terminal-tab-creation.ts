@@ -1,4 +1,5 @@
 import { warnIfZCodeCannotOpenSession } from '@/components/terminal-pane/zcode-missing-tui-notice'
+import { applyDefaultChatPanelLayout } from '../slices/tabs/chat-panel-layout'
 import { clearWorktreeSleepIntent } from '@/lib/worktree-sleep-intent'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { isValidHostTerminalTabId } from '../../../../shared/terminal-tab-id'
@@ -228,6 +229,33 @@ export function createTerminalTabCreationActions(
         const nextActiveTabIdForWorktree = shouldActivate
           ? tab.id
           : (cleanedActiveTabIdForWorktree ?? cleanedGroupActiveTabId ?? tab.id)
+        const nextLayout = applyDefaultChatPanelLayout(
+          {
+            unifiedTabsByWorktree: {
+              ...s.unifiedTabsByWorktree,
+              [worktreeId]: existingTerminalTab
+                ? existingUnifiedTabs
+                : [...existingUnifiedTabs, unifiedTab]
+            },
+            groupsByWorktree: {
+              ...groupsByWorktree,
+              [worktreeId]: updateGroup(cleanedGroups, {
+                ...cleanedTargetGroup,
+                activeTabId: shouldActivate
+                  ? unifiedTab.id
+                  : (cleanedGroupActiveTabId ?? unifiedTab.id),
+                tabOrder: nextGroupOrder,
+                recentTabIds: nextRecent
+              })
+            },
+            activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
+            layoutByWorktree: {
+              ...s.layoutByWorktree,
+              [worktreeId]: s.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
+            }
+          },
+          worktreeId
+        )
         return {
           ...orphanCleanupPatch,
           tabsByWorktree: {
@@ -235,28 +263,7 @@ export function createTerminalTabCreationActions(
             [worktreeId]: [...existing, tab]
           },
           // Why: publish the unified tab atomically with the runtime tab so a transient legacy mount can't race the split host.
-          unifiedTabsByWorktree: {
-            ...s.unifiedTabsByWorktree,
-            [worktreeId]: existingTerminalTab
-              ? existingUnifiedTabs
-              : [...existingUnifiedTabs, unifiedTab]
-          },
-          groupsByWorktree: {
-            ...groupsByWorktree,
-            [worktreeId]: updateGroup(cleanedGroups, {
-              ...cleanedTargetGroup,
-              activeTabId: shouldActivate
-                ? unifiedTab.id
-                : (cleanedGroupActiveTabId ?? unifiedTab.id),
-              tabOrder: nextGroupOrder,
-              recentTabIds: nextRecent
-            })
-          },
-          activeGroupIdByWorktree: nextActiveGroupIdByWorktree,
-          layoutByWorktree: {
-            ...s.layoutByWorktree,
-            [worktreeId]: s.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
-          },
+          ...nextLayout,
           activeTabId:
             shouldActivate && ownsGlobalSelection(s, worktreeId)
               ? tab.id

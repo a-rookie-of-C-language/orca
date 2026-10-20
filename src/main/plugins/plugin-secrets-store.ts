@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { guardedSafeStorage as safeStorage } from '../host/safe-storage-availability'
+import { getSecretStore } from '../../shared/secret-store'
 import { isUnreadableError, writeSecureFile } from '../../shared/secure-file'
 import {
   PLUGIN_STORAGE_KEY_LIMIT,
@@ -80,18 +80,20 @@ export class PluginSecretsStore {
     if (typeof ciphertext !== 'string') {
       return { ok: true, value: null }
     }
-    if (!safeStorage.isEncryptionAvailable()) {
+    const secretStore = getSecretStore()
+    if (!secretStore.isEncryptionAvailable()) {
       return { ok: false, error: 'OS-backed encryption is unavailable' }
     }
     try {
-      return { ok: true, value: safeStorage.decryptString(Buffer.from(ciphertext, 'base64')) }
+      return { ok: true, value: secretStore.decryptString(Buffer.from(ciphertext, 'base64')) }
     } catch {
       return { ok: false, error: 'failed to decrypt stored secret' }
     }
   }
 
   set(key: string, value: string): PluginSecretsResult<true> {
-    if (!safeStorage.isEncryptionAvailable()) {
+    const secretStore = getSecretStore()
+    if (!secretStore.isEncryptionAvailable()) {
       return { ok: false, error: 'OS-backed encryption is unavailable; secret not stored' }
     }
     const file = this.read()
@@ -104,7 +106,7 @@ export class PluginSecretsStore {
     ) {
       return { ok: false, error: `secret vault exceeds the ${PLUGIN_STORAGE_KEY_LIMIT}-key limit` }
     }
-    file.ciphertexts[key] = safeStorage.encryptString(value).toString('base64')
+    file.ciphertexts[key] = secretStore.encryptString(value).toString('base64')
     const nextFile = JSON.stringify(file, null, 2)
     if (Buffer.byteLength(nextFile, 'utf8') > PLUGIN_STORAGE_TOTAL_MAX_BYTES) {
       return { ok: false, error: `secret vault exceeds ${PLUGIN_STORAGE_TOTAL_MAX_BYTES} bytes` }

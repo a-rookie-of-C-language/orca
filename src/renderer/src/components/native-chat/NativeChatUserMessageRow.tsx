@@ -107,7 +107,7 @@ export function NativeChatUserMessageRow({
           'max-w-[80%] text-sm',
           from
             ? 'select-text border-l-2 border-border/60 pl-3 text-chat-foreground'
-            : 'rounded-xl border border-chat-user-border bg-chat-user-surface px-3.5 py-2.5 text-chat-foreground-strong'
+            : 'native-chat-user-bubble rounded-xl border border-chat-user-border bg-chat-user-surface px-3.5 py-2.5 text-chat-foreground-strong'
         )}
       >
         {markdown ? (

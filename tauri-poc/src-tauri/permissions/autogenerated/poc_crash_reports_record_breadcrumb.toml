@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-crash-reports-record-breadcrumb"
+description = "Enables the poc_crash_reports_record_breadcrumb command without any pre-configured scope."
+commands.allow = ["poc_crash_reports_record_breadcrumb"]
+
+[[permission]]
+identifier = "deny-poc-crash-reports-record-breadcrumb"
+description = "Denies the poc_crash_reports_record_breadcrumb command without any pre-configured scope."
+commands.deny = ["poc_crash_reports_record_breadcrumb"]

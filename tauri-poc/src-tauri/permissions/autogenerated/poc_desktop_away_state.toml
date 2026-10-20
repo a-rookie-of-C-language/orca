@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-desktop-away-state"
+description = "Enables the poc_desktop_away_state command without any pre-configured scope."
+commands.allow = ["poc_desktop_away_state"]
+
+[[permission]]
+identifier = "deny-poc-desktop-away-state"
+description = "Denies the poc_desktop_away_state command without any pre-configured scope."
+commands.deny = ["poc_desktop_away_state"]

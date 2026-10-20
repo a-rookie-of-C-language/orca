@@ -15,6 +15,16 @@ Chat UI is an experimental view layered on supported agent terminal sessions. Th
 
 Toggle Chat UI ↔ terminal from the agent pane once enabled.
 
+## Fixed chat panel
+
+Structured chats open in a fixed panel automatically, without a chat tab strip or a layout toggle.
+Existing chats that share a group with files move together to a split on the left when the
+workspace is restored. Otherwise, the file area appears on the right when you open a file.
+Files and diffs open outside the chat panel, even while the chat input has focus.
+
+Drag the divider to resize the panels. When several chats share the panel, use the conversation
+picker in its header. The panel layout is saved with the workspace.
+
 ## Composer
 
 - Type a message and send (or stop a working turn). Attach files/images when the host supports it. Unsent draft text and attachments stay with the pane across disconnect/reconnect when the host can restore them. A settled transcript also stays on screen while the same session reconnects, instead of blanking until the fresh load finishes (desktop and mobile share that retention).

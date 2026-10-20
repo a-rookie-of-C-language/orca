@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-doc-preview-authorize-directory"
+description = "Enables the poc_doc_preview_authorize_directory command without any pre-configured scope."
+commands.allow = ["poc_doc_preview_authorize_directory"]
+
+[[permission]]
+identifier = "deny-poc-doc-preview-authorize-directory"
+description = "Denies the poc_doc_preview_authorize_directory command without any pre-configured scope."
+commands.deny = ["poc_doc_preview_authorize_directory"]

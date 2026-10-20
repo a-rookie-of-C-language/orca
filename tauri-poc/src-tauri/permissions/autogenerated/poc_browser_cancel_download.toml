@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-cancel-download"
+description = "Enables the poc_browser_cancel_download command without any pre-configured scope."
+commands.allow = ["poc_browser_cancel_download"]
+
+[[permission]]
+identifier = "deny-poc-browser-cancel-download"
+description = "Denies the poc_browser_cancel_download command without any pre-configured scope."
+commands.deny = ["poc_browser_cancel_download"]

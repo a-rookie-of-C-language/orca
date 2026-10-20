@@ -1,6 +1,7 @@
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import type { AiVaultScanProgress } from '../../../../shared/ai-vault-scan-progress'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostScope } from '../../../../shared/execution-host'
+import { isTauriNativeHost } from '../../web/tauri-native-host'
 
 const MAX_PROGRESS_ENTRIES = 8
 const progressByKey = new Map<string, AiVaultScanProgress>()
@@ -90,9 +91,14 @@ type ScanPresentation = { progress: AiVaultScanProgress; agents: AiVaultScanProg
 /** Retains one rendered snapshot; only the requested key can replace its facts. */
 export function useAiVaultScanProgress(
   executionHostScope: ExecutionHostScope,
-  scanKey: string
+  scanKey: string,
+  appliedScanId?: string
 ): (ScanPresentation & { active: boolean }) | null {
-  const local = executionHostScope === LOCAL_EXECUTION_HOST_ID
+  // Electron's main process only broadcasts the local scan. Tauri's paired
+  // runtime broadcasts its own host scan through runtime.clientEvents.
+  const local =
+    executionHostScope === LOCAL_EXECUTION_HOST_ID ||
+    (isTauriNativeHost() && executionHostScope.startsWith('runtime:'))
   const subscribe = useCallback(
     (listener: () => void) => {
       if (local) {
@@ -107,7 +113,15 @@ export function useAiVaultScanProgress(
   const [shown, setShown] = useState<
     (ScanPresentation & { scanKey: string; discovering: boolean }) | null
   >(null)
-  const own = useKeyProgress(subscribe, local, scanKey)
+  const rawOwn = useKeyProgress(subscribe, local, scanKey)
+  // Live progress follows the request key; settled progress also needs the applied result's ID.
+  const own =
+    rawOwn &&
+    (rawOwn.settledAt === null ||
+      appliedScanId === undefined ||
+      rawOwn.scanId === appliedScanId)
+      ? rawOwn
+      : undefined
   if (own && (own !== shown?.progress || scanKey !== shown?.scanKey)) {
     const discovering =
       !shown ||

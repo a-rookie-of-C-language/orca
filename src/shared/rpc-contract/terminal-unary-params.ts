@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { TERMINAL_KITTY_FILE_MAX_BYTES } from '../terminal-kitty-file'
-import { OptionalFiniteNumber, OptionalString, requiredString } from './rpc-param-primitives'
+import {
+  OptionalFiniteNumber,
+  OptionalPositiveInt,
+  OptionalString,
+  requiredString
+} from './rpc-param-primitives'
 import { isTuiAgent } from '../tui-agent-config'
 import { SpawnIntentParam } from './agent-session-params'
 import {
@@ -10,6 +15,7 @@ import {
 } from '../windows-terminal-shell'
 import { TERMINAL_PANE_SPLIT_SOURCES } from '../feature-education-telemetry'
 import { OptionalExecutionHostId } from './worktree-params'
+import { isTerminalLeafMoveRequest } from '../terminal-leaf-move'
 
 // Why refused at the boundary rather than at spawn: only the host knows the allowlist, and a
 // relay-side throw reaches the caller as an opaque spawn failure after the round trip.
@@ -61,6 +67,12 @@ export const TerminalInspectProcess = TerminalHandle.extend({
   scanChildProcesses: z.boolean().optional()
 })
 
+export const TerminalSignal = TerminalHandle.extend({
+  // Why additive like scanChildProcesses: a legacy host strips the intent and the
+  // caller falls back to its previous interrupt delivery instead of failing Ctrl+C.
+  signal: requiredString('Missing signal name').pipe(z.string().max(16))
+})
+
 export const TerminalListParams = z.object({
   worktree: OptionalString,
   limit: OptionalFiniteNumber,
@@ -84,6 +96,17 @@ export const TerminalResolvePane = z.object({
   paneKey: requiredString('Missing pane key'),
   worktreeId: OptionalString
 })
+
+/** Moves a renderer-owned leaf into a newly named tab before the renderer mounts it. */
+export const TerminalMoveLeaf = z
+  .object({
+    worktreeId: requiredString('Missing worktree id').pipe(z.string().max(512)),
+    sourceTabId: requiredString('Missing source tab id').pipe(z.string().max(512)),
+    targetTabId: requiredString('Missing target tab id').pipe(z.string().max(512)),
+    leafId: requiredString('Missing leaf id').pipe(z.string().max(512)),
+    ptyId: z.string().min(1).max(512).nullable()
+  })
+  .refine(isTerminalLeafMoveRequest, { message: 'Invalid terminal pane identity' })
 
 export const TerminalRecoverPane = z.object({
   paneKey: requiredString('Missing pane key'),
@@ -122,6 +145,15 @@ export const TerminalRead = TerminalHandle.extend({
   // metadata — two frames of reference in one payload, which is the confusion `source` exists to
   // remove. The CLI already refuses the pair, but the RPC is reachable without it.
   message: 'Cursor cannot be combined with a screen read'
+})
+
+/**
+ * Returns the host-owned ANSI buffer used when a desktop pane is remounted.
+ * Unlike `terminal.read`, this preserves grid geometry and the output sequence
+ * needed to replay live bytes without duplicating the snapshot boundary.
+ */
+export const TerminalBufferSnapshot = TerminalHandle.extend({
+  scrollbackRows: OptionalPositiveInt
 })
 
 // Why: preserve the legacy contract — `title: string | null` only, `undefined` rejected, so the CLI's "reset" signal stays distinct.
@@ -204,6 +236,10 @@ export const TerminalCreateParams = z.object({
   clientMutationId: z.string().min(1).max(128).optional(),
   reconcileExisting: z.boolean().optional(),
   command: OptionalString,
+  // Optional so older paired clients keep the host-selected workspace cwd and size.
+  cwd: OptionalString,
+  cols: z.number().int().min(1).max(1000).optional(),
+  rows: z.number().int().min(1).max(500).optional(),
   startupCommandDelivery: z.enum(['fast', 'shell-ready']).optional(),
   env: z.record(z.string(), z.string()).optional(),
   envToDelete: z.array(z.string().min(1).max(256)).max(32).optional(),

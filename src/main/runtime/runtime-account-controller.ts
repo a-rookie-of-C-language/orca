@@ -168,6 +168,25 @@ export class RuntimeAccountController {
     return getManagedDataAccountService().remove(provider, accountId)
   }
 
+  addClaude(
+    target?: ClaudeAccountSelectionTarget,
+    copyLink = false
+  ): Promise<ClaudeRateLimitAccountsState> {
+    return this.requireServices().claudeAccounts.addAccount(target, copyLink)
+  }
+
+  reauthenticateClaude(accountId: string, copyLink = false): Promise<ClaudeRateLimitAccountsState> {
+    return this.requireServices().claudeAccounts.reauthenticateAccount(accountId, copyLink)
+  }
+
+  cancelClaudePendingLogin(): boolean {
+    return this.requireServices().claudeAccounts.cancelPendingLogin()
+  }
+
+  waitForClaudeSignInLink(): Promise<string | null> {
+    return this.requireServices().claudeAccounts.waitForSignInLink()
+  }
+
   async refreshForMobile(): Promise<void> {
     const { rateLimits } = this.requireServices()
     await Promise.allSettled([
@@ -253,6 +272,28 @@ export class RuntimeAccountController {
     return this.requireServices().codexAccounts.addAccountFromHome(sourceHome, target)
   }
 
+  addCodex(target?: {
+    runtime?: 'host' | 'wsl'
+    wslDistro?: string | null
+  }): Promise<CodexRateLimitAccountsState> {
+    return this.requireServices().codexAccounts.addAccount(target)
+  }
+
+  reauthenticateCodex(
+    accountId: string,
+    options?: { activateIfSelectionWasEmpty?: boolean }
+  ): Promise<CodexRateLimitAccountsState> {
+    return this.requireServices().codexAccounts.reauthenticateAccount(accountId, options)
+  }
+
+  cancelCodexPendingLogin(): boolean {
+    return this.requireServices().codexAccounts.cancelPendingLogin()
+  }
+
+  getCodexPendingLoginUrl(): string | null {
+    return this.requireServices().codexAccounts.getPendingLoginUrl()
+  }
+
   onChanged(listener: (snapshot: AccountsSnapshot) => void): () => void {
     const services = this.requireServices()
     const unsubscribeData = hasAppEnvironment()
@@ -281,5 +322,9 @@ export class RuntimeAccountController {
       )
     }
     return this.services
+  }
+
+  getRateLimits(): RateLimitService {
+    return this.requireServices().rateLimits
   }
 }

@@ -27,10 +27,12 @@ describe('remote runtime terminal end verdict', () => {
   })
 
   it.each([
-    ['an explicit host verdict', { verdict: 'exited' }, 'exited'],
-    ['a legacy bare end', {}, 'unverifiable'],
-    ['an unknown future verdict', { verdict: 'unknown' }, 'unverifiable']
-  ])('maps %s to %s', async (_case, fields, expected) => {
+    ['an explicit host verdict', { verdict: 'exited' }, 'exited', undefined],
+    ['a proven host status', { verdict: 'exited', exitCode: 42 }, 'exited', 42],
+    ['a non-integer host status', { verdict: 'exited', exitCode: 4.2 }, 'exited', undefined],
+    ['a legacy bare end', {}, 'unverifiable', undefined],
+    ['an unknown future verdict', { verdict: 'unknown' }, 'unverifiable', undefined]
+  ])('maps %s to %s', async (_case, fields, expected, expectedCode) => {
     const { getRemoteRuntimeTerminalMultiplexer } =
       await import('./remote-runtime-terminal-multiplexer')
     const onEnd = vi.fn()
@@ -45,6 +47,10 @@ describe('remote runtime terminal end verdict', () => {
       result: { type: 'end', streamId: stream.streamId, ...fields }
     })
 
-    expect(onEnd).toHaveBeenCalledWith(expected)
+    if (expectedCode === undefined) {
+      expect(onEnd).toHaveBeenCalledWith(expected)
+    } else {
+      expect(onEnd).toHaveBeenCalledWith(expected, expectedCode)
+    }
   })
 })

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-set-minimize-to-tray"
+description = "Enables the poc_set_minimize_to_tray command without any pre-configured scope."
+commands.allow = ["poc_set_minimize_to_tray"]
+
+[[permission]]
+identifier = "deny-poc-set-minimize-to-tray"
+description = "Denies the poc_set_minimize_to_tray command without any pre-configured scope."
+commands.deny = ["poc_set_minimize_to_tray"]

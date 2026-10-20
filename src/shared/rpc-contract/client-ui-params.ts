@@ -240,6 +240,9 @@ export const UiUpdateFields = z
     mobileEmulatorTabIntroDismissed: z.boolean().optional(),
     mobileEmulatorAgentSetupDismissed: z.boolean().optional(),
     projectOrderManualDefaultNoticeDismissed: z.boolean().optional(),
+    // Windows-only one-shot tray notice; the Tauri renderer writes it through ui.set like
+    // the other dismissals above, and the pairing-local seam keeps each device's own answer.
+    trayMinimizeNoticeShown: z.boolean().optional(),
     usagePercentageDisplayChangeNoticeDismissed: z.boolean().optional(),
     statusBarCompactChangeNoticeDismissed: z.boolean().optional(),
     usageEmptyStateDismissed: z.boolean().optional(),

@@ -137,6 +137,11 @@ export const uiClipboardAndWindowControlsApi = {
   performNativeSelectionAction: (action: 'copy' | 'select-all'): void => {
     ipcRenderer.send('ui:performNativeSelectionAction', action)
   },
+  performNativeEditAction: (action: 'undo' | 'redo'): void => {
+    // Why: Electron serves menu undo/redo from native roles, so the hook
+    // never fires there; the send only keeps the shared ui contract whole.
+    ipcRenderer.send('ui:performNativeEditAction', action)
+  },
   writeClipboardFile: (
     args:
       | {

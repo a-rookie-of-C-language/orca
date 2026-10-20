@@ -126,12 +126,14 @@ export function ActivityBarButton({
   active,
   onClick,
   layout,
+  sidebarSide = 'right',
   statusIndicator
 }: {
   item: ActivityBarItem
   active: boolean
   onClick: () => void
   layout: 'top' | 'side'
+  sidebarSide?: 'left' | 'right'
   statusIndicator?: CheckStatus | null
 }): React.JSX.Element {
   const Icon = item.icon
@@ -143,14 +145,18 @@ export function ActivityBarButton({
       <TooltipTrigger asChild>
         <button
           type="button"
+          data-tools-sidebar-tab={item.id}
           className={cn(
-            'relative flex shrink-0 items-center justify-center transition-colors',
+            'relative flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
             RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME,
             isTop ? 'h-[36px] w-9' : 'w-10 h-10',
-            active ? 'text-foreground' : 'text-muted-foreground/60 hover:text-muted-foreground'
+            active
+              ? 'text-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           )}
           onClick={onClick}
           aria-label={activityItemAriaLabel(item, effectiveStatus)}
+          aria-current={active ? 'page' : undefined}
         >
           <Icon size={isTop ? 16 : 18} />
 
@@ -168,11 +174,19 @@ export function ActivityBarButton({
             <div className="absolute bottom-0 left-[25%] right-[25%] h-[2px] bg-foreground rounded-t" />
           )}
           {active && !isTop && (
-            <div className="absolute right-0 top-[25%] bottom-[25%] w-[2px] bg-foreground rounded-l" />
+            <div
+              className={cn(
+                'absolute top-[25%] bottom-[25%] w-[2px] bg-foreground',
+                sidebarSide === 'left' ? 'left-0 rounded-r' : 'right-0 rounded-l'
+              )}
+            />
           )}
         </button>
       </TooltipTrigger>
-      <TooltipContent side={isTop ? 'bottom' : 'left'} sideOffset={6}>
+      <TooltipContent
+        side={isTop ? 'bottom' : sidebarSide === 'left' ? 'right' : 'left'}
+        sideOffset={6}
+      >
         {item.shortcut ? `${item.title} (${item.shortcut})` : item.title}
       </TooltipContent>
     </Tooltip>

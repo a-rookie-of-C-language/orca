@@ -11,6 +11,7 @@ const { turnedOnDarkBuildDefines } = createRequire(import.meta.url)('../dark-bui
 export const ORCAD_ENTRY_POINT = 'src/main/orcad/main.ts'
 export const ORCAD_LAUNCHER_ENTRY_POINT = 'src/main/orcad/launcher.ts'
 export const ORCAD_CHILD_ENTRY_POINTS = {
+  sttWorker: 'src/main/speech/stt-worker.ts',
   watcher: 'src/main/ipc/parcel-watcher-process-entry.ts',
   daemon: 'src/main/daemon/daemon-entry.ts',
   writer: 'src/main/persistence/profile-state/profile-state-writer-worker-entry.ts',
@@ -20,7 +21,8 @@ export const ORCAD_CHILD_ENTRY_POINTS = {
   sessionScanner: 'src/main/ai-vault/session-scanner-service-entry.ts',
   workerThreadChildProcess:
     'src/main/worker-thread-child-process/worker-thread-child-process-entry.ts',
-  claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts'
+  claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts',
+  pluginHost: 'src/main/plugins/plugin-host-entry.ts'
 }
 
 /** Each child ships flat beside orcad.js under its source basename; the runtime resolvers look there. */

@@ -22,6 +22,7 @@ import {
   type WorkspaceEditorSshHost
 } from '@/lib/workspace-editor-ssh-target'
 import type { WorkspaceOwnerRef } from '@/lib/resolve-owner'
+import { getWindowsPathAccess } from '@/lib/windows-path-access'
 import { NO_OPEN_IN_APPLICATIONS } from '@/lib/open-in-application-selection'
 import { showOpenFailureToast } from './worktree-open-failure-toast'
 import type { OpenInApplication } from '../../../../shared/ui-chrome-types'
@@ -174,6 +175,7 @@ export async function openWorktreePath(args: {
   if (owner === 'unresolved') {
     return
   }
+  const wslDistro = getWindowsPathAccess(owner)?.wslDistro
 
   const result =
     args.target === 'file-manager'
@@ -182,6 +184,7 @@ export async function openWorktreePath(args: {
           path: args.worktreePath,
           command: args.command,
           connectionId: editorConnectionId,
+          ...(wslDistro ? { wslDistro } : {}),
           ownerHostId: owner
         })
   if (!result.ok) {

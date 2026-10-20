@@ -1,5 +1,11 @@
 import { ORCA_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../shared/browser-guest-web-preferences'
 
+export type BrowserClientPageWebviewFactory = (options: {
+  browserPageId: string
+  partition: string
+  host: HTMLDivElement
+}) => Electron.WebviewTag
+
 export function createBrowserClientPageRetainedRoot(document: Document): HTMLDivElement {
   const root = document.createElement('div')
   root.dataset.browserClientPageRetainedRoot = ''
@@ -34,17 +40,28 @@ export function createBrowserClientPageRetainedHost(
 }
 
 export function createBrowserClientPageWebview(options: {
-  createWebview?: () => Electron.WebviewTag
+  createWebview?: BrowserClientPageWebviewFactory
   document: Document
+  browserPageId: string
+  host: HTMLDivElement
   partition: string
 }): Electron.WebviewTag {
   const webview =
-    options.createWebview?.() ?? (options.document.createElement('webview') as Electron.WebviewTag)
+    options.createWebview?.({
+      browserPageId: options.browserPageId,
+      partition: options.partition,
+      host: options.host
+    }) ?? createElectronBrowserClientPageWebview(options.document)
   webview.setAttribute('partition', options.partition)
   webview.setAttribute('webpreferences', ORCA_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE)
   webview.setAttribute('src', 'about:blank')
   Object.assign(webview.style, { display: 'flex', width: '100%', height: '100%' })
   return webview
+}
+
+function createElectronBrowserClientPageWebview(document: Document): Electron.WebviewTag {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Electron upgrades this custom element to WebviewTag; other hosts supply a factory.
+  return document.createElement('webview') as Electron.WebviewTag
 }
 
 export function readBrowserClientPageAttachedGuestId(webview: Electron.WebviewTag): number | null {

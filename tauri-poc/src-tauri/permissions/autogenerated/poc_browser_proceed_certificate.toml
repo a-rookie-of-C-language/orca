@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-browser-proceed-certificate"
+description = "Enables the poc_browser_proceed_certificate command without any pre-configured scope."
+commands.allow = ["poc_browser_proceed_certificate"]
+
+[[permission]]
+identifier = "deny-poc-browser-proceed-certificate"
+description = "Denies the poc_browser_proceed_certificate command without any pre-configured scope."
+commands.deny = ["poc_browser_proceed_certificate"]

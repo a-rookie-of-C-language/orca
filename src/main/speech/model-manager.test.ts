@@ -20,6 +20,11 @@ vi.mock('electron', () => ({
   }
 }))
 
+vi.mock('./node-speech-model-download-request', () => ({
+  createNodeSpeechModelDownloadRequest: (url: URL) =>
+    netRequestMock({ method: 'GET', url: url.toString() })
+}))
+
 vi.mock('./openai-api-key-store', () => ({
   hasOpenAiSpeechApiKey: hasOpenAiSpeechApiKeyMock
 }))

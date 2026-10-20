@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import { importExternalPathsToRuntime } from './runtime-file-import-client'
+import {
+  FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY,
+  MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
+  RUNTIME_PROTOCOL_VERSION
+} from '../../../shared/protocol-version'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import {
   fsImportExternalPaths,
   fsStageExternalPathsForRuntimeUpload,
   fsUploadExternalFileToRuntime,
+  runtimeCall,
   runtimeEnvironmentCall,
   runtimeEnvironmentTransportCall,
   installRuntimeFileClientEnvironment
@@ -359,6 +365,110 @@ describe('runtime file client', () => {
       expectedEnvironmentPairingRevision: undefined,
       expectedEnvironmentRuntimeId: 'remote-runtime'
     })
+  })
+
+  it('uses the Tauri-owned runtime for direct SSH imports instead of Electron fs fallback', async () => {
+    window.__TAURI_INTERNALS__ = { invoke: vi.fn() }
+    fsStageExternalPathsForRuntimeUpload.mockResolvedValue({
+      sources: [
+        {
+          sourcePath: '/Users/me/note.txt',
+          status: 'staged',
+          name: 'note.txt',
+          kind: 'file',
+          entries: [stagedFile('', 4, 55)]
+        }
+      ]
+    })
+    let statCalls = 0
+    runtimeCall.mockImplementation(async ({ method }) => {
+      if (method === 'status.get') {
+        return {
+          id: method,
+          ok: true,
+          result: {
+            runtimeId: 'local-runtime',
+            runtimeProtocolVersion: RUNTIME_PROTOCOL_VERSION,
+            minCompatibleRuntimeClientVersion: MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
+            capabilities: [FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY]
+          },
+          _meta: { runtimeId: 'local-runtime' }
+        }
+      }
+      if (method === 'files.stat') {
+        statCalls += 1
+        if (statCalls > 1) {
+          return notFoundResponse(method)
+        }
+        return {
+          id: method,
+          ok: true,
+          result: { size: 0, isDirectory: true, mtime: 1 },
+          _meta: { runtimeId: 'local-runtime' }
+        }
+      }
+      return okResponse(method)
+    })
+
+    await expect(
+      importExternalPathsToRuntime(
+        {
+          target: { kind: 'local' as const },
+          worktreeId: 'wt-ssh',
+          worktreePath: '/remote/repo',
+          connectionId: 'ssh-1',
+          expectedSshTargetId: 'ssh-1',
+          expectedSshConnectionGeneration: 5,
+          expectedExecutionHostId: 'ssh:ssh-1'
+        },
+        ['/Users/me/note.txt'],
+        '/remote/repo/uploads'
+      )
+    ).resolves.toEqual({
+      results: [
+        {
+          sourcePath: '/Users/me/note.txt',
+          status: 'imported',
+          destPath: '/remote/repo/uploads/note.txt',
+          kind: 'file',
+          renamed: false
+        }
+      ]
+    })
+
+    expect(fsImportExternalPaths).not.toHaveBeenCalled()
+    expect(fsStageExternalPathsForRuntimeUpload).toHaveBeenCalledWith({
+      sourcePaths: ['/Users/me/note.txt']
+    })
+    expect(fsUploadExternalFileToRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktree: 'id:wt-ssh',
+        expectedExecutionHostId: 'ssh:ssh-1',
+        expectedSshTargetId: 'ssh-1',
+        expectedSshConnectionGeneration: 5
+      })
+    )
+    expect(runtimeCall).toHaveBeenCalledTimes(5)
+    expect(runtimeCall).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ method: 'status.get' })
+    )
+    expect(runtimeCall).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ method: 'files.stat' })
+    )
+    expect(runtimeCall).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ method: 'files.stat' })
+    )
+    expect(runtimeCall).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ method: 'files.commitUpload' })
+    )
+    expect(runtimeCall).toHaveBeenNthCalledWith(
+      5,
+      expect.objectContaining({ method: 'files.delete' })
+    )
   })
 
   it('removes a created runtime directory import root when a nested file upload fails', async () => {

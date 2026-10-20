@@ -1,4 +1,6 @@
 import { TERMINAL_LIFECYCLE_METHODS } from './terminal/terminal-lifecycle-methods'
+import { TERMINAL_LEAF_MOVE_METHOD } from './terminal/terminal-leaf-move-method'
+import { TERMINAL_CWD_METHOD } from './terminal/terminal-cwd-method'
 import { TERMINAL_MULTIPLEX_METHODS } from './terminal/terminal-multiplex-method'
 import { TERMINAL_QUERY_METHODS } from './terminal/terminal-query-methods'
 import { TERMINAL_SEND_METHODS } from './terminal/terminal-send-method'
@@ -19,5 +21,7 @@ export const TERMINAL_METHODS = [
   ...TERMINAL_MULTIPLEX_METHODS,
   ...TERMINAL_SUBSCRIBE_METHODS,
   ...TERMINAL_VIEWPORT_METHODS_AFTER_STREAMS,
-  ...TERMINAL_VIEWER_COLORS_METHODS
+  ...TERMINAL_VIEWER_COLORS_METHODS,
+  TERMINAL_CWD_METHOD,
+  TERMINAL_LEAF_MOVE_METHOD
 ]

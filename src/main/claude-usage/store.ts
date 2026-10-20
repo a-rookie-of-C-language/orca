@@ -1,6 +1,7 @@
 import { claudeTokenSessions } from '../usage/agent-token-usage'
-import { app } from 'electron'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import type {
   ClaudeUsageBreakdownKind,
   ClaudeUsageBreakdownRow,
@@ -36,6 +37,27 @@ const SCHEMA_VERSION = 7
 // mutates Electron's derived userData location, matching the persistence/store pattern.
 let _claudeUsageFile: string | null = null
 
+const require = createRequire(import.meta.url)
+
+function defaultUserDataPath(): string {
+  if (hasAppEnvironment()) {
+    return getAppEnvironment().getPath('userData')
+  }
+  const electron: unknown = require('electron')
+  if (
+    typeof electron === 'object' &&
+    electron !== null &&
+    'app' in electron &&
+    typeof electron.app === 'object' &&
+    electron.app !== null &&
+    'getPath' in electron.app &&
+    typeof electron.app.getPath === 'function'
+  ) {
+    return electron.app.getPath('userData')
+  }
+  throw new Error('Electron app environment is unavailable')
+}
+
 function getDefaultState(): ClaudeUsagePersistedState {
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -67,13 +89,18 @@ function normalizePersistedState(state: ClaudeUsagePersistedState): ClaudeUsageP
   }
 }
 
-export function initClaudeUsagePath(): void {
-  _claudeUsageFile = join(app.getPath('userData'), 'orca-claude-usage.json')
+export function initClaudeUsagePath(userDataPath?: string): void {
+  _claudeUsageFile = join(userDataPath ?? defaultUserDataPath(), 'orca-claude-usage.json')
 }
 
 function getClaudeUsageFile(): string {
+  const file = _claudeUsageFile
+  if (file) {
+    return file
+  }
+  initClaudeUsagePath()
   if (!_claudeUsageFile) {
-    _claudeUsageFile = join(app.getPath('userData'), 'orca-claude-usage.json')
+    throw new Error('Claude usage path is unavailable')
   }
   return _claudeUsageFile
 }
@@ -83,14 +110,17 @@ export class ClaudeUsageStore extends UsageProviderStoreLifecycle<
   ClaudeUsagePersistedState,
   'hasAnyClaudeData'
 > {
-  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>) {
+  constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>, userDataPath?: string) {
+    const cacheFile = userDataPath
+      ? join(userDataPath, 'orca-claude-usage.json')
+      : getClaudeUsageFile()
     super(store, {
       tokenUsage: {
         provider: 'claude',
         selectSessions: (state) => claudeTokenSessions(state.sessions)
       },
       logTag: '[claude-usage]',
-      resolveCacheFile: getClaudeUsageFile,
+      resolveCacheFile: () => cacheFile,
       createDefaultState: getDefaultState,
       normalizeState: normalizePersistedState,
       parseReport: parseClaudeUsageReport,

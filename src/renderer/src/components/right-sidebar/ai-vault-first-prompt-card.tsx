@@ -15,8 +15,11 @@ const FULL_FIRST_PROMPT_LOAD_TIMEOUT_MS = 15_000
 function canLoadFullFirstPrompt(
   session: Pick<AiVaultSession, 'executionHostId' | 'filePath'>
 ): boolean {
+  const runtimeSession =
+    Reflect.get(globalThis, '__ORCA_WEB_CLIENT__') === true &&
+    session.executionHostId.startsWith('runtime:')
   return (
-    session.executionHostId === LOCAL_EXECUTION_HOST_ID &&
+    (session.executionHostId === LOCAL_EXECUTION_HOST_ID || runtimeSession) &&
     Boolean(session.filePath.trim()) &&
     typeof window.api.aiVault.getFirstUserPrompt === 'function'
   )

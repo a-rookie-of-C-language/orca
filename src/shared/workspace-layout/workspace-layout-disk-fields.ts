@@ -171,6 +171,7 @@ const CONTENT_ENTRY = {
 
 const GROUP = {
   id: own('group', 'id'),
+  isChatPanel: own('group', 'isChatPanel'),
   worktreeId: WORKTREE,
   activeTabId: { from: 'viewGroup.activeTabId', via: ['group.tabOrder'] },
   tabOrder: TAB_ORDER,

@@ -173,6 +173,15 @@ export async function getRuntimeBackedStoredSettings(): Promise<GlobalSettings> 
     if (typeof result.settings.agentSkillSharingEnabled === 'boolean') {
       runtimeSettings.agentSkillSharingEnabled = result.settings.agentSkillSharingEnabled
     }
+    // Read-only mirror: the paired Tauri shell's awake verdict reads the host's
+    // own store, so the renderer shows the host value rather than a local one.
+    if (result.settings.computerAwakeMode !== undefined) {
+      runtimeSettings.computerAwakeMode = result.settings.computerAwakeMode
+    }
+    if (typeof result.settings.keepComputerAwakeWhileAgentsRun === 'boolean') {
+      runtimeSettings.keepComputerAwakeWhileAgentsRun =
+        result.settings.keepComputerAwakeWhileAgentsRun
+    }
     const next = mergeSettings(local, runtimeSettings)
     writeStoredSettings(next)
     return settingsForActiveVisibilityOwner(next)
@@ -234,7 +243,16 @@ export async function syncRuntimeBackedSettings(
       updates.prBotAuthorOverrides
     )
   }
-  Object.assign(runtimeUpdates, runtimeChatPermissionSetting(updates, false))
+    Object.assign(runtimeUpdates, runtimeChatPermissionSetting(updates, false))
+    // Why runtime-backed: the host-side awake verdict reads the paired host's
+    // own settings store, so a local save that never reached it would set a
+    // blocker policy the host cannot see.
+    if (updates.computerAwakeMode !== undefined) {
+      runtimeUpdates.computerAwakeMode = updates.computerAwakeMode
+    }
+    if (typeof updates.keepComputerAwakeWhileAgentsRun === 'boolean') {
+      runtimeUpdates.keepComputerAwakeWhileAgentsRun = updates.keepComputerAwakeWhileAgentsRun
+    }
   if (Object.keys(runtimeUpdates).length === 0) {
     return localNext
   }

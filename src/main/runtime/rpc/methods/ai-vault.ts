@@ -30,11 +30,25 @@ import {
   supportsStructuredAgentSessions
 } from './structured-agent-session-policy'
 import {
+  AiVaultDeleteSessionParams,
   AiVaultListSessionsParams,
+  AiVaultFirstUserPromptParams,
+  AiVaultPrepareSessionDeleteParams,
   AiVaultPrepareSessionResumeParams,
-  AiVaultSessionTitlesParams
+  AiVaultScanProgressParams,
+  AiVaultSessionTitlesParams,
+  AiVaultSubagentListParams
 } from '../../../../shared/rpc-contract/ai-vault-params'
-export { AiVaultListSessionsParams, AiVaultPrepareSessionResumeParams, AiVaultSessionTitlesParams }
+export {
+  AiVaultDeleteSessionParams,
+  AiVaultFirstUserPromptParams,
+  AiVaultListSessionsParams,
+  AiVaultPrepareSessionDeleteParams,
+  AiVaultPrepareSessionResumeParams,
+  AiVaultScanProgressParams,
+  AiVaultSessionTitlesParams,
+  AiVaultSubagentListParams
+}
 
 export const AI_VAULT_METHODS = [
   defineMethod({
@@ -80,11 +94,43 @@ export const AI_VAULT_METHODS = [
     }
   }),
   defineMethod({
+    name: 'aiVault.clearSearchIndex',
+    permission: 'settings-write',
+    params: null,
+    handler: async (_params, { runtime, pairedDeviceId }) => {
+      if (!pairedDeviceId) {
+        throw Object.assign(
+          new Error('Session search index can only be cleared by a paired client.'),
+          { code: 'forbidden' }
+        )
+      }
+      await runtime.clearAiVaultSearchIndex()
+    }
+  }),
+  defineMethod({
+    name: 'aiVault.getScanProgress',
+    permission: 'workspace',
+    params: AiVaultScanProgressParams,
+    handler: (params, { runtime }) => runtime.getAiVaultScanProgress(params.scanKey)
+  }),
+  defineMethod({
     name: 'aiVault.resolveSessionTitles',
     permission: 'workspace',
     params: AiVaultSessionTitlesParams,
     handler: (params, { runtime, signal }) =>
       runtime.resolveAiVaultSessionTitles(params.requests, signal)
+  }),
+  defineMethod({
+    name: 'aiVault.listSubagentSessions',
+    permission: 'workspace',
+    params: AiVaultSubagentListParams,
+    handler: (params, { runtime, signal }) => runtime.listAiVaultSubagentSessions(params, signal)
+  }),
+  defineMethod({
+    name: 'aiVault.getFirstUserPrompt',
+    permission: 'workspace',
+    params: AiVaultFirstUserPromptParams,
+    handler: (params, { runtime, signal }) => runtime.getAiVaultFirstUserPrompt(params, signal)
   }),
   defineMethod({
     name: 'aiVault.listSessions',
@@ -159,5 +205,17 @@ export const AI_VAULT_METHODS = [
         (await copyStructuredChatConversation(args)) ?? runtime.prepareAiVaultSessionResume(args)
       )
     }
+  }),
+  defineMethod({
+    name: 'aiVault.prepareSessionDelete',
+    permission: 'workspace',
+    params: AiVaultPrepareSessionDeleteParams,
+    handler: (params, { runtime }) => runtime.prepareAiVaultSessionDelete(params)
+  }),
+  defineMethod({
+    name: 'aiVault.deleteSession',
+    permission: 'workspace',
+    params: AiVaultDeleteSessionParams,
+    handler: (params, { runtime }) => runtime.deleteAiVaultSession(params)
   })
 ]

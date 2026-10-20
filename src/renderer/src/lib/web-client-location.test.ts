@@ -31,6 +31,14 @@ describe('isWebClientLocation', () => {
     expect(isWebClientLocation()).toBe(true)
   })
 
+  it('does not classify the Tauri desktop renderer as a web client', () => {
+    vi.stubGlobal('window', {
+      __TAURI_INTERNALS__: { invoke: () => Promise.resolve() },
+      location: { pathname: '/web-index.html' }
+    })
+    expect(isWebClientLocation()).toBe(false)
+  })
+
   it('detects the web client by its global marker', () => {
     vi.stubGlobal('window', { __ORCA_WEB_CLIENT__: true, location: { pathname: '/' } })
     expect(isWebClientLocation()).toBe(true)

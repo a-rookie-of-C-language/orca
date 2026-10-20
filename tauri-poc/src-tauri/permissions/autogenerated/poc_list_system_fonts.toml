@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-list-system-fonts"
+description = "Enables the poc_list_system_fonts command without any pre-configured scope."
+commands.allow = ["poc_list_system_fonts"]
+
+[[permission]]
+identifier = "deny-poc-list-system-fonts"
+description = "Denies the poc_list_system_fonts command without any pre-configured scope."
+commands.deny = ["poc_list_system_fonts"]

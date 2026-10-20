@@ -12,7 +12,7 @@ import {
 } from './runtime-file-mutation-rpc'
 import type { RuntimeFileImportSession } from './runtime-file-mutation-rpc'
 import {
-  getRemoteFileArgs,
+  getRemoteFileMutationArgs,
   joinRuntimeRelativePath,
   withSshMutationExpectation
 } from './runtime-file-routing'
@@ -23,6 +23,7 @@ import {
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
 import { localAccess } from './runtime-file-read-client'
+import { isTauriNativeHost } from '@/web/tauri-native-host'
 
 export async function importExternalPathsToRuntime(
   context: RuntimeFileOperationArgs,
@@ -38,7 +39,10 @@ export async function importExternalPathsToRuntime(
   }
 ): Promise<{ results: ImportItemResult[] }> {
   const target = context.target
-  if (target.kind !== 'environment' || !context.worktreeId || !context.worktreePath) {
+  const canUseRuntimeOwnedFiles =
+    target.kind === 'environment' ||
+    (target.kind === 'local' && Boolean(context.connectionId) && isTauriNativeHost())
+  if (!canUseRuntimeOwnedFiles || !context.worktreeId || !context.worktreePath) {
     return window.api.fs.importExternalPaths(
       withSshMutationExpectation(context, {
         sourcePaths,
@@ -50,23 +54,25 @@ export async function importExternalPathsToRuntime(
     )
   }
 
-  const destinationArgs = getRemoteFileArgs(context, destinationDir)
+  const destinationArgs = getRemoteFileMutationArgs(context, destinationDir)
   if (!destinationArgs) {
     throw new Error('Destination is outside the active runtime worktree')
   }
 
-  const expectedEnvironmentPairingRevision = captureRuntimeEnvironmentRequestRevision(
-    target.environmentId
-  )
-  const expectedEnvironmentConnectionGeneration = getRuntimeEnvironmentConnectionGeneration(
-    target.environmentId
-  )
+  const expectedEnvironmentPairingRevision =
+    target.kind === 'environment'
+      ? captureRuntimeEnvironmentRequestRevision(target.environmentId)
+      : undefined
+  const expectedEnvironmentConnectionGeneration =
+    target.kind === 'environment'
+      ? getRuntimeEnvironmentConnectionGeneration(target.environmentId)
+      : undefined
   const expectedEnvironmentRuntimeId = await assertRuntimeFileMutationCapability(
     target,
     expectedEnvironmentPairingRevision
   )
   const assertImportSessionCurrent = createRuntimeImportSessionGuard(
-    target.environmentId,
+    target,
     expectedEnvironmentPairingRevision,
     expectedEnvironmentConnectionGeneration,
     options?.assertCurrent
