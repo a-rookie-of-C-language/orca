@@ -90,6 +90,7 @@ fn main() {
             "poc_browser_client_route_import_from_browser",
             "poc_browser_session_clear_default_cookies",
             "poc_browser_cancel_download",
+            "poc_browser_download_blob",
             "poc_browser_open_devtools",
             "poc_browser_set_bounds",
             "poc_browser_set_visible",

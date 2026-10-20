@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -46,6 +47,8 @@ pub struct BrowserWebviewState {
         tauri::async_runtime::Mutex<HashMap<String, Arc<tauri::async_runtime::Mutex<()>>>>,
     certificate_challenges: Mutex<HashMap<String, PendingCertificateChallenge>>,
     accepted_certificates: Mutex<HashMap<String, AcceptedCertificateIdentity>>,
+    /// Attachment URLs whose response arrived but native DownloadStarting never fired for (Windows host gap).
+    pending_attachment_downloads: Mutex<HashMap<String, String>>,
     navigation_epochs: Mutex<HashMap<String, u64>>,
     navigation_in_flight: Mutex<HashMap<String, String>>,
     active_grab_ops: Mutex<HashMap<String, String>>,
@@ -1033,9 +1036,10 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
     use webview2_com::{
         take_pwstr, FaviconChangedEventHandler, Microsoft::Web::WebView2::Win32::*,
         NavigationCompletedEventHandler, NavigationStartingEventHandler, ProcessFailedEventHandler,
-        SourceChangedEventHandler,
+        SourceChangedEventHandler, WebMessageReceivedEventHandler,
+        WebResourceResponseReceivedEventHandler,
     };
-    use windows_core::{Interface, BOOL, PWSTR};
+    use windows_core::{Interface, BOOL, HSTRING, PCWSTR, PWSTR};
 
     fn base_event(page_id: &str, event_type: &str) -> BrowserPageEvent {
         BrowserPageEvent {
@@ -1203,6 +1207,13 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                         None if (1..=5).contains(&status.0) => return Ok(()),
                         None => (-2, format!("ERR_FAILED (WebView2 status {})", status.0)),
                     };
+                    // Attachment fallback: a main-frame abort after an
+                    // attachment response means DownloadStarting stayed
+                    // silent, so fetch the bytes in-page instead of losing
+                    // the download. Native wins when it fires (checked inside).
+                    if error_code == -3 {
+                        start_attachment_fallback(&app_for_failed, &page_id_for_failed, &url);
+                    }
                     let mut event = base_event(&page_id_for_failed, "did-fail-load");
                     event.url = Some(url.clone());
                     event.error_code = Some(error_code);
@@ -1215,7 +1226,117 @@ fn install_lifecycle_hooks(webview: &tauri::Webview<tauri::Wry>, app: &AppHandle
                 core.add_NavigationCompleted(&failed_handler, &mut token)
                     .map_err(|error| error.to_string())?;
             }
-            // FaviconChanged needs ICoreWebView2_15; older runtimes keep today's
+            // Attachment fallback signal: record main-frame responses that
+            // declare a download. When DownloadStarting stays silent the
+            // navigation still fails with ERR_ABORTED, and the fail arm below
+            // consumes this entry to fetch the bytes in-page instead.
+            let app_for_attachment = app.clone();
+            let page_id_for_attachment = page_id.clone();
+            let attachment_handler =
+                WebResourceResponseReceivedEventHandler::create(Box::new(move |_sender, args| {
+                    let Some(args) = args else {
+                        return Ok(());
+                    };
+                    let request_uri = (|| {
+                        let request = unsafe { args.Request()? };
+                        let mut raw = PWSTR::null();
+                        unsafe { request.Uri(&mut raw)? };
+                        Ok::<_, windows_core::Error>(take_pwstr(raw))
+                    })();
+                    let disposition = (|| {
+                        let response = unsafe { args.Response()? };
+                        let headers = unsafe { response.Headers()? };
+                        let name = HSTRING::from("Content-Disposition");
+                        let mut raw = PWSTR::null();
+                        unsafe { headers.GetHeader(PCWSTR::from_raw(name.as_ptr()), &mut raw)? };
+                        Ok::<_, windows_core::Error>(take_pwstr(raw))
+                    })();
+                    let (Ok(request_uri), Ok(disposition)) = (request_uri, disposition) else {
+                        return Ok(());
+                    };
+                    if !disposition.to_ascii_lowercase().contains("attachment") {
+                        return Ok(());
+                    }
+                    let state = app_for_attachment.state::<BrowserWebviewState>();
+                    let is_main_frame = state
+                        .navigation_in_flight
+                        .lock()
+                        .map(|in_flight| {
+                            in_flight
+                                .get(&page_id_for_attachment)
+                                .is_some_and(|url| *url == request_uri)
+                        })
+                        .unwrap_or(false);
+                    if !is_main_frame {
+                        return Ok(());
+                    }
+                    if let Ok(mut pending) = state.pending_attachment_downloads.lock() {
+                        pending.insert(page_id_for_attachment.clone(), request_uri);
+                    }
+                    Ok(())
+                }));
+            unsafe {
+                let filter = HSTRING::from("*");
+                core.AddWebResourceRequestedFilter(
+                    PCWSTR::from_raw(filter.as_ptr()),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_DOCUMENT,
+                )
+                .map_err(|error| error.to_string())?;
+                let core2: ICoreWebView2_2 =
+                    core.cast().map_err(|error| error.to_string())?;
+                core2
+                    .add_WebResourceResponseReceived(&attachment_handler, &mut token)
+                    .map_err(|error| error.to_string())?;
+            }
+            // Download blob pipe: arbitrary guest origins cannot invoke
+            // Tauri commands (capability gate), so fallback chunks cross
+            // over the native WebView2 message pipe instead.
+            let app_for_blob = app.clone();
+            let page_id_for_blob = page_id.clone();
+            let blob_handler =
+                WebMessageReceivedEventHandler::create(Box::new(move |_sender, args| {
+                    let Some(args) = args else {
+                        return Ok(());
+                    };
+                    let mut raw = PWSTR::null();
+                    if unsafe { args.TryGetWebMessageAsString(&mut raw) }.is_err() {
+                        return Ok(());
+                    }
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(&take_pwstr(raw)).unwrap_or(serde_json::Value::Null);
+                    if parsed.get("tag").and_then(|tag| tag.as_str()) != Some("orca-download-blob") {
+                        return Ok(());
+                    }
+                    let download_id = parsed
+                        .get("downloadId")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let content = parsed
+                        .get("contentBase64")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let done = parsed.get("done").and_then(|value| value.as_bool()).unwrap_or(false);
+                    let error = parsed
+                        .get("error")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_string);
+                    if download_id.is_empty() {
+                        return Ok(());
+                    }
+                    let _ = ingest_fallback_chunk(
+                        &app_for_blob,
+                        &page_id_for_blob,
+                        download_id,
+                        content,
+                        done,
+                        error,
+                    );
+                    Ok(())
+                }));
+            unsafe {
+                core.add_WebMessageReceived(&blob_handler, &mut token)
+                    .map_err(|error| error.to_string())?;
+            }            // FaviconChanged needs ICoreWebView2_15; older runtimes keep today's
             // behavior (no favicon event) instead of failing page creation.
             if let Ok(core15) = core.cast::<ICoreWebView2_15>() {
                 let app_for_favicon = app.clone();
@@ -1851,6 +1972,300 @@ fn reserve_download_path(app: &AppHandle, filename: &str) -> Result<PathBuf, Str
     Err("Could not choose a unique Downloads file name.".to_string())
 }
 
+#[tauri::command]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDownloadBlobArgs {
+    pub browser_page_id: String,
+    pub download_id: String,
+    pub content_base64: String,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+// 4 GiB cap keeps a compromised guest from filling the disk unchecked.
+const MAX_FALLBACK_DOWNLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const FALLBACK_FETCH_CHUNK_BYTES: usize = 512 * 1024;
+
+fn fallback_staging_path(download_id: &str) -> Option<PathBuf> {
+    if download_id.is_empty() || download_id.len() > 128 {
+        return None;
+    }
+    if !download_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return None;
+    }
+    Some(
+        std::env::temp_dir()
+            .join("orca-browser-downloads")
+            .join(format!("{download_id}.part")),
+    )
+}
+
+fn find_fallback_download(
+    state: &BrowserWebviewState,
+    download_id: &str,
+) -> Option<BrowserDownload> {
+    state
+        .downloads
+        .lock()
+        .ok()?
+        .values()
+        .flat_map(|entries| entries.iter())
+        .find(|entry| entry.download_id == download_id)
+        .cloned()
+}
+
+fn take_fallback_download(
+    state: &BrowserWebviewState,
+    download_id: &str,
+) -> Option<BrowserDownload> {
+    let mut downloads = state.downloads.lock().ok()?;
+    let mut found = None;
+    let mut empty_key = None;
+    for (key, entries) in downloads.iter_mut() {
+        if let Some(position) = entries
+            .iter()
+            .position(|entry| entry.download_id == download_id)
+        {
+            found = Some(entries.remove(position));
+            if entries.is_empty() {
+                empty_key = Some(key.clone());
+            }
+            break;
+        }
+    }
+    if let Some(key) = empty_key {
+        downloads.remove(&key);
+    }
+    found
+}
+
+fn fail_fallback_download(app: &AppHandle, download: &BrowserDownload, error: String) {
+    let state = app.state::<BrowserWebviewState>();
+    take_fallback_download(&state, &download.download_id);
+    if let Some(staging) = fallback_staging_path(&download.download_id) {
+        let _ = fs::remove_file(&staging);
+    }
+    emit_download_finished(app, download, "failed", Some(error));
+}
+
+// Native DownloadStarting is silent on some Windows hosts even though the
+// attachment response arrived. Fetch the bytes in-page (cookies included)
+// and surface the same download events Electron emits.
+#[cfg(windows)]
+fn start_attachment_fallback(app: &AppHandle, page_id: &str, url: &str) {
+    let state = app.state::<BrowserWebviewState>();
+    let Ok(parsed) = Url::parse(url) else {
+        return;
+    };
+    // Native records before NavigationCompleted, so a tracked entry means
+    // the native path owns this URL and the fallback must stand down.
+    let native_claimed = state
+        .downloads
+        .lock()
+        .map(|downloads| downloads.contains_key(&download_key(page_id, &parsed)))
+        .unwrap_or(false);
+    let recorded = state
+        .pending_attachment_downloads
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.remove(page_id));
+    let Some(recorded) = recorded else {
+        return;
+    };
+    if recorded != url || native_claimed {
+        return;
+    }
+    // Preview partitions refuse downloads instead of saving them.
+    let preview_state = app.state::<DocPreviewState>();
+    if let Some(grant_id) = grant_id_for_page(&preview_state, page_id) {
+        notice_preview_download_blocked(app, &preview_state, &grant_id);
+        return;
+    }
+    let filename = safe_download_filename(&parsed);
+    let path = match reserve_download_path(app, &filename) {
+        Ok(path) => path,
+        Err(_) => return,
+    };
+    let download = BrowserDownload {
+        download_id: format!("tauri-download-{}", state.next_download_id()),
+        browser_page_id: page_id.to_string(),
+        save_path: path,
+        canceled: false,
+    };
+    let key = download_key(page_id, &parsed);
+    if let Ok(mut downloads) = state.downloads.lock() {
+        downloads.entry(key).or_default().push(download.clone());
+    }
+    let _ = app.emit(
+        "browser:download-requested",
+        BrowserDownloadRequestedEvent {
+            browser_page_id: download.browser_page_id.clone(),
+            download_id: download.download_id.clone(),
+            origin: safe_origin(&parsed),
+            filename,
+            total_bytes: None,
+            mime_type: None,
+            save_path: download.save_path.to_string_lossy().into_owned(),
+            status: "downloading",
+        },
+    );
+    let app_thread = app.clone();
+    let script = attachment_fetch_script(page_id, &download.download_id, url);
+    std::thread::spawn(move || {
+        let state = app_thread.state::<BrowserWebviewState>();
+        match child_webview(&app_thread, &state, &download.browser_page_id) {
+            Ok(webview) => {
+                let eval_result = webview.eval(&script);
+                if let Err(error) = eval_result {
+                    fail_fallback_download(&app_thread, &download, error.to_string());
+                }
+            }
+            Err(error) => fail_fallback_download(&app_thread, &download, error),
+        }
+    });
+}
+
+fn attachment_fetch_script(page_id: &str, download_id: &str, url: &str) -> String {
+    let page = serde_json::to_string(page_id).unwrap_or_else(|_| "\"\"".to_string());
+    let id = serde_json::to_string(download_id).unwrap_or_else(|_| "\"\"".to_string());
+    let target = serde_json::to_string(url).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        r#"(async () => {{
+  const request = {{ pageId: {page}, downloadId: {id}, url: {target} }};
+  const post = (payload) => window.chrome.webview.postMessage(JSON.stringify(Object.assign(
+    {{ tag: 'orca-download-blob' }},
+    payload,
+  )));
+  const send = (index, contentBase64, done, error) => post(Object.assign(
+    {{ downloadId: request.downloadId, index, contentBase64, done }},
+    error === undefined ? null : {{ error }},
+  ));
+  try {{
+    const webview = window.chrome && window.chrome.webview;
+    if (!webview || typeof webview.postMessage !== 'function') {{
+      throw new Error('browser message bridge is unavailable');
+    }}
+    const response = await fetch(request.url, {{ credentials: 'include' }});
+    if (!response.ok) {{
+      throw new Error('HTTP ' + response.status);
+    }}
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const CHUNK = {chunk};
+    if (bytes.length === 0) {{
+      await send(0, '', true);
+      return;
+    }}
+    let index = 0;
+    for (let offset = 0; offset < bytes.length; offset += CHUNK) {{
+      const slice = bytes.subarray(offset, Math.min(offset + CHUNK, bytes.length));
+      let binary = '';
+      for (let i = 0; i < slice.length; i += 0x8000) {{
+        binary += String.fromCharCode.apply(null, slice.subarray(i, i + 0x8000));
+      }}
+      await send(index, btoa(binary), offset + CHUNK >= bytes.length);
+      index += 1;
+    }}
+  }} catch (error) {{
+    try {{
+      post({{ downloadId: request.downloadId, index: 0, contentBase64: '', done: true, error: String((error && error.message) || error) }});
+    }} catch {{
+      // Page teardown can drop the bridge mid-flight; Rust cleans up on close.
+    }}
+  }}
+}})();"#,
+        chunk = FALLBACK_FETCH_CHUNK_BYTES,
+    )
+}
+pub fn poc_browser_download_blob(
+    app: AppHandle,
+    _state: State<BrowserWebviewState>,
+    args: BrowserDownloadBlobArgs,
+) -> Result<(), String> {
+    ingest_fallback_chunk(
+        &app,
+        &args.browser_page_id,
+        &args.download_id,
+        &args.content_base64,
+        args.done,
+        args.error,
+    )
+}
+
+fn ingest_fallback_chunk(
+    app: &AppHandle,
+    page_id: &str,
+    download_id: &str,
+    content_base64: &str,
+    done: bool,
+    error: Option<String>,
+) -> Result<(), String> {
+    let state = app.state::<BrowserWebviewState>();
+    let staging = fallback_staging_path(download_id)
+        .ok_or_else(|| "browser download id is invalid".to_string())?;
+    if let Some(error) = error {
+        if let Some(download) = take_fallback_download(&state, download_id) {
+            let _ = fs::remove_file(&staging);
+            emit_download_finished(&app, &download, "failed", Some(error));
+        }
+        return Ok(());
+    }
+    if content_base64.is_empty() && !done {
+        return Err("browser download chunk is empty".to_string());
+    }
+    if !content_base64.is_empty() {
+        let bytes = BASE64
+            .decode(content_base64.as_bytes())
+            .map_err(|error| format!("browser download chunk is invalid: {error}"))?;
+        if let Some(parent) = staging.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&staging)
+            .map_err(|error| error.to_string())?;
+        file.write_all(&bytes).map_err(|error| error.to_string())?;
+    }
+    let Some(download) = find_fallback_download(&state, download_id) else {
+        return Err("browser download is no longer tracked".to_string());
+    };
+    if download.browser_page_id != page_id {
+        return Err("browser download page mismatch".to_string());
+    }
+    if download.canceled {
+        take_fallback_download(&state, download_id);
+        let _ = fs::remove_file(&staging);
+        emit_download_finished(&app, &download, "canceled", None);
+        return Ok(());
+    }
+    let received = fs::metadata(&staging).map(|metadata| metadata.len()).unwrap_or(0);
+    if received > MAX_FALLBACK_DOWNLOAD_BYTES {
+        fail_fallback_download(
+            &app,
+            &download,
+            "browser download exceeds its byte budget".to_string(),
+        );
+        return Ok(());
+    }
+    emit_download_progress(&app, &download, received, Some("progressing"));
+    if !done {
+        return Ok(());
+    }
+    if let Some(parent) = download.save_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    if fs::rename(&staging, &download.save_path).is_err() {
+        fs::copy(&staging, &download.save_path).map_err(|error| error.to_string())?;
+        let _ = fs::remove_file(&staging);
+    }
+    take_fallback_download(&state, download_id);
+    emit_download_finished(&app, &download, "completed", None);
+    Ok(())
+}
 fn download_key(browser_page_id: &str, url: &Url) -> String {
     format!("{browser_page_id}\n{url}")
 }
@@ -2584,6 +2999,33 @@ pub fn poc_browser_close(
     if let Ok(mut in_flight) = state.navigation_in_flight.lock() {
         in_flight.remove(&args.browser_page_id);
     }
+    #[cfg(windows)]
+    {
+        if let Ok(mut pending) = state.pending_attachment_downloads.lock() {
+            pending.remove(&args.browser_page_id);
+        }
+        // Fallback downloads never complete natively; drop their staging
+        // and entries so a closed page cannot leak either.
+        if let Ok(downloads) = state.downloads.lock() {
+            let mut staged_ids = Vec::new();
+            for entries in downloads.values() {
+                for download in entries {
+                    if download.browser_page_id == args.browser_page_id {
+                        if let Some(staging) = fallback_staging_path(&download.download_id) {
+                            if staging.exists() {
+                                staged_ids.push((download.download_id.clone(), staging));
+                            }
+                        }
+                    }
+                }
+            }
+            drop(downloads);
+            for (download_id, staging) in staged_ids {
+                take_fallback_download(&state, &download_id);
+                let _ = fs::remove_file(&staging);
+            }
+        }
+    }
     if let Ok(mut focused) = state.last_dom_focused.lock() {
         if focused.as_deref() == Some(args.browser_page_id.as_str()) {
             *focused = None;
@@ -2666,22 +3108,40 @@ pub fn poc_browser_proceed_certificate(
 
 #[tauri::command]
 pub fn poc_browser_cancel_download(
+    app: AppHandle,
     state: State<BrowserWebviewState>,
     args: BrowserDownloadIdArgs,
 ) -> bool {
-    let Ok(mut downloads) = state.downloads.lock() else {
-        return false;
-    };
-    for entries in downloads.values_mut() {
-        if let Some(download) = entries
-            .iter_mut()
-            .find(|download| download.download_id == args.download_id)
-        {
-            download.canceled = true;
-            return true;
+    let found = state.downloads.lock().map(|mut downloads| {
+        let mut found = false;
+        for entries in downloads.values_mut() {
+            if let Some(download) = entries
+                .iter_mut()
+                .find(|download| download.download_id == args.download_id)
+            {
+                download.canceled = true;
+                found = true;
+                break;
+            }
+        }
+        found
+    });
+    // Fallback downloads never complete natively, so finish them here.
+    #[cfg(windows)]
+    if matches!(found, Ok(true)) {
+        if let Some(download) = find_fallback_download(&state, &args.download_id) {
+            if fallback_staging_path(&download.download_id)
+                .is_some_and(|staging| staging.exists())
+            {
+                take_fallback_download(&state, &download.download_id);
+                if let Some(staging) = fallback_staging_path(&download.download_id) {
+                    let _ = fs::remove_file(&staging);
+                }
+                emit_download_finished(&app, &download, "canceled", None);
+            }
         }
     }
-    false
+    found.unwrap_or(false)
 }
 
 #[tauri::command]

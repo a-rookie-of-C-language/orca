@@ -1174,6 +1174,7 @@ fn main() {
             browser_webview::poc_browser_close,
             browser_webview::poc_browser_proceed_certificate,
             browser_webview::poc_browser_cancel_download,
+            browser_webview::poc_browser_download_blob,
             browser_webview::poc_browser_open_devtools,
             browser_webview::poc_browser_set_viewport_override,
             browser_webview::poc_browser_set_bounds,

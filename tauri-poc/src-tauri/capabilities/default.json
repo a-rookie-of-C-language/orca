@@ -90,6 +90,7 @@
     "allow-poc-browser-create",
     "allow-poc-browser-close",
     "allow-poc-browser-cancel-download",
+    "allow-poc-browser-download-blob",
     "allow-poc-browser-open-devtools",
     "allow-poc-browser-set-bounds",
     "allow-poc-browser-set-visible",
