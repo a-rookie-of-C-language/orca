@@ -364,8 +364,7 @@ Not migrated yet:
   refused; the Windows `\\?\`-prefixed canonical paths the first probe run exposed now match
   their roots). End-to-end verification across packaged profiles is still part of release validation.
 - Packaged runtime staging/update supervision, tray menu-click routing plus the full dock attention
-  behavior, certificate exception production policy and non-Windows support,
-  SSH/remote document-preview transfer, and
+  behavior, non-Windows support, SSH/remote document-preview transfer, and
   release packaging.
 - Browser guest-shortcut forwarding now suppresses handled chords in the guest: the main
   renderer publishes the live keybinding-registry chord set, Rust pushes it into every guest
@@ -481,10 +480,12 @@ Not migrated yet:
   `caffeinate` / Linux `systemd-inhibit` mirror the Electron assertions but need live-OS
   verification, plus tray/dock live checks.
 - Windows/WSL/SSH native-boundary audits and production signing.
-- General browser downloads: a navigation that turns into a download currently produces no
-  `browser:download-requested` event on Windows (observed for a same-origin
-  `Content-Disposition: attachment` response), so end-to-end completion still needs to be proven
-  and fixed. Preview pages stay denied regardless through the grant-bound refuse path above.
+- General browser downloads: WebView2 never raises native DownloadStarting for attachment
+  navigations on Windows (observed for a same-origin `Content-Disposition: attachment`
+  response), so attachments fall back to the in-page fetch over the native message pipe
+  and land with the same requested/progress/finished events Electron emits, proven live by
+  `tauri-poc/scripts/check-browser-download-fallback.mjs`. Preview pages stay denied
+  regardless through the grant-bound refuse path above.
 
 Those systems are the remaining high-risk parity work; Electron remains the production desktop
 until they have been migrated and verified on every supported host.

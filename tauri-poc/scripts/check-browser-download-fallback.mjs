@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import {
@@ -61,6 +61,7 @@ const server = await serve((req, res) => {
   res.end('<!doctype html><html><body>fallback check</body></html>')
 })
 let page
+let downloadedPath = null
 try {
   page = await connectDevelopmentRenderer(endpoint, connections)
   await assertReadyHidden(page, root)
@@ -136,11 +137,33 @@ try {
   assert.equal(finished[1].status, 'completed')
   const savePath = finished[1].savePath
   assert.ok(savePath, 'finished carries the save path')
+  downloadedPath = savePath
   const data = readFileSync(savePath)
   assert.equal(data.length, SIZE)
   assert.equal(data.subarray(0, 16).toString(), 'b'.repeat(16))
   console.log(`[download-fallback-check] ${SIZE} bytes landed at ${savePath}`)
+  mkdirSync(join(root, '.cache'), { recursive: true })
+  writeFileSync(
+    join(root, '.cache', 'tauri-download-fallback-check-latest.json'),
+    JSON.stringify(
+      {
+        bytes: SIZE,
+        requested: requested.length,
+        progress: progress.length,
+        status: finished[1].status,
+        at: new Date().toISOString()
+      },
+      null,
+      2
+    )
+  )
 } finally {
+  try {
+    // The probe owns the staged file, so remove it instead of littering Downloads.
+    if (downloadedPath) {
+      unlinkSync(downloadedPath)
+    }
+  } catch {}
   try {
     await invoke(page, 'poc_browser_close', { args: { browserPageId: PAGE_ID } })
   } catch {}
