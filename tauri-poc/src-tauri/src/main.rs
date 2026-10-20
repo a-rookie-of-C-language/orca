@@ -33,6 +33,7 @@ mod crash_reports;
 mod diagnostics;
 mod doc_preview;
 mod external_editor;
+mod feature_wall;
 mod filesystem_download;
 mod filesystem_import;
 mod filesystem_upload;
@@ -1209,6 +1210,7 @@ fn main() {
             poc_read_file_data_url,
             poc_platform_info,
             poc_app_identity,
+            feature_wall::poc_get_feature_wall_asset_base_url,
             windows_admin::poc_get_windows_administrator_status,
             poc_is_maximized,
             poc_is_minimized,

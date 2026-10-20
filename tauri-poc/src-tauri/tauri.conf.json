@@ -43,7 +43,8 @@
     "resources": {
       "../resources/orcad": "orcad",
       "../../resources/tray": "tray",
-      "../resources/runtimes": "runtimes"
+      "../resources/runtimes": "runtimes",
+      "../../resources/onboarding": "onboarding"
     },
     "icon": ["icons/icon.ico"]
   }

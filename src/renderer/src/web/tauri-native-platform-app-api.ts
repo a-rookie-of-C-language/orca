@@ -200,6 +200,10 @@ export function createTauriNativeAppApi(): Partial<AppApi> {
     // fallback only applies off the Tauri host.
     getWindowsAdministratorStatus: () =>
       invokeNative<boolean | null>('poc_get_windows_administrator_status'),
+    // Why native: the tour surface resolves tile art against this base.
+    // Rust answers the same /@fs dev and file:// packaged shapes as
+    // Electron, so the web / fallback only applies off the Tauri host.
+    getFeatureWallAssetBaseUrl: () => invokeNative<string>('poc_get_feature_wall_asset_base_url'),
     // Tauri owns a local orcad runtime through the same RPC boundary as a
     // paired desktop. Query its durable inventory so existing Codex/Claude
     // chats are restored even when the new-chat preference is disabled.
@@ -231,6 +235,8 @@ export function createTauriNativeAppNamespaceApi(): Pick<PreloadApi, 'app'> {
       getIdentity: api.getIdentity ?? fallback.getIdentity,
       getWindowsAdministratorStatus:
         api.getWindowsAdministratorStatus ?? fallback.getWindowsAdministratorStatus,
+      getFeatureWallAssetBaseUrl:
+        api.getFeatureWallAssetBaseUrl ?? fallback.getFeatureWallAssetBaseUrl,
       holdsStructuredAgentSessions:
         api.holdsStructuredAgentSessions ?? fallback.holdsStructuredAgentSessions,
       onStructuredAgentSessionsHeldChanged:

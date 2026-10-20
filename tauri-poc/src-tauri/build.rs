@@ -10,6 +10,7 @@ fn main() {
             "poc_read_file_data_url",
             "poc_platform_info",
             "poc_app_identity",
+            "poc_get_feature_wall_asset_base_url",
             "poc_get_windows_administrator_status",
             "poc_is_maximized",
             "poc_is_minimized",
