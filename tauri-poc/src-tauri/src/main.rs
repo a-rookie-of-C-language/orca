@@ -1265,6 +1265,7 @@ fn main() {
             crash_reports::poc_crash_reports_record_breadcrumb,
             crash_reports::poc_crash_reports_record_renderer_error,
             crash_reports::poc_crash_reports_submit,
+            crash_reports::poc_crash_reports_capture_minidump,
             diagnostics::poc_diagnostics_get_status,
             diagnostics::poc_diagnostics_collect_bundle,
             diagnostics::poc_diagnostics_open_bundle_preview,

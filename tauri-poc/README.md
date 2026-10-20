@@ -361,8 +361,13 @@ Not migrated yet:
   instead of auto-picking a pending crash, so Help-menu uncaptured reports never absorb one,
   and dismiss leaves in-flight submissions alone while renderer-error dedupe keys are capped
   oldest-first, proven live by `tauri-poc/scripts/check-crash-report-resolution.mjs` (seeded
-  pending report, three-way lookup, dismiss cleanup) with the resolver unit tests. Complete minidump
-  attachments still need a native implementation.
+  pending report, three-way lookup, dismiss cleanup) with the resolver unit tests. Minidump
+  attachment is native too: the capture command pairs the WebView2 Crashpad dump written for a
+  crash (30s recency window, 64MiB pick, claim-once pairing, Crashpad-budget prune) and folds the
+  signature into the report exactly like Electron attachMinidumpSignature (minidumpStatus,
+  minidumpPath and minidumpBytes plus the flattened signature), proven live by
+  `tauri-poc/scripts/check-crash-minidump.mjs` against the real WebView2 dump with the minidump
+  unit tests.
 - Remaining Electron PTY parity (Windows-native terminal capabilities), plus the SSH managed-server/relay
   ladder's end-to-end serving proof against a host that still runs relay-era terminals (the
   decision, the bridge host, and the `bridged` connect behavior already run on orcad).

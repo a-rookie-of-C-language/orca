@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager, State};
 use url::Url;
 
 use crate::diagnostics::{collect_diagnostic_bundle, diagnostics_bundle_enabled};
+use crate::minidump;
 
 const MAX_REPORTS: usize = 5;
 const MAX_BREADCRUMBS: usize = 30;
@@ -108,6 +109,20 @@ pub struct CrashReportLookupArgs {
     pub report_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrashReportMinidumpArgs {
+    pub report_id: String,
+    #[serde(default)]
+    pub crashed_at_ms: Option<u128>,
+    #[serde(default)]
+    pub expected_process_type: Option<String>,
+    /// Test seam mirroring the TS injectable capture: a temp dir standing in
+    /// for the WebView2 Crashpad reports directory.
+    #[serde(default)]
+    pub dump_directory: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct CrashReportFile {
     reports: Vec<CrashReportRecord>,
@@ -119,6 +134,7 @@ pub struct CrashReportState {
     breadcrumbs: Mutex<Vec<CrashReportBreadcrumb>>,
     renderer_error_keys: Mutex<HashMap<String, u128>>,
     in_flight_submissions: Mutex<HashSet<String>>,
+    minidump_claims: Mutex<HashMap<PathBuf, u128>>,
 }
 
 fn now_ms() -> u128 {
@@ -955,6 +971,91 @@ pub fn poc_crash_reports_record_renderer_error(
     report.details = sanitize_details(details);
     let report = store_report(&app, &state, report)?;
     Ok(serde_json::json!({ "ok": true, "report": report, "deduped": false }))
+}
+
+/// Pairs the WebView2 Crashpad dump written for a crash with its report and
+/// folds the signature in, mirroring Electron attachMinidumpSignature. Never
+/// throws for absent dumps: those resolve to `{ ok: false, reason }`.
+#[tauri::command]
+pub fn poc_crash_reports_capture_minidump(
+    app: AppHandle,
+    state: State<CrashReportState>,
+    args: CrashReportMinidumpArgs,
+) -> Result<Value, String> {
+    let report_id = string_value(&args.report_id, 120);
+    let path = app_data_path(&app)?;
+    {
+        let _guard = state
+            .io
+            .lock()
+            .map_err(|_| "crash report storage is unavailable".to_string())?;
+        let reports = read_reports(&path);
+        if !reports.iter().any(|report| report.id == report_id) {
+            return Ok(serde_json::json!({ "ok": false, "reason": "unknown_report" }));
+        }
+    }
+    let crashed_at_ms = args.crashed_at_ms.unwrap_or_else(now_ms);
+    let directory = match args.dump_directory.as_deref() {
+        Some(directory) => PathBuf::from(directory),
+        None => minidump::webview_crash_reports_dir(&app)?,
+    };
+    let candidates = minidump::collect_dump_candidates(&directory);
+    let mut claims = state
+        .minidump_claims
+        .lock()
+        .map_err(|_| "minidump claim state is unavailable".to_string())?;
+    let fresh = minidump::fresh_dump_candidates(&candidates, crashed_at_ms, &mut claims);
+    // Newest first like the TS poll: a mismatched process type is skipped, a
+    // vanished file is normal because Crashpad promotes dumps by rename.
+    let mut captured = None;
+    for candidate in &fresh {
+        let parsed =
+            minidump::parse_dump_file(&candidate.path, args.expected_process_type.as_deref());
+        let Ok(Some((signature, size_bytes))) = parsed else {
+            continue;
+        };
+        if let Some(expected) = args.expected_process_type.as_deref() {
+            if signature.process_type.as_deref() != Some(expected) {
+                continue;
+            }
+        }
+        claims.insert(candidate.path.clone(), candidate.mtime_ms);
+        captured = Some((candidate.clone(), signature, size_bytes));
+        break;
+    }
+    drop(claims);
+    let Some((candidate, signature, size_bytes)) = captured else {
+        return Ok(serde_json::json!({ "ok": false, "reason": "no_fresh_dump" }));
+    };
+    let mut extra = minidump::minidump_signature_details(&signature);
+    extra.push((
+        "minidumpStatus".to_string(),
+        Value::String("captured".to_string()),
+    ));
+    extra.push((
+        "minidumpPath".to_string(),
+        Value::String(candidate.path.to_string_lossy().into_owned()),
+    ));
+    extra.push(("minidumpBytes".to_string(), Value::from(size_bytes)));
+    let _guard = state
+        .io
+        .lock()
+        .map_err(|_| "crash report storage is unavailable".to_string())?;
+    let mut reports = read_reports(&path);
+    let Some(index) = reports.iter().position(|report| report.id == report_id) else {
+        return Ok(serde_json::json!({ "ok": false, "reason": "unknown_report" }));
+    };
+    reports[index].details.extend(sanitize_details(extra));
+    let report = reports[index].clone();
+    write_reports(&path, &reports)?;
+    // Crashpad prunes on its own delay; the POC prunes inline because no owned
+    // background task runs here. Best effort: a racing Crashpad write wins.
+    if let Ok(claims) = state.minidump_claims.lock() {
+        for victim in minidump::select_prune_victims(&candidates, &claims) {
+            let _ = fs::remove_file(victim);
+        }
+    }
+    Ok(serde_json::json!({ "ok": true, "report": report }))
 }
 
 #[tauri::command]

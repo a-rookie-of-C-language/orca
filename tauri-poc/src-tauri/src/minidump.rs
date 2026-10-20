@@ -325,7 +325,9 @@ fn match_check_log(candidate: &str) -> Option<(String, Option<u32>, String)> {
         return None;
     }
     let mut pos = 1;
-    // One or two `digits:` groups (pid, optional tid).
+    // One or two digits-colon groups (pid, optional tid). A digit run not
+    // followed by a colon is the date, not a second group: rewind it,
+    // like the TS backtrack.
     let mut groups = 0;
     while groups < 2 {
         let start = pos;
@@ -333,6 +335,7 @@ fn match_check_log(candidate: &str) -> Option<(String, Option<u32>, String)> {
             pos += 1;
         }
         if pos == start || pos >= bytes.len() || bytes[pos] != b':' {
+            pos = start;
             break;
         }
         pos += 1;
@@ -908,7 +911,7 @@ mod tests {
     /// Minimal valid dump: crashpad info with three annotations, one module,
     /// one exception. Returns the bytes.
     fn annotated_dump() -> Vec<u8> {
-        let log = "[1234:5678/0101:010203.123456:FATAL:foo.cc(123)] Check failed: x.";
+        let log = "[1234:5678:0101/010203.123456:FATAL:foo.cc(123)] Check failed: x.";
         let mut bytes = vec![0_u8; 32];
         // Header: magic, version, stream count, directory rva, checksum, stamp, flags.
         bytes[0..4].copy_from_slice(&MINIDUMP_SIGNATURE.to_le_bytes());
@@ -1002,7 +1005,7 @@ mod tests {
         let signature = parse_minidump_crash_signature(&dump, None).expect("parses");
         assert_eq!(
             signature.check_message.as_deref(),
-            Some("[1234:5678/0101:010203.123456:FATAL:foo.cc(123)] Check failed: x.")
+            Some("[1234:5678:0101/010203.123456:FATAL:foo.cc(123)] Check failed: x.")
         );
         assert_eq!(signature.check_file.as_deref(), Some("foo.cc"));
         assert_eq!(signature.check_line, Some(123));
@@ -1031,7 +1034,7 @@ mod tests {
         let mut bare = vec![0_u8; 32];
         bare[0..4].copy_from_slice(&MINIDUMP_SIGNATURE.to_le_bytes());
         bare[8..12].copy_from_slice(&0_u32.to_le_bytes());
-        let log = "[11:22/1213:010203.123:CHECK:bar\\baz.cc(45)] Check failed: no.";
+        let log = "[11:22:1213/010203.123:CHECK:bar\\baz.cc(45)] Check failed: no.";
         bare.extend_from_slice(&[0_u8; 64]);
         bare.extend_from_slice(log.as_bytes());
         bare.extend_from_slice(&[0_u8; 64]);
@@ -1084,17 +1087,17 @@ mod tests {
     #[test]
     fn check_log_pattern_cases() {
         let (file, line, _) =
-            match_check_log("[1:2/0101:010203.123:FATAL:bar/baz.cc(45)] boom").expect("valid");
+            match_check_log("[1:2:0101/010203.123:FATAL:bar/baz.cc(45)] boom").expect("valid");
         assert_eq!(file, "baz.cc");
         assert_eq!(line, Some(45));
         // Timestamp without groups is rejected like the TS pattern.
         assert!(match_check_log("[0101:010203.123:FATAL:foo.cc(1)] x").is_none());
         // ERROR needs a check-failed message.
-        assert!(match_check_log("[1:0101:010203.123:ERROR:foo.cc(7)] just noise").is_none());
-        assert!(match_check_log("[1:0101:010203.123:ERROR:foo.cc(7)] Check failed: bad").is_some());
+        assert!(match_check_log("[1:0101/010203.123:ERROR:foo.cc(7)] just noise").is_none());
+        assert!(match_check_log("[1:0101/010203.123:ERROR:foo.cc(7)] Check failed: bad").is_some());
         // Colon-separated middle groups pass.
         let (file, _, _) =
-            match_check_log("[12:34/0101:010203.123456:FATAL:mid:seg:deep.cc(9)] Check failed: y.")
+            match_check_log("[12:34:0101/010203.123456:FATAL:mid:seg:deep.cc(9)] Check failed: y.")
                 .expect("groups");
         assert_eq!(file, "deep.cc");
     }
@@ -1160,11 +1163,13 @@ mod tests {
         let fresh = fresh_dump_candidates(&candidates, 100_000, &mut claimed);
         assert_eq!(fresh.len(), 1);
         assert_eq!(fresh[0].path, base.join("good.dmp"));
-        // Stale claims release.
-        let fresh = fresh_dump_candidates(&candidates, 200_000, &mut claimed);
+        // Recent claims still hold inside the window.
+        let fresh = fresh_dump_candidates(&candidates, 120_000, &mut claimed);
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0].path, base.join("good.dmp"));
         assert!(fresh
             .iter()
-            .any(|candidate| candidate.path == base.join("new.dmp")));
+            .all(|candidate| candidate.path != base.join("new.dmp")));
     }
 
     #[test]

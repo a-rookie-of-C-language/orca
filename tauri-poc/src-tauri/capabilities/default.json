@@ -89,6 +89,7 @@
     "allow-poc-crash-reports-record-breadcrumb",
     "allow-poc-crash-reports-record-renderer-error",
     "allow-poc-crash-reports-submit",
+    "allow-poc-crash-reports-capture-minidump",
     "allow-poc-runtime-pairing",
     "allow-poc-runtime-status",
     "allow-poc-browser-create",

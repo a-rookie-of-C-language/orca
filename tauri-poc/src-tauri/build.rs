@@ -71,6 +71,7 @@ fn main() {
             "poc_crash_reports_record_breadcrumb",
             "poc_crash_reports_record_renderer_error",
             "poc_crash_reports_submit",
+            "poc_crash_reports_capture_minidump",
             "poc_runtime_pairing",
             "poc_runtime_status",
             "poc_browser_create",
