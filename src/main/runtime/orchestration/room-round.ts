@@ -172,7 +172,7 @@ export async function sendRoomTurn(args: {
   callerKey: string
   expectedRuntimeFence: number
   prompt: string
-  fromSource: AgentMessageSource
+  fromSource?: AgentMessageSource
   signal?: AbortSignal
   budgetMs?: number
 }): Promise<RoomSendOutcome> {
@@ -190,7 +190,7 @@ export async function sendRoomTurn(args: {
     kind: 'message',
     role: 'user',
     blocks: [{ type: 'text', text: args.prompt }],
-    from: args.fromSource
+    ...(args.fromSource ? { from: args.fromSource } : {})
   }
   const outcome = await sendAgentTurn({
     kind: 'structured-session',
@@ -222,7 +222,7 @@ export type RoomRoundDeps = {
   host: StructuredAgentTurnHost
   callerKey: string
   expectedRuntimeFenceFor: (memberId: string) => number
-  fromSource: AgentMessageSource
+  fromSource?: AgentMessageSource
   signal?: AbortSignal
 }
 

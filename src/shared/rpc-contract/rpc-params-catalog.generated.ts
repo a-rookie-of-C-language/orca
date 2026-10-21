@@ -458,6 +458,17 @@ import {
   TaskCreateParams,
   TaskListParams
 } from './orchestration-params'
+import {
+  RoomCreateParams,
+  RoomDeleteParams,
+  RoomListParams,
+  RoomLogParams,
+  RoomMemberAddParams,
+  RoomMemberRemoveParams,
+  RoomPostParams,
+  RoomSendParams,
+  RoomShowParams
+} from './orchestration-rooms-params'
 import { RequestShowParams } from './orchestration-runs-mutation-request-show-params'
 import {
   RunCreateParams,
@@ -543,14 +554,6 @@ import {
   SkillsDiscoverParams,
   SkillsGetInstallProgressParams
 } from './skills-params'
-import {
-  SpeechDesktopApiKey,
-  SpeechDesktopAudio,
-  SpeechDesktopEventsUnsubscribe,
-  SpeechDesktopModelAction,
-  SpeechDesktopSession,
-  SpeechDesktopStart
-} from './speech-desktop-params'
 import {
   DictationChunk,
   DictationHandle,
@@ -661,7 +664,6 @@ import {
   UsageCredentialApiKeyParams,
   UsageCredentialSessionCookieParams
 } from './usage-credentials-params'
-import { LayoutReopenHeldPanesParams } from './workspace-layout-held-panes-params'
 import {
   UsageBreakdownParams,
   UsageProviderParams,
@@ -671,6 +673,7 @@ import {
   UsageSetEnabledParams,
   UsageSnapshotParams
 } from './usage-params'
+import { LayoutReopenHeldPanesParams } from './workspace-layout-held-panes-params'
 import {
   LayoutApplyParams,
   LayoutReportViewParams,
@@ -1299,6 +1302,15 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.reply': ReplyParams,
   'orchestration.requestShow': RequestShowParams,
   'orchestration.reset': ResetParams,
+  'orchestration.roomCreate': RoomCreateParams,
+  'orchestration.roomDelete': RoomDeleteParams,
+  'orchestration.roomList': RoomListParams,
+  'orchestration.roomLog': RoomLogParams,
+  'orchestration.roomMemberAdd': RoomMemberAddParams,
+  'orchestration.roomMemberRemove': RoomMemberRemoveParams,
+  'orchestration.roomPost': RoomPostParams,
+  'orchestration.roomSend': RoomSendParams,
+  'orchestration.roomShow': RoomShowParams,
   'orchestration.run': RunParams,
   'orchestration.runCreate': RunCreateParams,
   'orchestration.runCurrent': RunCurrentParams,
@@ -1437,19 +1449,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'skills.removeInstall': SkillRemoveRequestSchema,
   'skills.share': AgentSkillShareRequestSchema,
   'skills.uploadChunk': SkillUploadChunkRequestSchema,
-  'speech.desktop.cancelDownload': SpeechDesktopModelAction,
-  'speech.desktop.clearOpenAiApiKey': null,
-  'speech.desktop.deleteModel': SpeechDesktopModelAction,
-  'speech.desktop.downloadModel': SpeechDesktopModelAction,
-  'speech.desktop.events': null,
-  'speech.desktop.events.unsubscribe': SpeechDesktopEventsUnsubscribe,
-  'speech.desktop.feedAudio': SpeechDesktopAudio,
-  'speech.desktop.getCatalog': null,
-  'speech.desktop.getModelStates': null,
-  'speech.desktop.getOpenAiApiKeyStatus': null,
-  'speech.desktop.saveOpenAiApiKey': SpeechDesktopApiKey,
-  'speech.desktop.startDictation': SpeechDesktopStart,
-  'speech.desktop.stopDictation': SpeechDesktopSession,
   'speech.dictation.cancel': DictationHandle,
   'speech.dictation.chunk': DictationChunk,
   'speech.dictation.finish': DictationHandle,
