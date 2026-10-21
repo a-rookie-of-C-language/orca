@@ -144,6 +144,17 @@ export function listRooms(this: OrchestrationDb): RoomWithMembers[] {
   return rows.map((r) => this.getRoom(r.id)!).filter(Boolean)
 }
 
+/** Every room that carries this member, for reverse lookups (turn-completion watcher). */
+export function roomsForMember(
+  this: OrchestrationDb,
+  memberId: string
+): RoomWithMembers[] {
+  const rows = this.db
+    .prepare(`SELECT room_id FROM room_members WHERE member_id = ?`)
+    .all(memberId) as { room_id: string }[]
+  return rows.map((r) => this.getRoom(r.room_id)!).filter(Boolean)
+}
+
 export function deleteRoom(this: OrchestrationDb, roomId: string): void {
   this.db.exec('BEGIN IMMEDIATE')
   try {
@@ -290,6 +301,7 @@ export type RoomStoreMethods = {
   getRoom: typeof getRoom
   getRoomByName: typeof getRoomByName
   listRooms: typeof listRooms
+  roomsForMember: typeof roomsForMember
   deleteRoom: typeof deleteRoom
   addRoomMember: typeof addRoomMember
   removeRoomMember: typeof removeRoomMember
@@ -305,6 +317,7 @@ export function attachRoomStore(ctor: { prototype: object }): void {
     getRoom,
     getRoomByName,
     listRooms,
+    roomsForMember,
     deleteRoom,
     addRoomMember,
     removeRoomMember,

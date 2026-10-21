@@ -8,6 +8,7 @@ import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-
 import { defineMethod } from '../../../core'
 import { runRoomRound, postRoomReply } from '../../../../orchestration/room-round'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
+import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
 import {
   RoomCreateParams,
   RoomDeleteParams,
@@ -188,6 +189,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
           fromSource: ROOM_SOURCE
         }
       )
+      ensureRoomReplyWatcherForCurrentHost(db)
       return {
         seq: result.seq,
         slots: result.slots.map((s) => ({
@@ -222,6 +224,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
         expectedRuntimeFenceFor: () => 0,
           fromSource: ROOM_SOURCE
       })
+      ensureRoomReplyWatcherForCurrentHost(db)
       return {
         seq: result.seq,
         followUps: result.followUps.map((m) => ({
