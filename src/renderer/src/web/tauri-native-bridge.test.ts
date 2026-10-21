@@ -110,8 +110,10 @@ describe('tauri native bridge', () => {
       'poc_crash_reports_submit'
     ])
     expect(host.invoke).toHaveBeenNthCalledWith(6, 'poc_crash_reports_submit', {
-      githubLogin: null,
-      githubEmail: null
+      args: {
+        githubLogin: null,
+        githubEmail: null
+      }
     })
   })
 
