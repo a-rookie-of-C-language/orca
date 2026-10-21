@@ -156,7 +156,16 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
       'orchestration gate-create',
       'orchestration gate-resolve',
       'orchestration gate-list',
-      'orchestration reset'
+      'orchestration reset',
+      'orchestration room-create',
+      'orchestration room-list',
+      'orchestration room-show',
+      'orchestration room-delete',
+      'orchestration room-add',
+      'orchestration room-remove',
+      'orchestration room-send',
+      'orchestration room-post',
+      'orchestration room-log'
     ],
     load: async () => (await import('./handlers/orchestration.js')).ORCHESTRATION_HANDLERS
   },
