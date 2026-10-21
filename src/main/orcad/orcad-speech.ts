@@ -1,5 +1,5 @@
 import { ModelManager } from '../speech/model-manager'
-import { createNodeSpeechModelDownloadRequest } from '../speech/node-speech-model-download-request'
+import { openNodeSpeechDownloadRequest } from '../speech/node-speech-download-request'
 import { setSpeechServiceFactories } from '../speech/speech-runtime-service'
 import { SttService } from '../speech/stt-service'
 
@@ -7,7 +7,7 @@ import { SttService } from '../speech/stt-service'
 export function installOrcadSpeechServices(): void {
   setSpeechServiceFactories({
     createModelManager: (customModelsDir) =>
-      new ModelManager(customModelsDir, createNodeSpeechModelDownloadRequest),
+      new ModelManager(customModelsDir, openNodeSpeechDownloadRequest),
     createSttService: (models) => new SttService(models)
   })
 }

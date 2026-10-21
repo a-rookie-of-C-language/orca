@@ -27,6 +27,7 @@ import { resolveAgentLaunchExecutionContext } from '@/lib/launch-agent-execution
 import { launchStructuredAgentFromNewTab } from '@/lib/launch-agent-in-new-tab-structured-route'
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
 import type { StructuredLaunchTerminal } from '@/lib/structured-agent-session-launch-admission'
+import type { StructuredPromptDeliveryResult } from '@/lib/structured-agent-session-launch-prompt'
 import { workspaceKindForWorktreeId } from '@/lib/agent-launch-route-input'
 import {
   launchOnceHostAnswered,
@@ -101,7 +102,7 @@ export type LaunchAgentInNewTabResult = {
   surface: AgentLaunchSurface
   startupPlan: AgentStartupPlan
   pasteDraftAfterLaunch: boolean
-  promptDeliveryResult?: Promise<{ delivered: boolean; failureNotified: boolean }>
+  promptDeliveryResult?: Promise<StructuredPromptDeliveryResult>
   /** Structured route only: what the launch did once it settled. The call stays synchronous. */
   terminalCompletion?: StructuredLaunchTerminal['completion']
   structuredSettlement?: Promise<StructuredAgentLaunchSettlement>
