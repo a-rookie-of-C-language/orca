@@ -70,8 +70,13 @@ export function useTabAgentMenuLaunch({
   onTabOpened,
   onPromptHandedOff,
   disabled,
-  onFocusHostTerminal
-}: QuickLaunchAgentMenuItemsProps & { onFocusHostTerminal?: () => void }) {
+  onFocusHostTerminal,
+  onFocusChat
+}: QuickLaunchAgentMenuItemsProps & {
+  onFocusHostTerminal?: () => void
+  /** A New Chat opened at once: its composer takes the focus the menu gives back. */
+  onFocusChat?: (tabId: string) => void
+}) {
   const runLaunch = useCallback(
     (row: NewTabAgentMenuRow) => {
       if (disabled || row.kind === 'chat-unavailable') {
@@ -130,6 +135,10 @@ export function useTabAgentMenuLaunch({
           }
         })
       }
+      if (result.surface.kind === 'local-chat') {
+        onFocusChat?.(result.surface.tabId)
+        return
+      }
       if (result.surface.kind !== 'local-terminal') {
         onFocusHostTerminal?.()
         return
@@ -147,7 +156,8 @@ export function useTabAgentMenuLaunch({
       onTabOpened,
       onPromptHandedOff,
       disabled,
-      onFocusHostTerminal
+      onFocusHostTerminal,
+      onFocusChat
     ]
   )
 

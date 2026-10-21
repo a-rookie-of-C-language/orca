@@ -41,8 +41,7 @@ import { createEphemeralAgentSessionClaimSigner } from '../agent-session-claim-i
 import { registerConptyDa1OverrideInstaller } from '../terminal-model-query-authority'
 import { registerTerminalViewAttributesApplier } from '../terminal-view-attribute-store'
 import { RuntimeMachineName } from '../runtime-machine-name'
-import { RuntimeCredentialController } from '../runtime-credential-controller'
-import { RuntimeUsageController } from '../runtime-usage-controller'
+import { setPRConflictSummaryRemoteFetches } from '../../github/conflict-summary'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The constructor installs every checked canonical surface.
 export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
@@ -148,8 +147,6 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       subscriptions: this.subscriptions,
       mobileNotifications: this.mobileNotifications,
       accounts: this.accounts,
-      credentials: new RuntimeCredentialController(() => this.accounts.getRateLimits()),
-      usage: new RuntimeUsageController(deps?.usageStores),
       mobileSpeech: this.mobileSpeech,
       mobileDictation: this.mobileDictation,
       browserDrivers: this.browserDrivers,
@@ -267,6 +264,8 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
         state.emulator.applyPushedViewAttributes(attributes)
       }
     })
+    // Why: PR conflict previews fetch the same base branches a create refreshes; one owner queues them.
+    setPRConflictSummaryRemoteFetches(this.remoteFetches)
   }
 }
 

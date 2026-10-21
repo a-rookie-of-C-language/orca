@@ -38,6 +38,7 @@ import {
 import { STRUCTURED_AGENT_SESSION_HOLD_METHODS } from './structured-agent-session-hold'
 import { STRUCTURED_AGENT_SESSION_PROMPT_RESPONSE_METHODS } from './structured-agent-session-prompt-response'
 import { STRUCTURED_AGENT_SESSION_REVEAL_METHODS } from './structured-agent-session-reveal'
+import { STRUCTURED_AGENT_SESSION_REGENERATE_NAME_METHODS } from './structured-agent-session-regenerate-name'
 import { STRUCTURED_AGENT_SESSION_QUEUED_METHODS } from './structured-agent-session-queued-methods'
 import { STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS } from './structured-agent-session-restart-resume'
 import {
@@ -51,6 +52,7 @@ import {
 import { STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS } from './structured-agent-session-turn-completion-stream'
 import { STRUCTURED_AGENT_SESSION_THREAD_GOAL_METHODS } from './structured-agent-session-thread-goal'
 import { STRUCTURED_AGENT_SESSION_CONVERSATION_OUTLINE_METHODS } from './structured-agent-session-conversation-outline'
+import { STRUCTURED_AGENT_SESSION_ITEM_METHODS } from './structured-agent-session-item'
 import { STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS } from './structured-agent-session-options-read'
 import {
   AttachParams,
@@ -293,11 +295,13 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
   }),
   ...STRUCTURED_AGENT_SESSION_HOLD_METHODS,
   ...STRUCTURED_AGENT_SESSION_REVEAL_METHODS,
+  ...STRUCTURED_AGENT_SESSION_REGENERATE_NAME_METHODS,
   ...STRUCTURED_AGENT_SESSION_RESTART_RESUME_METHODS,
   ...STRUCTURED_AGENT_SESSION_STATUS_METHODS,
   ...STRUCTURED_AGENT_SESSION_TURN_COMPLETION_METHODS,
   ...STRUCTURED_AGENT_SESSION_THREAD_GOAL_METHODS,
   ...STRUCTURED_AGENT_SESSION_CONVERSATION_OUTLINE_METHODS,
+  ...STRUCTURED_AGENT_SESSION_ITEM_METHODS,
   ...STRUCTURED_AGENT_SESSION_CURRENT_REQUESTS_METHODS,
   ...STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS
 ]

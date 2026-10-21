@@ -32,6 +32,7 @@ export function MobileSessionActiveContent({
     setCreateError,
     setShowCreateTabDrawer,
     dictationMode,
+    dictationEnabled,
     toastMessage,
     handleTerminalTap,
     browserScreencastSupported,
@@ -231,7 +232,7 @@ export function MobileSessionActiveContent({
         onOpenFile={handleNativeChatFileTap}
         images={nativeChatImages}
         structuredComposer={nativeChatStructuredComposer}
-        onMicPress={handleDictationToggle}
+        onMicPress={dictationEnabled ? handleDictationToggle : undefined}
         micActive={dictation.isRecording}
         dictationMode={dictationMode}
         onMicPressIn={handleDictationPressIn}

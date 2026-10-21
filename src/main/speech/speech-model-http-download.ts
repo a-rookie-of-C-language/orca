@@ -5,14 +5,15 @@ import {
   getHeaderValue,
   parseContentRange,
   parseRetryAfterMs,
-  type DownloadRequest,
   type DownloadIncomingMessage,
-  type DownloadTotals
+  type DownloadTotals,
+  type OpenSpeechDownloadRequest,
+  type SpeechDownloadRequest
 } from './speech-model-download-response'
 import type { HttpStatusError } from '../network/transient-download-error'
 
 export abstract class SpeechModelHttpDownload {
-  protected abstract createDownloadRequest(url: URL): DownloadRequest
+  constructor(private readonly openRequest: OpenSpeechDownloadRequest) {}
 
   protected abstract reportDownloadProgress(modelId: string, progress: number): void
 
@@ -47,7 +48,8 @@ export abstract class SpeechModelHttpDownload {
       }
 
       let settled = false
-      let request: DownloadRequest | null = null
+      let request: SpeechDownloadRequest | null = null
+      let detachRequest = (): void => {}
       let idleTimeout: ReturnType<typeof setTimeout> | null = null
       const onSignalAbort = (): void => {
         const activeRequest = request
@@ -66,9 +68,7 @@ export abstract class SpeechModelHttpDownload {
         if (!activeRequest) {
           return
         }
-        activeRequest.off('error', onRequestError)
-        activeRequest.off('response', onResponse)
-        activeRequest.off('redirect', onRedirect)
+        detachRequest()
         signal?.removeEventListener('abort', onSignalAbort)
         request = null
       }
@@ -243,16 +243,18 @@ export abstract class SpeechModelHttpDownload {
           })
       }
 
-      request = this.createDownloadRequest(parsedUrl)
+      request = this.openRequest(parsedUrl.toString())
       if (resumeOffset > 0) {
         request.setHeader('Range', `bytes=${resumeOffset}-`)
       }
 
-      // Why: Electron net honors app proxy settings (unlike Node https) but exposes no setTimeout, so time out manually.
+      // Why manual: neither stack's request exposes an idle timeout that covers the response body.
       resetIdleTimeout()
-      request.on('error', onRequestError)
-      request.on('response', onResponse)
-      request.on('redirect', onRedirect)
+      detachRequest = request.listen({
+        error: onRequestError,
+        response: onResponse,
+        redirect: onRedirect
+      })
       if (signal) {
         signal.addEventListener('abort', onSignalAbort, { once: true })
       }

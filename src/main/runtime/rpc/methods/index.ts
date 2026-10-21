@@ -70,7 +70,11 @@ import { ARTIFACT_METHODS } from './artifacts'
 import { AGENT_HOOK_METHODS } from './agent-hooks'
 import { AGENT_AWAKE_METHODS } from './agent-awake'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
-import { LAYOUT_APPLY_METHODS, WORKSPACE_LAYOUT_METHODS } from './workspace-layout'
+import {
+  LAYOUT_APPLY_METHODS,
+  LAYOUT_VIEW_REPORT_METHODS,
+  WORKSPACE_LAYOUT_METHODS
+} from './workspace-layout'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
@@ -119,7 +123,7 @@ export const ALL_RPC_METHODS = [
   ...SESSION_TAB_METHODS,
   ...WORKSPACE_LAYOUT_METHODS,
   // Switch point: a window-owned build registers no layout command.
-  ...(ORCA_LAYOUT_OWNER_IS_MAIN ? LAYOUT_APPLY_METHODS : []),
+  ...(ORCA_LAYOUT_OWNER_IS_MAIN ? [...LAYOUT_APPLY_METHODS, ...LAYOUT_VIEW_REPORT_METHODS] : []),
   ...NATIVE_CHAT_METHODS,
   ...FILE_METHODS,
   ...GIT_METHODS,
