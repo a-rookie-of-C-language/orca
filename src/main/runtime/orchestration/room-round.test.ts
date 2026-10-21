@@ -2,12 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionSendResult } from '../../../shared/agent-session-wire'
 import { OrchestrationDb } from './db'
-import {
-  postRoomReply,
-  runRoomRound,
-  stripRoomSpeakerName,
-  type RoomRoundDeps
-} from './room-round'
+import { postRoomReply, runRoomRound, stripRoomSpeakerName, type RoomRoundDeps } from './room-round'
 import type { StructuredAgentTurnHost } from './send-agent-turn'
 
 const alice = {
@@ -17,9 +12,7 @@ const alice = {
 }
 const beta = { memberId: 'orca_session_id:session_beta_0002', name: 'beta' }
 
-const userSource = { kind: 'user' } as unknown as Parameters<
-  typeof runRoomRound
->[2]['fromSource']
+const userSource = { kind: 'user' } as unknown as Parameters<typeof runRoomRound>[2]['fromSource']
 
 type SentTurn = { sessionId: string; text: string }
 type HostSendAnswer = Awaited<ReturnType<StructuredAgentTurnHost['send']>>
@@ -37,8 +30,7 @@ const hostThatSends = () => {
   const send: StructuredAgentTurnHost['send'] = async (_caller, message) => {
     const envelope = (message as { envelope?: { sessionId?: string } }).envelope
     const sessionId = envelope?.sessionId ?? ''
-    const blocks =
-      (message as { body?: { blocks?: { text?: string }[] } }).body?.blocks ?? []
+    const blocks = (message as { body?: { blocks?: { text?: string }[] } }).body?.blocks ?? []
     sent.push({ sessionId, text: blocks.map((b) => b.text ?? '').join('\n') })
     const clientMessageId = `cm-${sent.length}`
     const submission = {
@@ -52,8 +44,8 @@ const hostThatSends = () => {
     } as unknown as AgentJournalSubmission
     return acceptedAnswer({ clientMessageId, submission })
   }
-  const waitForSendSettlement: StructuredAgentTurnHost['waitForSendSettlement'] =
-    async () => undefined
+  const waitForSendSettlement: StructuredAgentTurnHost['waitForSendSettlement'] = async () =>
+    undefined
   const host: StructuredAgentTurnHost = { send, waitForSendSettlement }
   return { host, sent }
 }
@@ -105,10 +97,7 @@ describe('runRoomRound', () => {
     })
     const { host, sent } = hostThatSends()
     await runRoomRound(room, { text: 'hi all' }, deps(db, host))
-    expect(sent.map((s) => s.sessionId)).toEqual([
-      'session_alice_0001',
-      'session_beta_0002'
-    ])
+    expect(sent.map((s) => s.sessionId)).toEqual(['session_alice_0001', 'session_beta_0002'])
   })
 
   it('@mention routes to that member', async () => {

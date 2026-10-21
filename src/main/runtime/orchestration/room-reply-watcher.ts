@@ -99,7 +99,7 @@ async function reportToAdmin(
     '',
     replyText,
     '',
-    'As this room\'s admin, decide whether the group needs a response. If you have a summary or a follow-up for the user, post it now with no name prefix. Reply [PASS] to stay silent.'
+    "As this room's admin, decide whether the group needs a response. If you have a summary or a follow-up for the user, post it now with no name prefix. Reply [PASS] to stay silent."
   ].join('\n')
   await sendRoomTurn({
     member: admin,
@@ -120,10 +120,7 @@ async function handleCompletion(
   const memberRows = memberForSession(deps.db, completion.sessionId)
   if (!memberRows.length) return
   const snapshot = await deps.host.journalSnapshot(completion.sessionId)
-  const text = extractAssistantText(
-    snapshot.items as AgentJournalRenderItem[],
-    completion.turnId
-  )
+  const text = extractAssistantText(snapshot.items as AgentJournalRenderItem[], completion.turnId)
   if (!text) return
   for (const memberRow of memberRows) {
     const room = deps.db.getRoom(memberRow.room_id)
@@ -196,18 +193,20 @@ async function runAdminTools(
       })
     },
     readLog: (roomId, limit) =>
-      (
-        deps.db.db
-          .prepare(`SELECT who, text FROM room_log WHERE room_id = ? ORDER BY seq DESC LIMIT ?`)
-          .all(roomId, limit)
-          .toReversed() as { who: string; text: string }[]
-      ),
+      deps.db.db
+        .prepare(`SELECT who, text FROM room_log WHERE room_id = ? ORDER BY seq DESC LIMIT ?`)
+        .all(roomId, limit)
+        .toReversed() as { who: string; text: string }[],
     sendToRoom: async (roomId, text) => {
       const target = deps.db.getRoom(roomId)
       if (!target) {
         throw new Error('The room is not here.')
       }
-      await runRoomRound(target, { text, who: 'Orca' }, roundDeps({ db: deps.db, host: deps.host }, target))
+      await runRoomRound(
+        target,
+        { text, who: 'Orca' },
+        roundDeps({ db: deps.db, host: deps.host }, target)
+      )
     }
   }
   const { results } = await runAdminToolCalls(toolRt, replyText)
@@ -246,7 +245,10 @@ export function ensureRoomReplyWatcher(deps: WatcherDeps): void {
 }
 
 /** Hook for callers that already hold the runtime; reads the installed host itself. */
-export function ensureRoomReplyWatcherForCurrentHost(db: OrchestrationDb, runtime?: OrcaRuntimeService): void {
+export function ensureRoomReplyWatcherForCurrentHost(
+  db: OrchestrationDb,
+  runtime?: OrcaRuntimeService
+): void {
   const host = getStructuredAgentSessionHost()
   if (host) {
     ensureRoomReplyWatcher({ db, host, runtime })

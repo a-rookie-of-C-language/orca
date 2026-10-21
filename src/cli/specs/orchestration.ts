@@ -80,6 +80,23 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'member-id', 'name', 'admin']
   },
   {
+    path: ['orchestration', 'room-bot-create'],
+    summary: 'Spawn a bot session into a room',
+    usage:
+      'orca orchestration room-bot-create --id <id> --worktree <selector> --agent <lane> --name <name> [--model <model>] [--effort <effort>] [--admin] [--instructions <text>] [--json]',
+    allowedFlags: [
+      ...GLOBAL_FLAGS,
+      'id',
+      'worktree',
+      'agent',
+      'model',
+      'effort',
+      'name',
+      'admin',
+      'instructions'
+    ]
+  },
+  {
     path: ['orchestration', 'room-remove'],
     summary: 'Remove a member from a room',
     usage: 'orca orchestration room-remove --id <id> --member-id <member_id> [--json]',
@@ -98,8 +115,7 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['orchestration', 'room-post'],
     summary: 'Post a member reply into the room (for tests and external drivers)',
-    usage:
-      'orca orchestration room-post --id <id> --member-id <member_id> --text <text> [--json]',
+    usage: 'orca orchestration room-post --id <id> --member-id <member_id> --text <text> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'member-id', 'text'],
     notes: [
       'Live rooms normally write replies through the room mailbox (turn-completion watcher). This entry point exists for tests and for a member whose session is driven outside Orca.'
@@ -115,8 +131,8 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     path: ['orchestration', 'room-ensure-main-bot'],
     summary: 'Create the HQ room and its admin bot when missing',
     usage:
-      'orca orchestration room-ensure-main-bot --worktree <selector> [--agent <lane>] [--room-name <name>] [--bot-name <name>] [--json]',
-    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'agent', 'room-name', 'bot-name']
+      'orca orchestration room-ensure-main-bot --worktree <selector> [--agent <lane>] [--model <model>] [--effort <effort>] [--room-name <name>] [--bot-name <name>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'agent', 'model', 'effort', 'room-name', 'bot-name']
   },
   {
     path: ['orchestration', 'send'],

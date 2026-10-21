@@ -17,10 +17,7 @@ import { createHash } from 'node:crypto'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
 import { parseOrcaSessionAddress } from '../../../shared/orca-session-address'
-import {
-  roomMentionsIn,
-  type RoomMentionable
-} from '../../../shared/orchestration-room-mentions'
+import { roomMentionsIn, type RoomMentionable } from '../../../shared/orchestration-room-mentions'
 import type { OrchestrationDb } from './db'
 import type { RoomLogRow, RoomMemberRow, RoomWithMembers } from './db/rooms/room-store'
 import { sendAgentTurn, type StructuredAgentTurnHost } from './send-agent-turn'
@@ -57,7 +54,9 @@ const ROOM_CALLS_TEXT =
   'Writing "@Name" calls that member next, to answer or to do what you ask; when it finishes work you gave it, you answer its result. To only mention a member, write its name without "@".'
 
 const isPass = (text: string) =>
-  text === '' || /^\s*[[【(（]\s*pass\s*[\]】)）]|^\s*pass\s*[.。!！]?\s*$/i.test(text)
+  text === '' ||
+  // ASCII-only: brackets cover []() plus CJK variants via escapes.
+  /^\s*[[\u3010(\uFF08]\s*pass\s*[\]\u3011)\uFF09]|^\s*pass\s*[.\u3002!\uFF01]?\s*$/i.test(text)
 
 const headOf = (text: string, n: number) => (text.length > n ? text.slice(0, n) : text)
 
@@ -89,9 +88,7 @@ function slotLabel(slot: RoomSlot): string {
 }
 
 const transcript = (lines: RoomLogRow[]): string =>
-  lines
-    .map((line) => `${line.who}: ${headOf(line.text, GROUP_LINE_READ)}`)
-    .join('\n')
+  lines.map((line) => `${line.who}: ${headOf(line.text, GROUP_LINE_READ)}`).join('\n')
 
 function roomPrompt(
   room: RoomWithMembers,
@@ -178,9 +175,7 @@ export async function sendRoomTurn(args: {
 }): Promise<RoomSendOutcome> {
   // A member's room session (`session_id`) wins over its own chat session
   // (`member_id`): a spawned bot gets its own conversation per room.
-  const sessionId = parseOrcaSessionAddress(
-    args.member.session_id ?? args.member.member_id
-  )
+  const sessionId = parseOrcaSessionAddress(args.member.session_id ?? args.member.member_id)
   if (!sessionId) {
     return {
       kind: 'failed',
@@ -287,8 +282,12 @@ export async function runRoomRound(
 
     switch (sent.kind) {
       case 'sent':
-      case 'queued':
         slot.status = 'speaking' // still speaking; reply comes back through the room mailbox
+        break
+      case 'queued':
+        // Busy chat holds our prompt as a draft: surface it as working so the
+        // room shows "it is working" instead of silently looking idle.
+        slot.status = 'working'
         break
       case 'refused':
       case 'failed':
@@ -332,8 +331,9 @@ export async function postRoomReply(
   const leads = member.member_id === room.admin_member_id
   const { all, found } = roomMentionsIn(stripped, mentionables, { speakerId: memberId })
   const namedIds = new Set(found.map((f) => f.id))
-  const callees = leads && all
-    ? room.members.filter((m) => m.member_id !== memberId)
-    : room.members.filter((m) => namedIds.has(m.member_id))
+  const callees =
+    leads && all
+      ? room.members.filter((m) => m.member_id !== memberId)
+      : room.members.filter((m) => namedIds.has(m.member_id))
   return { seq, followUps: callees }
 }

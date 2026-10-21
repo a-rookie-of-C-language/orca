@@ -62,8 +62,7 @@ const ROOM_NAME_MAX = 60
 const ROOM_NOTICE_MAX = 2000
 const ROOM_LOG_MAX = 60
 
-const invalid = (message: string) =>
-  Object.assign(new Error(message), { code: 'room/invalid' })
+const invalid = (message: string) => Object.assign(new Error(message), { code: 'room/invalid' })
 
 export function createRoom(
   this: OrchestrationDb,
@@ -82,7 +81,8 @@ export function createRoom(
   const worktree = String(input.worktree ?? '')
   const mode: RoomMode = input.mode === 'everyone' ? 'everyone' : 'admin'
   const members = input.members ?? []
-  if (members.length > ROOM_MAX_MEMBERS) throw invalid(`A room has at most ${ROOM_MAX_MEMBERS} members`)
+  if (members.length > ROOM_MAX_MEMBERS)
+    throw invalid(`A room has at most ${ROOM_MAX_MEMBERS} members`)
 
   const id = generateId('room')
   const now = new Date().toISOString()
@@ -123,7 +123,9 @@ export function createRoom(
 }
 
 export function getRoom(this: OrchestrationDb, roomId: string): RoomWithMembers | undefined {
-  const room = this.db.prepare(`SELECT * FROM rooms WHERE id = ?`).get(roomId) as RoomRow | undefined
+  const room = this.db.prepare(`SELECT * FROM rooms WHERE id = ?`).get(roomId) as
+    | RoomRow
+    | undefined
   if (!room) return undefined
   const members = this.db
     .prepare(`SELECT * FROM room_members WHERE room_id = ? ORDER BY created_at, member_id`)
@@ -131,10 +133,7 @@ export function getRoom(this: OrchestrationDb, roomId: string): RoomWithMembers 
   return { ...room, members }
 }
 
-export function getRoomByName(
-  this: OrchestrationDb,
-  name: string
-): RoomWithMembers | undefined {
+export function getRoomByName(this: OrchestrationDb, name: string): RoomWithMembers | undefined {
   const room = this.db
     .prepare(`SELECT * FROM rooms WHERE lower(name) = lower(?)`)
     .get(String(name).trim()) as RoomRow | undefined
@@ -148,10 +147,7 @@ export function listRooms(this: OrchestrationDb): RoomWithMembers[] {
 }
 
 /** Every room that carries this member, for reverse lookups (turn-completion watcher). */
-export function roomsForMember(
-  this: OrchestrationDb,
-  memberId: string
-): RoomWithMembers[] {
+export function roomsForMember(this: OrchestrationDb, memberId: string): RoomWithMembers[] {
   const rows = this.db
     .prepare(`SELECT room_id FROM room_members WHERE member_id = ?`)
     .all(memberId) as { room_id: string }[]
@@ -238,12 +234,8 @@ export function appendRoomLine(
     `INSERT INTO room_log (room_id, seq, who, member_id, text, kind, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
-  const bump = this.db.prepare(
-    `UPDATE rooms SET seq = ?, updated_at = ? WHERE id = ?`
-  )
-  const trim = this.db.prepare(
-    `DELETE FROM room_log WHERE room_id = ? AND seq <= ?`
-  )
+  const bump = this.db.prepare(`UPDATE rooms SET seq = ?, updated_at = ? WHERE id = ?`)
+  const trim = this.db.prepare(`DELETE FROM room_log WHERE room_id = ? AND seq <= ?`)
   let seq = 0
   this.db.exec('BEGIN IMMEDIATE')
   try {

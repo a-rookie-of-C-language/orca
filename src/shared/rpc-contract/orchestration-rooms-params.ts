@@ -45,6 +45,10 @@ export const RoomBotCreateParams = z.object({
   worktree: requiredString('Missing --worktree'),
   /** Structured agent lane (`claude`, `codex`, …). */
   agent: requiredString('Missing --agent'),
+  /** Model override the new session launches under, e.g. `gpt-5.2-codex` or `opus`. */
+  model: OptionalString,
+  /** Thinking level for the model override; invalid values follow the model's own default. */
+  effort: OptionalString,
   /** Display name in the room. */
   name: requiredString('Missing --name'),
   isAdmin: z.boolean().optional(),
@@ -75,6 +79,10 @@ export const RoomEnsureMainBotParams = z.object({
   /** Worktree selector new bots spawn under when the room records none. */
   worktree: requiredString('Missing --worktree'),
   agent: OptionalString,
+  /** Model override for the seeded admin bot. */
+  model: OptionalString,
+  /** Thinking level for the seeded admin bot's model. */
+  effort: OptionalString,
   roomName: OptionalString,
   botName: OptionalString
 })

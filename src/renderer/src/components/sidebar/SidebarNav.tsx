@@ -1,5 +1,13 @@
 import React from 'react'
-import { BookOpen, CalendarClock, EyeOff, Files, MessagesSquare, Search, Smartphone } from 'lucide-react'
+import {
+  BookOpen,
+  CalendarClock,
+  EyeOff,
+  Files,
+  Bot,
+  Search,
+  Smartphone
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
@@ -161,12 +169,12 @@ const SidebarNav = React.memo(function SidebarNav() {
             : 'text-worktree-sidebar-foreground/60 hover:bg-worktree-sidebar-foreground/8'
         )}
       >
-        <MessagesSquare
+        <Bot
           className={cn('size-4 shrink-0', !roomsActive && 'text-worktree-sidebar-foreground/30')}
           strokeWidth={roomsActive ? 2.25 : 1.75}
         />
         <span className="flex-1">
-          {translate('auto.components.sidebar.SidebarNav.rooms', 'Rooms')}
+          {translate('auto.components.sidebar.SidebarNav.rooms', 'Bots')}
         </span>
       </button>
       {showSkillsButton ? (

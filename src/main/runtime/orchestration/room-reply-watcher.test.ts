@@ -19,7 +19,10 @@ const hostWith = (snapshotItems: unknown[] = []) => {
     }),
     journalSnapshot: vi.fn(async () => ({ items: snapshotItems })),
     send: vi.fn(
-      async (_caller: unknown, message: { envelope?: { sessionId?: string }; body?: { blocks?: { text?: string }[] } }) => {
+      async (
+        _caller: unknown,
+        message: { envelope?: { sessionId?: string }; body?: { blocks?: { text?: string }[] } }
+      ) => {
         sends.push({
           sessionId: message.envelope?.sessionId ?? '',
           text: (message.body?.blocks ?? []).map((b) => b.text ?? '').join('\n')
@@ -29,7 +32,10 @@ const hostWith = (snapshotItems: unknown[] = []) => {
           replayed: false,
           fence: 0,
           cursor: { epoch: 'e', sequence: 1 },
-          value: { clientMessageId: `cm-${sends.length}`, submission: { dispatchState: 'accepted' } }
+          value: {
+            clientMessageId: `cm-${sends.length}`,
+            submission: { dispatchState: 'accepted' }
+          }
         }
       }
     ),
@@ -147,7 +153,7 @@ describe('room-reply-watcher', () => {
     expect(sends).toHaveLength(0)
   })
 
-  it('the admin\'s own reply does not loop back to itself', async () => {
+  it("the admin's own reply does not loop back to itself", async () => {
     const db = new OrchestrationDb(':memory:')
     seedAdminRoom(db)
     const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'admin said')])

@@ -87,12 +87,16 @@ export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
       id: getRequiredStringFlag(flags, 'id'),
       worktree: getRequiredStringFlag(flags, 'worktree'),
       agent: getRequiredStringFlag(flags, 'agent'),
+      model: getOptionalStringFlag(flags, 'model'),
+      effort: getOptionalStringFlag(flags, 'effort'),
       name: getRequiredStringFlag(flags, 'name'),
       isAdmin: flags.has('admin') ? true : undefined,
       instructions: getOptionalStringFlag(flags, 'instructions')
     })
-    printResult(result, json, (r) =>
-      `Bot ${r.memberId} in ${r.room ? roomSummary(r.room) : 'room'}`
+    printResult(
+      result,
+      json,
+      (r) => `Bot ${r.memberId} in ${r.room ? roomSummary(r.room) : 'room'}`
     )
   },
 
@@ -147,18 +151,26 @@ export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
       }
     )
     printResult(result, json, (r) =>
-      r.lines.length
-        ? r.lines.map((l) => `[${l.seq}] ${l.who}: ${l.text}`).join('\n')
-        : '(empty)'
+      r.lines.length ? r.lines.map((l) => `[${l.seq}] ${l.who}: ${l.text}`).join('\n') : '(empty)'
     )
   },
   'orchestration room-ensure-main-bot': async ({ flags, client, json }) => {
-    const result = await client.call<{ room: RoomDto }>('orchestration.roomEnsureMainBot', {
-      worktree: getRequiredStringFlag(flags, 'worktree'),
-      agent: getOptionalStringFlag(flags, 'agent'),
-      roomName: getOptionalStringFlag(flags, 'room-name'),
-      botName: getOptionalStringFlag(flags, 'bot-name')
-    })
-    printResult(result, json, (r) => `Main bot ready: ${roomSummary(r.room)}`)
+    const result = await client.call<{ room: RoomDto; adminSeated: boolean }>(
+      'orchestration.roomEnsureMainBot',
+      {
+        worktree: getRequiredStringFlag(flags, 'worktree'),
+        agent: getOptionalStringFlag(flags, 'agent'),
+        model: getOptionalStringFlag(flags, 'model'),
+        effort: getOptionalStringFlag(flags, 'effort'),
+        roomName: getOptionalStringFlag(flags, 'room-name'),
+        botName: getOptionalStringFlag(flags, 'bot-name')
+      }
+    )
+    printResult(
+      result,
+      json,
+      (r) =>
+        `Main bot ${r.adminSeated ? 'ready' : 'room ready, bot not seated'}: ${roomSummary(r.room)}`
+    )
   }
 }

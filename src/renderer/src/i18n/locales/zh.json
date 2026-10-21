@@ -5598,7 +5598,8 @@
           "fee535205b": "任务",
           "d599269755": "从侧边栏隐藏",
           "artifacts": "工件",
-          "skills": "技能"
+          "skills": "技能",
+          "rooms": "Bots"
         },
         "SidebarRepositoryFilterSection": {
           "d3a9c4cea1": "清除",
@@ -18263,6 +18264,94 @@
         "copyFailed": "无法复制链接。",
         "signingIn": "正在登录…",
         "cancel": "取消"
+      },
+      "rooms": {
+        "pool": {
+          "untitledSession": "（未命名会话）"
+        },
+        "useRooms": {
+          "listFailed": "加载 Bots 列表失败",
+          "adminReady": "Orca Admin 已在 Orca HQ 就绪",
+          "seatMainBotFailed": "主 Bot 入驻失败"
+        },
+        "useRoomLog": {
+          "readFailed": "读取群聊记录失败"
+        },
+        "spawnBot": {
+          "needsName": "请给 Bot 起个名字",
+          "pickWorkspace": "为 Bot 选择一个工作区",
+          "joined": "Bot\"{{name}}\"已加入群聊",
+          "failed": "创建 Bot 失败",
+          "title": "新建 Bot",
+          "namePlaceholder": "名字（比如 reviewer、planner）",
+          "noWorkspace": "（无工作区）",
+          "instructionsPlaceholder": "角色 / 补充说明（可选）",
+          "cancel": "取消",
+          "spawn": "创建",
+          "modelPlaceholder": "模型（可选，比如 gpt-5.2-codex / opus）",
+          "modelDefault": "(默认模型)",
+          "effortDefault": "(默认思考等级)"
+        },
+        "createRoom": {
+          "nameRequired": "请填写名称",
+          "adminFailed": "群聊已创建，但 admin bot 启动失败",
+          "created": "已创建群聊\"{{name}}\"",
+          "failed": "创建群聊失败",
+          "newRoom": "新建群聊",
+          "title": "新建群聊",
+          "description": "群聊默认带一个 admin bot，你永远不会对着空房间说话。你的消息先发给 admin；@名字可点名某位成员。",
+          "namePlaceholder": "名称",
+          "briefPlaceholder": "Admin 简报（可选）",
+          "membersLabel": "成员（第一个选中的成为 admin）：",
+          "noSessions": "没有打开的 agent 会话 — 将创建一个新的 admin bot 来带群。",
+          "modeAdmin": "admin（admin 先回）",
+          "modeEveryone": "everyone（所有成员都发言）",
+          "seedAdmin": "创建一个 admin bot（Codex）来带群",
+          "cancel": "取消",
+          "create": "创建",
+          "modelPlaceholder": "Admin 模型（可选，比如 gpt-5.2-codex / opus）",
+          "modelDefault": "(默认模型)",
+          "effortDefault": "(默认思考等级)"
+        },
+        "hero": {
+          "adminLeads": "{{name}} 是这里的 admin。",
+          "subtitle": "直接说人话 — admin 会帮你叫对的 bot。",
+          "howTitle": "群聊怎么玩",
+          "howAdmin": "· 你的消息先发给 admin。",
+          "howMention": "· 输入 @名字可直接点名某位成员。",
+          "howCreate": "· 说\"创建一个 bot / 建个群\"，admin 会照做。",
+          "sayHi": "打个招呼",
+          "spawnBot": "创建 bot",
+          "howTo": "怎么用？"
+        },
+        "page": {
+          "title": "Bots",
+          "refresh": "刷新",
+          "close": "关闭",
+          "loading": "加载中…",
+          "noRooms": "还没有群聊。",
+          "memberCount": "{{count}} 位成员",
+          "tip": "小贴士：在 Orca HQ 里直接跟 Orca Admin 说 — \"建个群 / 加个 bot\"就行。",
+          "adminLabel": "admin：{{name}}",
+          "spawnBot": "向该群聊添加 bot",
+          "addMember": "添加成员",
+          "deleteRoom": "删除群聊",
+          "noMembers": "还没有成员 — 在上面创建一个 bot。",
+          "removeMember": "移除{{name}}",
+          "allSessionsAdded": "所有打开的 agent 会话都已在这个群里。",
+          "add": "添加",
+          "addAsAdmin": "设为 Admin",
+          "workingOnIt": "正在处理",
+          "composerPlaceholder": "发消息… @名字点名某位，@all（仅 admin）叫全体",
+          "send": "发送",
+          "pickRoom": "在左侧选一个群聊，或新建一个。",
+          "deleted": "群聊已删除",
+          "deleteFailed": "删除失败",
+          "memberAdded": "已添加成员",
+          "addMemberFailed": "添加成员失败",
+          "removeMemberFailed": "移除成员失败",
+          "sendFailed": "发送失败"
+        }
       }
     },
     "i18n": {

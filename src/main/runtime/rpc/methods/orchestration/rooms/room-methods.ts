@@ -144,6 +144,15 @@ export const ORCHESTRATION_ROOM_METHODS = [
         name: params.name,
         isAdmin: params.isAdmin
       })
+      // Seating an existing chat still gets its own per-room cursor: without a
+      // session_id the round runner would fall back to the member's main chat.
+      // Point it at the seated session for now; a dedicated per-room session
+      // can replace it later without changing the send path.
+      try {
+        db.setRoomMemberSession(params.id, params.memberId, params.memberId)
+      } catch {
+        // Member row wins; a missing session link just reuses the main chat.
+      }
       const room = db.getRoom(params.id)
       if (!room) throw roomError('room_not_found', 'The room is not here.')
       return { room: exposeRoom(room) }
@@ -164,13 +173,19 @@ export const ORCHESTRATION_ROOM_METHODS = [
         room,
         name: params.name,
         agent: params.agent,
+        model: params.model,
+        effort: params.effort,
         worktree: params.worktree,
         instructions: params.instructions,
         isAdmin: params.isAdmin
       })
       ensureRoomReplyWatcherForCurrentHost(db, ctx.runtime)
       const fresh = db.getRoom(room.id)
-      return { memberId: spawned.memberId, sessionId: spawned.sessionId, room: fresh ? exposeRoom(fresh) : null }
+      return {
+        memberId: spawned.memberId,
+        sessionId: spawned.sessionId,
+        room: fresh ? exposeRoom(fresh) : null
+      }
     }
   }),
 
@@ -182,7 +197,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
       const db = runtime.getOrchestrationDb()
       const roomName = params.roomName?.trim() || MAIN_BOT_ROOM_NAME
       const botName = params.botName?.trim() || MAIN_BOT_NAME
-      const agent = params.agent?.trim() || 'claude'
+      const agent = params.agent?.trim() || 'codex'
       let room = db.getRoomByName(roomName)
       if (!room) {
         room = db.createRoom({
@@ -193,25 +208,61 @@ export const ORCHESTRATION_ROOM_METHODS = [
         })
       } else if (!room.worktree && params.worktree) {
         db.setRoomWorktree(room.id, params.worktree)
+        const refilled = db.getRoom(room.id)
+        if (refilled) {
+          room = refilled
+        }
       }
-      const admin = room.members.find((m) => m.is_admin === 1)
-      if (!admin) {
-        await spawnRoomBot({
-          runtime,
-          db,
-          room,
-          name: botName,
-          agent,
-          worktree: room.worktree || params.worktree,
-          isAdmin: true
-        })
+      // Repair a stale HQ left by a failed first seat (e.g. claude CLI missing):
+      // an admin row with no per-room session and an empty log never started.
+      let admin = room.members.find((m) => m.is_admin === 1)
+      if (admin && !admin.session_id) {
+        try {
+          const logCount = (
+            db.db.prepare(`SELECT COUNT(*) as n FROM room_log WHERE room_id = ?`).get(room.id) as {
+              n: number
+            }
+          ).n
+          if (logCount === 0) {
+            db.removeRoomMember(room.id, admin.member_id)
+            const refilled = db.getRoom(room.id)
+            if (refilled) room = refilled
+            admin = undefined
+          }
+        } catch {
+          // Repair is best-effort; a stale row just stays until next ensure.
+        }
+      }
+      let adminSeated = room.members.some((m) => m.is_admin === 1)
+      if (!adminSeated) {
+        const worktree = room.worktree || params.worktree
+        if (worktree) {
+          try {
+            await spawnRoomBot({
+              runtime,
+              db,
+              room,
+              name: botName,
+              agent,
+              model: params.model,
+              effort: params.effort,
+              worktree,
+              isAdmin: true,
+              instructions:
+                'You were just set up as the user\u2019s Main Bot. Greet the user in one or two short messages: say you run their Bot team and group chats and they can ask you in plain words to create a bot or start a group. Then ask in one short question what the team should help with first. Write in Chinese.'
+            })
+            adminSeated = true
+          } catch {
+            adminSeated = false
+          }
+        }
       }
       ensureRoomReplyWatcherForCurrentHost(db, runtime)
       const fresh = db.getRoom(room.id)
       if (!fresh) {
         throw roomError('room_not_found', 'The room is not here.')
       }
-      return { room: exposeRoom(fresh) }
+      return { room: exposeRoom(fresh), adminSeated }
     }
   }),
 
@@ -289,7 +340,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
         host,
         callerKey: `room:${room.id}`,
         expectedRuntimeFenceFor: () => 0,
-          fromSource: ROOM_SOURCE
+        fromSource: ROOM_SOURCE
       })
       ensureRoomReplyWatcherForCurrentHost(db, runtime)
       return {
@@ -313,8 +364,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
       const limit = params.limit ?? 60
       const lines = params.memberId
         ? db.unseenRoomLines(room.id, params.memberId, 200, limit)
-        : (db
-            .db
+        : (db.db
             .prepare(`SELECT * FROM room_log WHERE room_id = ? ORDER BY seq DESC LIMIT ?`)
             .all(room.id, limit)
             .reverse() as {
