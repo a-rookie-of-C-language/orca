@@ -22,7 +22,10 @@ import {
   setSshTargetRegistryStore,
   setSshPortForwardManagerResolver
 } from '../ssh/targets/ssh-target-registry'
-import { resolveHostServerOnConnect, type HostServerOnConnectDeps } from '../ssh/ssh-host-server-on-connect'
+import {
+  resolveHostServerOnConnect,
+  type HostServerOnConnectDeps
+} from '../ssh/ssh-host-server-on-connect'
 import { hostServerOnConnectDeps } from '../ipc/ssh/ssh-host-server-on-connect-wiring'
 import {
   clearSshHostServerStatus,

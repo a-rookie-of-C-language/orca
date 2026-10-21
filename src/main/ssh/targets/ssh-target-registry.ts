@@ -84,7 +84,6 @@ export function importRegisteredSshConfig(options?: { reAdopt?: boolean }): SshC
   return { targets, repoReadoptions }
 }
 
-
 export function setSshTargetRegistryHandlers(handlers: {
   connect: ConnectSshTarget | null
   getState: ((targetId: string) => SshConnectionState | undefined) | null

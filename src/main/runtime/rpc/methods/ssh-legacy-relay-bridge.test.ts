@@ -126,7 +126,10 @@ describe('ssh legacy relay bridge RPC methods', () => {
     })
     expect(setLegacyRelayPaneOutputPausedMock).toHaveBeenCalledWith('ssh:t@@r1', true)
     expect(paused).toMatchObject({ ok: true, result: { paused: true } })
-    const detached = await dispatch('ssh.detachLegacyRelayBridgedPane', { ptyId: 'ssh:t@@r1', acquisitionId: 7 })
+    const detached = await dispatch('ssh.detachLegacyRelayBridgedPane', {
+      ptyId: 'ssh:t@@r1',
+      acquisitionId: 7
+    })
     expect(detachLegacyRelayPaneMock).toHaveBeenCalledWith('ssh:t@@r1', 7)
     expect(detached).toMatchObject({ ok: true, result: { detached: true } })
   })

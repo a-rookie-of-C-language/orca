@@ -7,7 +7,9 @@ import { SidebarLayoutToggle } from './SidebarLayoutToggle'
 const mocks = vi.hoisted(
   (): {
     state: {
-      settings: { toolsSidebarPosition?: 'left' | 'right'; workspaceMode?: 'work' | 'code' } | undefined
+      settings:
+        | { toolsSidebarPosition?: 'left' | 'right'; workspaceMode?: 'work' | 'code' }
+        | undefined
       updateSettings: ReturnType<typeof vi.fn>
       setSidebarOpen: ReturnType<typeof vi.fn>
       setRightSidebarOpen: ReturnType<typeof vi.fn>

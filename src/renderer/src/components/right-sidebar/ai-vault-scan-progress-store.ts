@@ -117,9 +117,7 @@ export function useAiVaultScanProgress(
   // Live progress follows the request key; settled progress also needs the applied result's ID.
   const own =
     rawOwn &&
-    (rawOwn.settledAt === null ||
-      appliedScanId === undefined ||
-      rawOwn.scanId === appliedScanId)
+    (rawOwn.settledAt === null || appliedScanId === undefined || rawOwn.scanId === appliedScanId)
       ? rawOwn
       : undefined
   if (own && (own !== shown?.progress || scanKey !== shown?.scanKey)) {

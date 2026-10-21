@@ -40,7 +40,11 @@ export async function assertReadyHidden(page, root) {
     runtime: await window.__TAURI_INTERNALS__.invoke('poc_runtime_status'),
     visible: await window.__TAURI__.window.getCurrentWindow().isVisible()
   }))
-  assert.equal(realpathSync(snapshot.identity.devRepoRoot), realpathSync(root), 'The renderer belongs to another checkout.')
+  assert.equal(
+    realpathSync(snapshot.identity.devRepoRoot),
+    realpathSync(root),
+    'The renderer belongs to another checkout.'
+  )
   assert.equal(snapshot.visible, false, 'Refusing to operate on a visible user window.')
   assert.equal(snapshot.runtime.state, 'ready')
 }

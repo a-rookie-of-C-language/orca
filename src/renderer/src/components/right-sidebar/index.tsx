@@ -138,10 +138,7 @@ function RightSidebarInner({
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={6}>
-        {translate(
-          'auto.components.right.sidebar.index.9fffaf17c1',
-          'Toggle tools sidebar'
-        )}
+        {translate('auto.components.right.sidebar.index.9fffaf17c1', 'Toggle tools sidebar')}
       </TooltipContent>
     </Tooltip>
   ) : null
@@ -209,9 +206,7 @@ function RightSidebarInner({
                 />
               ) : null}
             </nav>
-            <div className="flex shrink-0 items-center">
-              {closeButton}
-            </div>
+            <div className="flex shrink-0 items-center">{closeButton}</div>
           </TooltipProvider>
         </div>
       </ContextMenuTrigger>
@@ -231,8 +226,7 @@ function RightSidebarInner({
         reserveTitlebarSpace && 'pt-9 bg-sidebar',
         // Why: Work/Code switches glide the tools sidebar open and shut;
         // manual drags keep the transition off or the handle feels detached.
-        !isResizing &&
-          'transition-[width] duration-200 ease-out motion-reduce:transition-none',
+        !isResizing && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
         // Why: overflow-visible is needed when open so the resize handle
         // on the outer edge remains interactive.  When closed (width 0),
         // switch to overflow-hidden so the activity bar icons and panel
@@ -322,7 +316,7 @@ function RightSidebarInner({
           />
         </ContextMenu>
       )}
-      </div>
+    </div>
   )
 }
 

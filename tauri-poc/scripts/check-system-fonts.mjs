@@ -23,9 +23,7 @@ try {
     'expected a stock Windows family in ' + fonts.slice(0, 8).join(', ')
   )
   await assertReadyHidden(page, root)
-  console.log(
-    JSON.stringify({ ok: true, count: fonts.length, at: new Date().toISOString() })
-  )
+  console.log(JSON.stringify({ ok: true, count: fonts.length, at: new Date().toISOString() }))
 } finally {
   for (const browser of connections) {
     await browser.close().catch(() => {})

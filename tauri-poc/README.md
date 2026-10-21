@@ -50,6 +50,7 @@ reuses the bundled `orca-administrator-restart.exe` helper (staged beside the
 CLI launcher by `prepare-release-runtime.mjs`) and reports the same
 installed-app error in development that Electron throws outside the installed
 Windows app. Verify without triggering UAC via:
+
 ```powershell
 $env:ORCA_BACKGROUND_LAUNCH="1"
 node tauri-poc/scripts/check-restart-as-administrator.mjs
@@ -61,6 +62,7 @@ new token is actually elevated it restarts the owned persistent daemon
 through orcad (`terminalDaemon.restart`) before App mounts, so local
 terminals run under the new token. Verify the take-once latch without
 elevation via:
+
 ```powershell
 $env:ORCA_BACKGROUND_LAUNCH="1"
 node tauri-poc/scripts/check-elevation-restart.mjs
@@ -71,6 +73,7 @@ enumerates installed families in-process through GDI (cached, same
 sorted-unique contract and Windows fallback as Electron) instead of
 spawning PowerShell, and the renderer merges it over the web empty-list
 fallback. Verify against the hidden development app via:
+
 ```powershell
 $env:ORCA_BACKGROUND_LAUNCH="1"
 node tauri-poc/scripts/check-system-fonts.mjs
@@ -80,16 +83,19 @@ Terminal theme-import previews stay native too. `previewGhosttyImport`
 and `previewWarpThemeImport` reuse the shared Ghostty parser/mapper and
 Warp YAML parser on the renderer, but read the config and theme files
 through the authorized-external staging channel (`poc_stage_external_paths`
-+ `poc_read_external_file_chunk`) rather than an ambient fs handle, and the
-Warp auto-scan enumerates `%APPDATA%\warp\<channel>\data\themes` through
-`poc_list_directory` (bounded to the authorized roots). Manual file/folder
-pickers go through the Tauri dialog plugin. Verify against the hidden
-development app via:
+
+- `poc_read_external_file_chunk`) rather than an ambient fs handle, and the
+  Warp auto-scan enumerates `%APPDATA%\warp\<channel>\data\themes` through
+  `poc_list_directory` (bounded to the authorized roots). Manual file/folder
+  pickers go through the Tauri dialog plugin. Verify against the hidden
+  development app via:
+
 ```powershell
 $env:ORCA_BACKGROUND_LAUNCH="1"
 node tauri-poc/scripts/check-ghostty-import.mjs
 node tauri-poc/scripts/check-warp-theme-import.mjs
 ```
+
 The same hidden development app can verify real terminal directory changes:
 
 ```powershell
@@ -177,11 +183,11 @@ first native slice covers the low-risk operations that the renderer already expe
 - Windows administrator status through the same bundled launcher probe Electron
   main runs (orca.exe --orca-administrator-status, 3s budget, true/false/null
   vocabulary), so Settings shows the identical elevation row. Proven live by
-  	auri-poc/scripts/check-admin-status.mjs.
+  auri-poc/scripts/check-admin-status.mjs.
 - Feature-wall tour art through the same asset shapes Electron serves: the
   repo copy over Vite's /@fs route in dev, the staged resources bundle as a
   ile:// URL when packaged. Proven live by
-  	auri-poc/scripts/check-feature-wall-assets.mjs.
+  auri-poc/scripts/check-feature-wall-assets.mjs.
 - floating terminal cwd, floating markdown directory, picker trust and markdown
   resolution through the owned orcad runtime (`host.floating.*`), reusing the same
   headless-safe resolvers Electron main calls. Native dialogs stay in the renderer
@@ -612,4 +618,3 @@ Not migrated yet:
 
 Those systems are the remaining high-risk parity work; Electron remains the production desktop
 until they have been migrated and verified on every supported host.
-

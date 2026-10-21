@@ -9,7 +9,6 @@ export function subtreeHasChatGroup(
     return chatGroupIds.has(node.groupId)
   }
   return (
-    subtreeHasChatGroup(node.first, chatGroupIds) ||
-    subtreeHasChatGroup(node.second, chatGroupIds)
+    subtreeHasChatGroup(node.first, chatGroupIds) || subtreeHasChatGroup(node.second, chatGroupIds)
   )
 }

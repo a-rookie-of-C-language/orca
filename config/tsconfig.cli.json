@@ -295,8 +295,7 @@
     "../src/main/sqlite/sqlite-integer-reader.ts",
     "../src/main/sqlite/node-sqlite-reader-api.ts",
     "../src/main/sqlite/node-sqlite-statement.ts",
-    "../src/main/win32-utils.ts"
-    ,
+    "../src/main/win32-utils.ts",
     "../src/main/macos-tree-clone.ts",
     "../src/main/asar-transparent-fs.ts",
     "../src/main/provider-process/provider-error-chain.ts"

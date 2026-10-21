@@ -39,9 +39,10 @@ function contentTab(): Tab {
   })
 }
 
-function storeWithChatColumn(
-  settings: { toolsSidebarPosition: 'left' | 'right'; workspaceMode?: 'work' | 'code' }
-): ReturnType<typeof createTestStore> {
+function storeWithChatColumn(settings: {
+  toolsSidebarPosition: 'left' | 'right'
+  workspaceMode?: 'work' | 'code'
+}): ReturnType<typeof createTestStore> {
   const store = createTestStore()
   const chat = chatTab('agent-session:chat-1', CHAT_GROUP)
   seedStore(store, {
@@ -86,12 +87,12 @@ describe('shouldPinChatPanelColumn', () => {
     expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'right' })).toBe(true)
     expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'left' })).toBe(false)
     // Why: both modes fix chat in place, so Code stays pinned despite Explorer on the left.
-    expect(
-      shouldPinChatPanelColumn({ toolsSidebarPosition: 'left', workspaceMode: 'code' })
-    ).toBe(true)
-    expect(
-      shouldPinChatPanelColumn({ toolsSidebarPosition: 'right', workspaceMode: 'work' })
-    ).toBe(true)
+    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'left', workspaceMode: 'code' })).toBe(
+      true
+    )
+    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'right', workspaceMode: 'work' })).toBe(
+      true
+    )
   })
 })
 

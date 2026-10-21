@@ -79,7 +79,10 @@ try {
     await page.screenshot({ path: join(root, '.cache', 'tauri-dom-menu-check.png') })
   }
   const evidence = { ...gate, ui, at: new Date().toISOString() }
-  await writeFile(join(root, '.cache', 'tauri-dom-menu-check.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+  await writeFile(
+    join(root, '.cache', 'tauri-dom-menu-check.json'),
+    `${JSON.stringify(evidence, null, 2)}\n`
+  )
   console.log(`DOM-MENU-CHECK ui=${ui} gate=${gate.gate}`)
 } finally {
   for (const connection of connections) {

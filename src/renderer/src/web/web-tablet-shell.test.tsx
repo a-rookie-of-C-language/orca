@@ -23,9 +23,11 @@ describe('WebTabletShell', () => {
       removeEventListener: () => {}
     })) as unknown as typeof window.matchMedia
 
-    const { unmount } = render(<WebTabletShell>
-      <div>pairing</div>
-    </WebTabletShell>)
+    const { unmount } = render(
+      <WebTabletShell>
+        <div>pairing</div>
+      </WebTabletShell>
+    )
 
     expect(document.documentElement).toHaveClass('web-tablet')
     unmount()

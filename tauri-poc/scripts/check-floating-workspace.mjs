@@ -24,11 +24,14 @@ try {
     typeof directory === 'string' && directory.length > 0,
     'floating markdown directory must be a real path, got: ' + JSON.stringify(directory)
   )
-  const trusted = await page.evaluate(() => window.api.app.getFloatingTerminalCwd({ requireTrusted: true }))
+  const trusted = await page.evaluate(() =>
+    window.api.app.getFloatingTerminalCwd({ requireTrusted: true })
+  )
   assert.strictEqual(
     trusted,
     directory,
-    'trusted cwd without a configured path must be the app-owned workspace: ' + JSON.stringify(trusted)
+    'trusted cwd without a configured path must be the app-owned workspace: ' +
+      JSON.stringify(trusted)
   )
   const fallback = await page.evaluate(() =>
     window.api.app.getFloatingTerminalCwd({ path: '/definitely/not/here-orca-floating-probe' })
@@ -36,7 +39,8 @@ try {
   assert.strictEqual(
     fallback,
     directory,
-    'an unreachable configured path must fall back to the app-owned workspace: ' + JSON.stringify(fallback)
+    'an unreachable configured path must fall back to the app-owned workspace: ' +
+      JSON.stringify(fallback)
   )
   await assertReadyHidden(page, root)
   console.log(JSON.stringify({ ok: true, cwd, directory, at: new Date().toISOString() }))

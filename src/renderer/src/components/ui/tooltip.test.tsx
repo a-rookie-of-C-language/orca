@@ -20,13 +20,22 @@ it.each([undefined, 'default', 'surface', 'tab-preview'] as const)(
     )
     const label = screen.getByRole('tooltip')
     const content = label.closest('[data-slot="tooltip-content"]')
-    expect(content?.classList.contains('bg-popover')).toBe(true)
-    expect(content?.classList.contains('text-popover-foreground')).toBe(true)
-    expect(content?.classList.contains('border-border')).toBe(true)
+    expect(content?.classList.contains('bg-[rgba(255,255,255,0.82)]')).toBe(true)
+    expect(content?.classList.contains('dark:bg-[rgba(0,0,0,0.72)]')).toBe(true)
+    expect(content?.classList.contains('border-black/14')).toBe(true)
+    expect(content?.classList.contains('dark:border-white/14')).toBe(true)
+    expect(content?.classList.contains('backdrop-blur-2xl')).toBe(true)
+    expect(content?.classList.contains('bg-popover')).toBe(false)
+    expect(content?.classList.contains('text-popover-foreground')).toBe(false)
+    expect(content?.classList.contains('border-border')).toBe(false)
     expect(content?.classList.contains('bg-foreground')).toBe(false)
     expect(content?.classList.contains('text-background')).toBe(false)
-    expect(content?.querySelector('svg')?.classList.contains('fill-popover')).toBe(true)
-    expect(content?.querySelector('svg')?.classList.contains('bg-popover')).toBe(true)
+    expect(content?.querySelector('svg')?.classList.contains('fill-[rgba(255,255,255,0.82)]')).toBe(
+      true
+    )
+    expect(content?.querySelector('svg')?.classList.contains('bg-[rgba(255,255,255,0.82)]')).toBe(
+      true
+    )
   }
 )
 

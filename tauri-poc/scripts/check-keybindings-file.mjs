@@ -17,7 +17,8 @@ try {
   const snapshot = await page.evaluate(() => window.api.keybindings.get())
   assert.ok(snapshot && typeof snapshot === 'object', 'keybindings.get must return a snapshot')
   assert.ok(
-    snapshot.path.endsWith('.orca\\keybindings.json') || snapshot.path.endsWith('.orca/keybindings.json'),
+    snapshot.path.endsWith('.orca\\keybindings.json') ||
+      snapshot.path.endsWith('.orca/keybindings.json'),
     'snapshot.path must point at the user keybindings file, got ' + snapshot.path
   )
   assert.notStrictEqual(

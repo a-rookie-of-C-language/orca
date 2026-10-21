@@ -83,7 +83,7 @@ export function roomMentionSpans(
       if (member) consumed = member.name.length
     }
     if (consumed === 0 && !isAll) continue
-    const end = at + 1 + (isAll ? consumed : (member ? member.name.length : 0))
+    const end = at + 1 + (isAll ? consumed : member ? member.name.length : 0)
     if (end <= at + 1) continue
     if (overlaps(skip, at, end)) continue
     if (isAll) spans.push({ start: at, end, all: true })

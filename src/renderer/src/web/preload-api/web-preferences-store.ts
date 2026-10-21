@@ -243,16 +243,16 @@ export async function syncRuntimeBackedSettings(
       updates.prBotAuthorOverrides
     )
   }
-    Object.assign(runtimeUpdates, runtimeChatPermissionSetting(updates, false))
-    // Why runtime-backed: the host-side awake verdict reads the paired host's
-    // own settings store, so a local save that never reached it would set a
-    // blocker policy the host cannot see.
-    if (updates.computerAwakeMode !== undefined) {
-      runtimeUpdates.computerAwakeMode = updates.computerAwakeMode
-    }
-    if (typeof updates.keepComputerAwakeWhileAgentsRun === 'boolean') {
-      runtimeUpdates.keepComputerAwakeWhileAgentsRun = updates.keepComputerAwakeWhileAgentsRun
-    }
+  Object.assign(runtimeUpdates, runtimeChatPermissionSetting(updates, false))
+  // Why runtime-backed: the host-side awake verdict reads the paired host's
+  // own settings store, so a local save that never reached it would set a
+  // blocker policy the host cannot see.
+  if (updates.computerAwakeMode !== undefined) {
+    runtimeUpdates.computerAwakeMode = updates.computerAwakeMode
+  }
+  if (typeof updates.keepComputerAwakeWhileAgentsRun === 'boolean') {
+    runtimeUpdates.keepComputerAwakeWhileAgentsRun = updates.keepComputerAwakeWhileAgentsRun
+  }
   if (Object.keys(runtimeUpdates).length === 0) {
     return localNext
   }
