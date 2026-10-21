@@ -180,6 +180,15 @@ impl OrcadRuntime {
 }
 
 fn launch_runtime(resource_root: Option<&Path>) -> Result<Child, String> {
+    // Tauri's resource_dir() returns a canonicalized `\\?\` verbatim path on
+    // Windows; Node.exe and CreateProcess handle plain drive paths more
+    // reliably for cwd/argv, so strip the prefix.
+    fn strip_verbatim(path: &Path) -> PathBuf {
+        let s = path.as_os_str().to_string_lossy();
+        s.strip_prefix(r"\\?\")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| path.to_path_buf())
+    }
     let (root, entry, supervisor, node, profile) = if cfg!(debug_assertions) {
         let root = std::env::var_os("ORCA_DEV_REPO_ROOT")
             .map(PathBuf::from)
@@ -200,6 +209,10 @@ fn launch_runtime(resource_root: Option<&Path>) -> Result<Child, String> {
         let profile = runtime_profile(default_packaged_profile());
         (root.to_path_buf(), entry, supervisor, node, profile)
     };
+    let root = strip_verbatim(&root);
+    let entry = strip_verbatim(&entry);
+    let supervisor = strip_verbatim(&supervisor);
+    let node = strip_verbatim(&node);
     if !entry.is_file() || !supervisor.is_file() {
         return Err(format!(
             "Tauri runtime bundle is incomplete: {} or {} is missing.",
@@ -217,23 +230,65 @@ fn launch_runtime(resource_root: Option<&Path>) -> Result<Child, String> {
             node.display()
         ));
     }
-    let mut command = Command::new(node);
+    let mut command = Command::new(&node);
     command
-        .args([supervisor, entry])
+        .args([&supervisor, &entry])
         .current_dir(root)
-        .env("ORCA_USER_DATA", profile)
+        .env("ORCA_USER_DATA", &profile)
         .env("ORCA_BACKGROUND_LAUNCH", "1")
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stdout(Stdio::piped());
+    if cfg!(debug_assertions) {
+        command.stderr(Stdio::null());
+    } else {
+        let stderr_target = profile
+            .join("orcad-supervisor-stderr.log")
+            .into_os_string();
+        let _ = std::fs::create_dir_all(&profile);
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stderr_target)
+        {
+            Ok(file) => {
+                command.stderr(Stdio::from(file));
+            }
+            Err(_) => {
+                command.stderr(Stdio::null());
+            }
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    command
+    let diag_path = profile.join("orcad-launch-diag.log");
+    let mut child = command
         .spawn()
-        .map_err(|error| format!("Failed to start Node supervisor: {error}"))
+        .map_err(|error| format!("Failed to start Node supervisor: {error}"))?;
+    if !cfg!(debug_assertions) {
+        let pid = child.id();
+        let alive = matches!(child.try_wait(), Ok(None));
+        let _ = std::fs::create_dir_all(&profile);
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&diag_path)
+        {
+            use std::io::Write as _;
+            let _ = writeln!(
+                f,
+                "[launch] pid={} alive_after_spawn={} node={} supervisor={} entry={}",
+                pid,
+                alive,
+                node.display(),
+                supervisor.display(),
+                entry.display()
+            );
+        }
+    }
+    Ok(child)
 }
 
 fn resolve_bundled_node(resource_root: &Path, bundle: &Path) -> Result<PathBuf, String> {

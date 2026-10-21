@@ -22,6 +22,7 @@ export const ORCAD_CHILD_ENTRY_POINTS = {
   workerThreadChildProcess:
     'src/main/worker-thread-child-process/worker-thread-child-process-entry.ts',
   claudeProfileSetup: 'src/main/claude-accounts/claude-profile-setup-worker-entry.ts',
+  usageScanWorker: 'src/main/usage/usage-scan-worker-entry.ts',
   pluginHost: 'src/main/plugins/plugin-host-entry.ts'
 }
 
