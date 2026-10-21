@@ -202,7 +202,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     memory: {
       getSnapshot: () =>
         isTauriNativeHost()
-          ? invokeNative<MemorySnapshot>('poc_memory_snapshot')
+          ? callRuntimeResult<MemorySnapshot>('diagnostics.memory')
           : Promise.resolve(createEmptyMemorySnapshot())
     },
     aiVault: createWebAiVaultApi(),
