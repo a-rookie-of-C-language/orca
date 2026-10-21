@@ -117,6 +117,8 @@ export function createBrowserApi(): NonNullable<Partial<PreloadApi>['browser']> 
         )
       }),
     sessionClearDefaultCookies: () => Promise.resolve(false),
+    sitePermissionsList: () => Promise.resolve([]),
+    sitePermissionsSet: () => Promise.resolve([]),
     notifyActiveTabChanged: () => Promise.resolve(false)
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this browser fallback intentionally implements only the web-safe subset of the preload contract.

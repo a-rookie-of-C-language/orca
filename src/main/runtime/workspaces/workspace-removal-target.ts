@@ -1,4 +1,4 @@
-import { applyClaudeTerminalImageViewerEnv } from '../terminal-image-viewer-env'
+import { applyRemoteViewerLaunchEnv } from '../remote-viewer-launch-env'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { OrcaRuntimeWithRemoveManagedWorktree } from './workspace-removal'
 import type {
@@ -38,6 +38,7 @@ import {
   waitForPendingWorktreeRemoval
 } from '../../worktree-background-removal'
 import { interruptedLocalWorktreeRemovalJob } from '../runtime-interrupted-local-worktree-removal'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { retryFailedRemovalUnlessRegistered } from '../../worktree-removal-leftover'
 import type { GitWorktreeInfo } from '../../../shared/worktree/types'
 import {
@@ -230,6 +231,13 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
   }
 
   async renameTerminal(handle: string, title: string | null): Promise<RuntimeTerminalRename> {
+    // Switch point: a terminal main owns is renamed in main's layout, with or without a window.
+    const mainRename = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? await this.renameTerminalInMainLayout(handle, title)
+      : null
+    if (mainRename) {
+      return mainRename
+    }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
       pty.pty.title = title
@@ -276,6 +284,13 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
 
   /** Names one pane of a split; the tab's own name is untouched. */
   async setPaneTitle(handle: string, title: string | null): Promise<RuntimeTerminalSetPaneTitle> {
+    // Switch point: a pane main owns is named in main's layout, with or without a window.
+    const mainTitle = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? await this.setPaneTitleInMainLayout(handle, title)
+      : null
+    if (mainTitle) {
+      return mainTitle
+    }
     const { leaf } = this.getLiveLeafForHandle(handle)
     if (!this.getAvailableAuthoritativeWindow() || !this.notifier?.setPaneTitle) {
       throw new Error('Pane titles require a running Orca desktop with set-pane-title support')
@@ -296,10 +311,7 @@ export abstract class OrcaRuntimeWithResolveWorktreeRemovalTarget extends OrcaRu
       hostIdentity: this.runtimeId,
       toSessionOptions: (preferences) => this.toAgentSessionOptions(preferences)
     })
-    const launch = applyClaudeTerminalImageViewerEnv(
-      resolvedLaunch,
-      opts.terminalImageViewerSupported
-    )
+    const launch = applyRemoteViewerLaunchEnv(resolvedLaunch, opts.terminalImageViewerSupported)
     // An SSH workspace's shell runs on that machine, where this distro's account paths mean nothing.
     return workspace.connectionId
       ? launch

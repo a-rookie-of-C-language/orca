@@ -67,7 +67,7 @@ export function SshHostFindPopover({
           }
         }}
       >
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} label={searchSshHostsLabel()}>
           <CommandInput
             value={query}
             onValueChange={setQuery}

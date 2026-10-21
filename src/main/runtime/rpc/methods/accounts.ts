@@ -1,4 +1,7 @@
-import { defineMethod, defineStreamingMethod } from '../core'
+import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
+import { rpcCallerOperationKey } from '../rpc-caller-identity'
+import { HostAccountSignInFlows } from '../../host-account-sign-in-flows'
+import type { OrcaRuntimeService } from '../../orca-runtime'
 import {
   AddDataAccountParams,
   SelectDataAccountParams,
@@ -16,7 +19,11 @@ import {
   ListAccountsParams,
   RemoveAccountParams,
   SelectAccountParams,
-  SelectCodexAccountForTargetParams
+  SelectCodexAccountForTargetParams,
+  HostAccountSignInStartParams,
+  HostAccountSignInWaitParams,
+  HostAccountSignInFlowParams,
+  HostAccountSignInCodeParams
 } from '../../../../shared/rpc-contract/accounts-params'
 import { HostAccountLaunchEnvParams } from '../../../../shared/host-account-launch-env'
 import { TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY } from '../../../../shared/account-runtime-capabilities'
@@ -37,6 +44,26 @@ function assertAccountControlAccess(
   ) {
     throw new Error('Account sign-in is only available on the local Orca desktop.')
   }
+}
+
+const hostSignIns = new WeakMap<OrcaRuntimeService, HostAccountSignInFlows>()
+function hostSignInFlows(runtime: OrcaRuntimeService): HostAccountSignInFlows {
+  let flows = hostSignIns.get(runtime)
+  if (!flows) {
+    flows = new HostAccountSignInFlows((provider, channel) =>
+      runtime.runHostAccountSignIn(provider, channel)
+    )
+    hostSignIns.set(runtime, flows)
+  }
+  return flows
+}
+
+/** The caller a sign-in belongs to, as its transport proved it; one it can't name gets none. */
+function signInOwner({ caller }: Pick<RpcContext, 'caller'>): string {
+  if (!caller) {
+    throw new Error('This client cannot add accounts on this host.')
+  }
+  return rpcCallerOperationKey(caller)
 }
 
 export const ACCOUNT_METHODS = [
@@ -274,6 +301,36 @@ export const ACCOUNT_METHODS = [
         wslDistro: params.wslDistro ?? null
       })
     }
+  }),
+  // Why: the login runs here and its credentials never leave; the caller opens the page and relays
+  // the code it shows (#20009).
+  defineMethod({
+    name: 'accounts.hostSignInStart',
+    permission: 'accounts-admin',
+    params: HostAccountSignInStartParams,
+    handler: async ({ provider }, ctx) =>
+      hostSignInFlows(ctx.runtime).start(signInOwner(ctx), provider)
+  }),
+  defineMethod({
+    name: 'accounts.hostSignInWait',
+    permission: 'accounts-admin',
+    params: HostAccountSignInWaitParams,
+    handler: async ({ flowId, afterRevision }, ctx) =>
+      hostSignInFlows(ctx.runtime).wait(signInOwner(ctx), flowId, afterRevision, ctx.signal)
+  }),
+  defineMethod({
+    name: 'accounts.hostSignInSubmitCode',
+    permission: 'accounts-admin',
+    params: HostAccountSignInCodeParams,
+    handler: async ({ flowId, code }, ctx) =>
+      hostSignInFlows(ctx.runtime).submitCode(signInOwner(ctx), flowId, code)
+  }),
+  defineMethod({
+    name: 'accounts.hostSignInCancel',
+    permission: 'accounts-admin',
+    params: HostAccountSignInFlowParams,
+    handler: async ({ flowId }, ctx) =>
+      hostSignInFlows(ctx.runtime).cancel(signInOwner(ctx), flowId)
   }),
   // Why: streaming counterpart so mobile usage bars refresh in place when the
   // desktop's 5-minute rate-limit poll completes or when the user switches

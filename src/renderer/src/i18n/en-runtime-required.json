@@ -608,6 +608,10 @@
           }
         }
       },
+      "hostPicker": {
+        "moreHosts_one": "{{count}} more host. Search by name to find it.",
+        "moreHosts_other": "{{count}} more hosts. Search by name to find one."
+      },
       "linear-issue-attribute-filter-dropdowns": {
         "optionsFromTeam": "Options from {{team}}"
       },

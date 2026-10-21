@@ -1302,6 +1302,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "搜索主机…",
+        "noHostsMatch": "没有匹配的主机。",
+        "moreHosts_one": "还有 {{count}} 个主机，请按名称搜索。",
+        "moreHosts_other": "还有 {{count}} 个主机，请按名称搜索。"
+      },
       "CodexRestartChip": {
         "c72a5fb234": "重新启动",
         "9263e75f49": "Codex 正在使用之前的账户",
@@ -6854,7 +6860,6 @@
           "9fec52de4b": "如何复制 Cookie",
           "remoteServerFallback": "远程服务器",
           "loadAccountsFailed": "无法加载提供商账户。",
-          "remoteScopeAccounts": "正在显示由 {{value0}} 管理的账户。请在该服务器上添加或重新验证账户。",
           "accountScopePrefix": "账户范围",
           "accountScopeRemoteServerUnnamed": "远程服务器",
           "remoteScopeLocalAccountsKept": "此桌面端管理的账户并未改变。将默认运行时切换回本地桌面即可查看。",

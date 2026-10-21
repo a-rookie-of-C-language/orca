@@ -64,6 +64,21 @@ export function editorBufferPathKey(
 }
 
 /**
+ * The path key of a file on a resolved owner, using only what the renderer verifies itself: a
+ * remote host's flavor is unknown here, so only paths that prove Windows (drive, `\\`) fold.
+ */
+export function editorBufferOwnerPathKey(
+  filePath: string,
+  owner: { environmentId: string | null; hostId: string | null }
+): EditorBufferPathKey {
+  const localWindows =
+    parseExecutionHostId(owner.hostId)?.kind === 'local' &&
+    !owner.environmentId &&
+    isLocalWindowsDesktopClient()
+  return editorBufferPathKey(filePath, localWindows ? 'windows' : 'unknown', localWindows)
+}
+
+/**
  * Null for tabs that never share: non-edit views, unresolved owners, and SSH tabs with no captured
  * endpoint.
  *

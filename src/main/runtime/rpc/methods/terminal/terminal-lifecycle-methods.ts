@@ -50,6 +50,40 @@ export const TERMINAL_LIFECYCLE_METHODS = [
       const activate = pairedViewer ? false : params.activate === true
       const presentation =
         pairedViewer && params.presentation === 'focused' ? 'background' : params.presentation
+      // Switch point: the window's own new tab, which main starts; refused as a pane-named split is.
+      if (params.windowTab) {
+        // Only this host's own window draws its tabs, by the identity its IPC proved: that channel
+        // also labels itself a client, and a paired viewer's window starts its own host's.
+        if (
+          context.caller?.kind !== 'desktop' ||
+          !params.worktree?.startsWith('id:') ||
+          !params.tabId ||
+          !params.leafId
+        ) {
+          throw new Error('host_not_owned')
+        }
+        return {
+          terminal: await runtime.startWindowTabTerminal(
+            params.worktree.slice('id:'.length),
+            { tabId: params.tabId, leafId: params.leafId },
+            {
+              command: params.command,
+              ...(params.cwd ? { cwd: params.cwd } : {}),
+              ...(params.shell ? { shellOverride: params.shell } : {}),
+              startupCommandDelivery: params.startupCommandDelivery,
+              env: params.env,
+              envToDelete: params.envToDelete,
+              ...(params.launchConfig ? { launchConfig: params.launchConfig } : {}),
+              ...(params.resumeProviderSession
+                ? { resumeProviderSession: params.resumeProviderSession }
+                : {}),
+              ...(params.launchToken ? { launchToken: params.launchToken } : {}),
+              ...(params.launchAgent ? { launchAgent: params.launchAgent } : {}),
+              terminalImageViewerSupported: terminalImageViewerSupported(context)
+            }
+          )
+        }
+      }
       const terminal = await runtime.dedupeTerminalCreate(
         pairedDeviceId ?? clientId ?? 'local',
         params.worktree,
@@ -96,7 +130,9 @@ export const TERMINAL_LIFECYCLE_METHODS = [
           terminal.executionHostId
         )
       }
-      return { terminal }
+      const publicTerminal = { ...terminal }
+      delete publicTerminal.savedStartupCwd
+      return { terminal: publicTerminal }
     }
   }),
   defineMethod({

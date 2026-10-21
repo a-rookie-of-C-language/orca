@@ -1388,6 +1388,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Rechercher des hôtes…",
+        "noHostsMatch": "Aucun hôte ne correspond.",
+        "moreHosts_one": "{{count}} autre hôte. Recherchez-le par son nom.",
+        "moreHosts_other": "{{count}} autres hôtes. Recherchez par nom pour en trouver un."
+      },
       "BrowserCookieImportDisclosure": {
         "title": "Connexions Google non importées",
         "description": "Connectez-vous à Google directement dans Orca."
@@ -6965,7 +6971,6 @@
           "4e32e030b2": "Stocké localement. Orca ne l'envoie qu'à platform.minimax.io pour les actualisations de consommation.",
           "remoteServerFallback": "le serveur distant",
           "loadAccountsFailed": "Impossible de charger les comptes du fournisseur.",
-          "remoteScopeAccounts": "Affiche les comptes gérés par {{value0}}. Ajoutez ou réauthentifiez les comptes sur ce serveur.",
           "accountScopePrefix": "Portée des comptes",
           "accountScopeRemoteServerUnnamed": "Serveur distant",
           "remoteScopeLocalAccountsKept": "Les comptes gérés sur ce bureau restent inchangés. Repassez le runtime par défaut sur Local desktop pour les voir.",

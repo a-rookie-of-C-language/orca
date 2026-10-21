@@ -1283,6 +1283,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Buscar hosts…",
+        "noHostsMatch": "Ningún host coincide.",
+        "moreHosts_one": "{{count}} host más. Búscalo por nombre.",
+        "moreHosts_other": "{{count}} hosts más. Busca por nombre para encontrar uno."
+      },
       "CodexRestartChip": {
         "c72a5fb234": "Reiniciar",
         "9263e75f49": "Codex está usando la cuenta anterior.",
@@ -6852,7 +6858,6 @@
           "4e32e030b2": "Se almacena localmente. Orca solo la envía a platform.minimax.io para actualizar el uso.",
           "remoteServerFallback": "el servidor remoto",
           "loadAccountsFailed": "No se pudieron cargar las cuentas de proveedor.",
-          "remoteScopeAccounts": "Mostrando las cuentas administradas por {{value0}}. Agrega o vuelve a autenticar cuentas en ese servidor.",
           "accountScopePrefix": "Alcance de la cuenta",
           "accountScopeRemoteServerUnnamed": "Servidor remoto",
           "remoteScopeLocalAccountsKept": "Las cuentas administradas en este escritorio no cambian. Vuelve a cambiar el runtime predeterminado a Escritorio local para verlas.",

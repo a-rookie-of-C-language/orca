@@ -1284,6 +1284,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "호스트 검색…",
+        "noHostsMatch": "일치하는 호스트가 없습니다.",
+        "moreHosts_one": "호스트 {{count}}개 더 있음. 이름으로 검색하세요.",
+        "moreHosts_other": "호스트 {{count}}개 더 있음. 이름으로 검색하세요."
+      },
       "CodexRestartChip": {
         "c72a5fb234": "다시 시작",
         "9263e75f49": "Codex는 이전 계정을 사용하고 있습니다",
@@ -5853,8 +5859,8 @@
           "workspaceSection": "워크스페이스",
           "primaryDeleteDisabled": "기본 작업 트리는 삭제할 수 없습니다. 대신 프로젝트를 제거하세요.",
           "deleteWorktree": "작업 트리 삭제",
-          "sleepWithDescendants": "자손과 동침({{value0}})",
-          "sleepWithDescendantsDescription": "메모리와 CPU를 확보하려면 이 워크스페이스과 모든 중첩 하위 항목의 활성 패널을 닫으세요.",
+          "sleepWithDescendants": "하위 항목도 절전 ({{value0}})",
+          "sleepWithDescendantsDescription": "이 워크스페이스와 모든 하위 워크스페이스의 활성 패널을 닫아 메모리와 CPU 사용량을 줄입니다.",
           "deleteWithDescendants": "하위 항목과 함께 삭제…"
         },
         "WorktreeList": {
@@ -6842,7 +6848,6 @@
           "4e32e030b2": "로컬에 저장됩니다. Orca는 사용량 새로 고침을 위해 platform.minimax.io로만 전송합니다.",
           "remoteServerFallback": "원격 서버",
           "loadAccountsFailed": "프로바이더 계정을 불러오지 못했습니다.",
-          "remoteScopeAccounts": "{{value0}}에서 관리하는 계정을 표시하고 있습니다. 계정 추가나 재인증은 해당 서버에서 진행하세요.",
           "accountScopePrefix": "계정 범위",
           "accountScopeRemoteServerUnnamed": "원격 서버",
           "remoteScopeLocalAccountsKept": "이 데스크탑에서 관리되는 계정은 그대로 유지됩니다. 기본 런타임을 로컬 데스크탑으로 다시 전환하면 확인할 수 있습니다.",

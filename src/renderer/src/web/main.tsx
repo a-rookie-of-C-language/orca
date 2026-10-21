@@ -31,9 +31,11 @@ import {
   type BrowserClientPageRendererInstallation
 } from '../components/browser-pane/browser-client-page-renderer-installation'
 import { isTauriNativeHost } from './tauri-native-bridge'
+import { installAppKeyboardRouter } from '../lib/app-keyboard-router'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
+installAppKeyboardRouter()
 const App = lazy(() => import('../App'))
 
 let tauriBrowserClientPageRenderer: BrowserClientPageRendererInstallation | null = null

@@ -12,7 +12,8 @@ import {
   restoreMainPlatform,
   setMainPlatform,
   startParityLanes,
-  type ParityLanes
+  type ParityLanes,
+  spawnBoth
 } from './pty-launch-parity.test-fixture'
 import {
   POSIX_PATH,
@@ -776,7 +777,7 @@ const WSL_PROJECT_SENT = {
 const LOGIN_SHELL = String.raw`C:\Program Files\PowerShell\7\pwsh.exe`
 
 // Pins main's current spawn preflight (row 3, C5b): where the two lanes resolve a plain terminal's
-// start differently today. Row 13a removes the missing-folder split; row 13b the runtime split.
+// start differently today. Row 13b removes the runtime split.
 describe('spawn preflight: where the lanes differ today', () => {
   const suite = setupPtyIpcSuite()
   afterEach(() => {
@@ -784,24 +785,15 @@ describe('spawn preflight: where the lanes differ today', () => {
     vi.unstubAllEnvs()
   })
 
-  async function spawnBoth(
-    lanes: ParityLanes,
-    workspace: LaunchWorkspace,
-    window: Record<string, unknown>,
-    host: Record<string, unknown> = {}
-  ): Promise<Record<'window' | 'host', Record<string, unknown>>> {
-    const worktreeId = launchWorkspaceId(workspace)
-    const result = recordOf(
-      await lanes.spawnWindow({ cols: 80, rows: 24, cwd: workspace.path, worktreeId, ...window })
-    )
-    const windowFacts = { ...(await providerFacts(lanes.provider)), result }
-    await lanes.runtime.createTerminal(`id:${worktreeId}`, host)
-    return { window: windowFacts, host: await providerFacts(lanes.provider) }
-  }
-
-  // The host hands the provider the missing folder, and the provider's own check then refuses it
-  // ("Working directory ... does not exist").
-  it('a deleted folder: the window starts in the workspace root and says so; the host does not', async () => {
+  // A caller-named session the host no longer has is created too, so it falls back like a fresh one.
+  it.each([
+    { name: 'a fresh start', window: {}, host: {} },
+    {
+      name: 'a dead caller-named session',
+      window: { sessionId: 'pty-gone-window' },
+      host: { sessionId: 'pty-gone-host' }
+    }
+  ])('a deleted folder, $name: both lanes start in the workspace root and say so', async (c) => {
     setMainPlatform('darwin')
     const missing = `${POSIX_PATH}/deleted`
     statSyncMock.mockImplementation((target: string) => {
@@ -814,15 +806,20 @@ describe('spawn preflight: where the lanes differ today', () => {
     const facts = await spawnBoth(
       lanes,
       POSIX_REPO,
-      { cwd: missing, cwdFallback: 'worktree' },
-      { cwd: missing }
+      { cwd: missing, ...c.window },
+      { cwd: missing, ...c.host }
     )
 
+    const fallback = { kind: 'worktree', cwd: POSIX_PATH }
     expect(facts.window).toMatchObject({
       cwd: POSIX_PATH,
-      result: { startupCwdFallback: { kind: 'worktree', cwd: POSIX_PATH } }
+      result: { startupCwdFallback: fallback }
     })
-    expect(facts.host).toMatchObject({ cwd: missing })
+    expect(facts.host).toMatchObject({ cwd: POSIX_PATH, created: { startupCwdFallback: fallback } })
+    expect(lanes.reveal).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.not.objectContaining({ startupCwdFallback: expect.anything() })
+    )
   })
 
   it.each([
