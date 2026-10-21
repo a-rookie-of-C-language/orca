@@ -21,8 +21,6 @@ import {
 } from './web-runtime-session'
 import { noopUnsubscribe } from './web-storage'
 import { syncTauriAppearanceMenuAfterSettingsSaved } from '../tauri-native-menu-appearance'
-import { syncTauriSystemTrayAfterSettingsSaved } from '../tauri-native-tray-api'
-import { syncTauriMinimizeToTray } from '../tauri-native-tray-close'
 
 export function createWebSettingsApi(): Partial<PreloadApi> {
   return {
@@ -85,12 +83,8 @@ export function createWebSettingsApi(): Partial<PreloadApi> {
           preserveAutoRenameBranchFromWorkUpdate: 'autoRenameBranchFromWork' in sanitizedUpdates
         })
         writeStoredSettings(next)
-        // A language or menu-bar-visibility save rebuilds the native tray menu.
-        void syncTauriSystemTrayAfterSettingsSaved(next).catch(() => {})
         // Appearance saves also refresh the native application-menu checkboxes.
         void syncTauriAppearanceMenuAfterSettingsSaved(next).catch(() => {})
-        // The native close path cannot read the renderer store on Alt+F4.
-        void syncTauriMinimizeToTray(next.minimizeToTrayOnClose === true).catch(() => {})
         return settingsForActiveVisibilityOwner(
           await syncRuntimeBackedSettings(sanitizedUpdates, next)
         )

@@ -55,68 +55,6 @@ describe('tauri native bridge', () => {
     vi.unstubAllGlobals()
   })
 
-  it('uses native diagnostics storage and upload commands', async () => {
-    const host = installTauriHost()
-    const { createTauriNativeDiagnosticsApi } = await import('./tauri-native-diagnostics-api')
-    const diagnostics = createTauriNativeDiagnosticsApi()
-
-    await diagnostics?.getStatus()
-    await diagnostics?.collectBundle(15)
-    await diagnostics?.openBundlePreview('bundle-1')
-    await diagnostics?.discardBundlePreview('bundle-1')
-    await diagnostics?.uploadBundle('bundle-1')
-    await diagnostics?.deleteBundle('ticket-1')
-
-    expect(host.invoke.mock.calls.map(([command]) => command)).toEqual([
-      'poc_diagnostics_get_status',
-      'poc_diagnostics_collect_bundle',
-      'poc_diagnostics_open_bundle_preview',
-      'poc_diagnostics_discard_bundle_preview',
-      'poc_diagnostics_upload_bundle',
-      'poc_diagnostics_delete_bundle'
-    ])
-    expect(host.invoke).toHaveBeenNthCalledWith(5, 'poc_diagnostics_upload_bundle', {
-      bundleSubmissionId: 'bundle-1'
-    })
-    expect(host.invoke).toHaveBeenNthCalledWith(6, 'poc_diagnostics_delete_bundle', {
-      ticketId: 'ticket-1'
-    })
-  })
-
-  it('uses native crash-report persistence and submission', async () => {
-    const host = installTauriHost()
-    const { createTauriNativeCrashReportsApi } = await import('./tauri-native-crash-reports-api')
-    const crashReports = createTauriNativeCrashReportsApi()
-    expect(crashReports).not.toBeNull()
-
-    await crashReports?.getLatestPending()
-    await crashReports?.getLatestReport()
-    await crashReports?.recordRendererError({
-      boundaryId: 'app-root',
-      surface: 'app-root',
-      errorName: 'Error',
-      errorMessage: 'broken'
-    })
-    crashReports?.recordBreadcrumb({ name: 'workspace_opened', data: { ssh: false } })
-    await crashReports?.dismiss({ reportId: 'report-1' })
-    await crashReports?.submit({ githubLogin: null, githubEmail: null })
-
-    expect(host.invoke.mock.calls.map(([command]) => command)).toEqual([
-      'poc_crash_reports_get_latest_pending',
-      'poc_crash_reports_get_latest',
-      'poc_crash_reports_record_renderer_error',
-      'poc_crash_reports_record_breadcrumb',
-      'poc_crash_reports_dismiss',
-      'poc_crash_reports_submit'
-    ])
-    expect(host.invoke).toHaveBeenNthCalledWith(6, 'poc_crash_reports_submit', {
-      args: {
-        githubLogin: null,
-        githubEmail: null
-      }
-    })
-  })
-
   it('maps window controls and close handshake to Rust commands', async () => {
     const host = installTauriHost()
     const { createTauriNativeUiApi } = await import('./tauri-native-bridge')
@@ -183,58 +121,6 @@ describe('tauri native bridge', () => {
     ui.setRichMarkdownContextMenuTarget?.(null)
     ui.syncTrafficLights?.(1.2)
     expect(ui.onRichMarkdownContextCommand?.(vi.fn())).toBeTypeOf('function')
-  })
-
-  it('maps signed updater state and lifecycle events to the shared updater API', async () => {
-    const host = installTauriHost()
-    host.invoke.mockImplementation((command: string) => {
-      if (command === 'poc_updater_get_version') {
-        return Promise.resolve('0.2.0')
-      }
-      if (command === 'poc_updater_get_status') {
-        return Promise.resolve({
-          state: 'available',
-          version: '0.2.0',
-          changelog: {
-            release: {
-              title: 'Orca 0.2.0',
-              description: 'Bug fixes',
-              releaseNotesUrl: 'https://example.test/release'
-            },
-            releasesBehind: 1
-          }
-        })
-      }
-      return Promise.resolve(null)
-    })
-    const { createTauriNativeUpdaterApi } = await import('./tauri-native-bridge')
-    const updater = createTauriNativeUpdaterApi()
-    const onStatus = vi.fn()
-
-    await expect(updater?.getVersion()).resolves.toBe('0.2.0')
-    await expect(updater?.getStatus()).resolves.toEqual({
-      state: 'available',
-      version: '0.2.0',
-      changelog: {
-        release: {
-          title: 'Orca 0.2.0',
-          description: 'Bug fixes',
-          releaseNotesUrl: 'https://example.test/release'
-        },
-        releasesBehind: 1
-      }
-    })
-
-    updater?.onStatus(onStatus)
-    await Promise.resolve()
-    await Promise.resolve()
-    host.emit('updater:status', { state: 'downloading', percent: 42, version: '0.2.0' })
-
-    expect(onStatus).toHaveBeenCalledWith({
-      state: 'downloading',
-      percent: 42,
-      version: '0.2.0'
-    })
   })
 
   it('durably checkpoints renderer state before a native relaunch', async () => {

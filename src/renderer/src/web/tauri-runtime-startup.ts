@@ -6,7 +6,6 @@ import {
   saveStoredWebRuntimeEnvironment
 } from './web-runtime-environment'
 import { getStoredSettings, writeStoredSettings } from './preload-api/web-preferences-store'
-import { consumeElevationRestartRequest } from './tauri-native-elevation-restart'
 
 export async function initializeTauriRuntime(): Promise<void> {
   if (!isTauriNativeHost()) {
@@ -36,7 +35,4 @@ export async function initializeTauriRuntime(): Promise<void> {
   // Tauri owns the paired runtime, so local workspace rows must route through it rather than the
   // browser-only local/SSH transport. Persist this before App mounts and hydrates its catalogs.
   writeStoredSettings(getStoredSettings(), environment.id)
-  // After an elevated relaunch the helper marker asks for local terminals
-  // under the new token; restart the owned daemon before App mounts.
-  await consumeElevationRestartRequest()
 }

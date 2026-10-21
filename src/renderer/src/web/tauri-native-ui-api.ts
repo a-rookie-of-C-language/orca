@@ -10,10 +10,6 @@ import { uiZoomFactorFromLevel } from '../../../shared/ui-zoom-level'
 import { invokeNative, invokePlugin, isTauriNativeHost, listenNative } from './tauri-native-host'
 import { createTauriNativeSecondInstanceBridge } from './tauri-native-second-instance'
 import {
-  installTauriMinimizeToTrayNotice,
-  notifyMinimizedToTrayOnce
-} from './tauri-native-tray-close'
-import {
   readTauriClipboardImagePngBase64,
   readTauriClipboardImageThumbnail,
   tauriClipboardHasImage,
@@ -22,7 +18,6 @@ import {
 import { saveClipboardImageAsWebAgentSessionAttachment } from './preload-api/web-agent-session-attachment-upload'
 import { saveClipboardImageAsTempFileInRuntime } from './preload-api/web-clipboard-api'
 import { requireActiveEnvironmentOrNull } from './preload-api/web-runtime-session'
-import { useAppStore } from '../store'
 
 const EVENT_MAXIMIZE_CHANGED = 'window:maximize-changed'
 const EVENT_FULLSCREEN_CHANGED = 'window:fullscreen-changed'
@@ -85,7 +80,6 @@ export function createTauriNativeUiApi(): Partial<PreloadApi['ui']> {
   if (!isTauriNativeHost()) {
     return {}
   }
-  installTauriMinimizeToTrayNotice()
   let zoomLevel = 0
   const secondInstance = createTauriNativeSecondInstanceBridge()
   const saveClipboardImageAsTempFile = async (args?: {
@@ -223,17 +217,6 @@ export function createTauriNativeUiApi(): Partial<PreloadApi['ui']> {
         (payload) => callback({ isQuitting: payload.isQuitting })
       ),
     requestClose: () => {
-      // Why: Electron request-close runs hideToTrayIfEnabled before
-      // window:close-requested, so the X button hides to the tray on Windows
-      // when the setting is on. poc_hide_to_tray hides like Electron instead
-      // of taskbar-minimizing, and the one-shot notice is shared with the
-      // native Alt+F4 path through notifyMinimizedToTrayOnce.
-      const settings = useAppStore.getState().settings
-      if (navigator.userAgent.includes('Windows') && settings?.minimizeToTrayOnClose === true) {
-        void invokeNative('poc_hide_to_tray').catch(() => {})
-        void notifyMinimizedToTrayOnce()
-        return
-      }
       void invokeNative('poc_request_close').catch(() => {})
     },
     confirmWindowClose: () => {

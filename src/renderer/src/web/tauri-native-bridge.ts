@@ -1,22 +1,16 @@
 import type { PreloadApi } from '../../../preload/api-types'
 import { invokeNative, isTauriNativeHost } from './tauri-native-host'
-import { createTauriNativeNotificationsApi } from './tauri-native-notifications-api'
 import { createTauriNativeRepositoriesApi } from './tauri-native-repositories-api'
 import {
   createTauriNativeAppNamespaceApi,
   createTauriNativePlatformNamespaceApi
 } from './tauri-native-platform-app-api'
 import { createTauriNativeShellApi } from './tauri-native-shell-api'
-import { createTauriNativeUpdaterApi } from './tauri-native-updater-api'
 import { createTauriNativeCliApi } from './tauri-native-cli-api'
-import { createTauriNativeDiagnosticsApi } from './tauri-native-diagnostics-api'
-import { createTauriNativeCrashReportsApi } from './tauri-native-crash-reports-api'
-import { createTauriNativeAgentAwakeApi } from './tauri-native-agent-awake-api'
 
 export { createTauriNativeFilesystemDropApi } from './tauri-native-filesystem-drop-api'
 export { createTauriNativeFilesystemApi } from './tauri-native-filesystem-api'
 export { isTauriNativeHost } from './tauri-native-host'
-export { createTauriNativeNotificationsApi } from './tauri-native-notifications-api'
 export { createTauriNativeRepositoriesApi } from './tauri-native-repositories-api'
 export {
   createTauriNativeAppNamespaceApi,
@@ -25,11 +19,7 @@ export {
   createTauriNativePlatformApi
 } from './tauri-native-platform-app-api'
 export { createTauriNativeShellApi } from './tauri-native-shell-api'
-export { createTauriNativeUpdaterApi } from './tauri-native-updater-api'
 export { createTauriNativeCliApi } from './tauri-native-cli-api'
-export { createTauriNativeDiagnosticsApi } from './tauri-native-diagnostics-api'
-export { createTauriNativeCrashReportsApi } from './tauri-native-crash-reports-api'
-export { createTauriNativeAgentAwakeApi } from './tauri-native-agent-awake-api'
 export { createTauriNativeSettingsApi } from './tauri-native-settings-api'
 export {
   createTauriNativeBrowserWebview,
@@ -92,21 +82,11 @@ export function createTauriNativePreloadApi(): Partial<PreloadApi> {
     return {}
   }
   const shell = createTauriNativeShellApi()
-  const notifications = createTauriNativeNotificationsApi()
-  const updater = createTauriNativeUpdaterApi()
-  const diagnostics = createTauriNativeDiagnosticsApi()
-  const crashReports = createTauriNativeCrashReportsApi()
-  const agentAwake = createTauriNativeAgentAwakeApi()
   return {
     ...(shell ? { shell } : {}),
     ...createTauriNativePlatformNamespaceApi(),
     ...createTauriNativeAppNamespaceApi(),
     ...createTauriNativeRepositoriesApi(),
-    ...(notifications ? { notifications } : {}),
-    ...(updater ? { updater } : {}),
-    ...(diagnostics ? { diagnostics } : {}),
-    ...(crashReports ? { crashReports } : {}),
-    ...(agentAwake ? { agentAwake } : {}),
     cli: createTauriNativeCliApi()
   }
 }

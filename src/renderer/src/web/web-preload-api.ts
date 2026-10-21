@@ -81,7 +81,6 @@ import {
   createTauriNativeBrowserApi,
   createTauriNativeFilesystemDropApi,
   createTauriNativeFilesystemApi,
-  createTauriNativeNotificationsApi,
   createTauriNativePreloadApi,
   createTauriNativePlatformNamespaceApi,
   createTauriNativeUiApi,
@@ -91,8 +90,6 @@ import {
   isTauriNativeHost
 } from './tauri-native-bridge'
 import { readStoredWebRuntimeEnvironment } from './web-runtime-environment'
-import { createTauriNativeLocalLogTailApi } from './tauri-native-local-log-tail-api'
-import { installTauriSystemTray } from './tauri-native-tray-api'
 
 export function installWebPreloadApi(): void {
   webRuntimeState.activeEnvironment = readStoredWebRuntimeEnvironment()
@@ -101,7 +98,6 @@ export function installWebPreloadApi(): void {
   installTauriWindowDragBridge()
   installTauriBrowserGuestShortcutForwarding()
   installTauriBrowserGuestCtrlTabCommit()
-  installTauriSystemTray()
   const api = createWebPreloadApi()
   if (isTauriNativeHost()) {
     const nativeApi = createTauriNativePreloadApi()
@@ -175,8 +171,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     fs: {
       ...fileApi,
       ...createTauriNativeFilesystemDropApi(),
-      ...createTauriNativeFilesystemApi(),
-      ...createTauriNativeLocalLogTailApi(fileApi.readFile)
+      ...createTauriNativeFilesystemApi()
     },
     git: createGitApi(),
     browser: {
@@ -208,8 +203,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     aiVault: createWebAiVaultApi(),
     preflight: createPreflightApi(),
     notifications: {
-      ...createNotificationsApi(),
-      ...createTauriNativeNotificationsApi()
+      ...createNotificationsApi()
     },
     rateLimits: createRateLimitsApi(),
     claudeUsage: createClaudeUsageApi(),

@@ -10,13 +10,17 @@ use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::menu::ContextMenu;
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+// Tray is removed: no TrayIconEvent handling needed.
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
 
-mod agent_awake;
-mod ai_vault_delete;
 mod application_menu_spec;
 mod authorized_roots;
+// Disabled in this fork — the `poc_*` commands that would consume these
+// modules are commented out of `invoke_handler!`. Keeping the files on disk
+// makes a targeted revert cheap; removing them from compilation keeps the
+// binary small.
+// mod agent_awake;
+// mod ai_vault_delete;
 mod browser_cdp_events;
 mod browser_client_route_authority;
 mod browser_client_route_partitions;
@@ -30,32 +34,32 @@ mod browser_upload_staging;
 mod browser_webview;
 mod clipboard_files;
 mod crash_reports;
-mod desktop_away_state;
+// mod desktop_away_state;
 mod diagnostics;
 mod doc_preview;
 mod external_editor;
-mod feature_wall;
+// mod feature_wall;
 mod filesystem_download;
 mod filesystem_import;
 mod filesystem_upload;
-mod keybindings_file;
-mod local_log_tail;
+// mod keybindings_file;
+// mod local_log_tail;
 mod menu_appearance;
-mod host_memory;
+// mod host_memory;
 mod menu_hints;
 mod minidump;
 mod runtime_process;
 mod runtime_readiness;
 mod second_instance;
-mod settings_theme_directories;
+// mod settings_theme_directories;
 mod shell_availability;
 mod system_fonts;
-mod system_tray;
-mod terminal_desync;
-mod updater;
+// mod system_tray;
+// mod terminal_desync;
+// mod updater;
 mod window_state;
-mod windows_admin;
-mod workspace_space;
+// mod windows_admin;
+// mod workspace_space;
 
 use application_menu_spec::{application_menu_bar, ids, MenuEntry, MenuPlatform};
 use runtime_process::OrcadRuntime;
@@ -65,15 +69,12 @@ use second_instance::{
 use window_state::WindowStateSaver;
 
 // Why 10 MiB: main caps custom notification sounds at MAX_NOTIFICATION_SOUND_BYTES.
-const MAX_SOUND_BYTES: u64 = 10 * 1024 * 1024;
-const NOTIFICATION_SOUND_EXTENSIONS: [&str; 6] = ["ogg", "mp3", "wav", "m4a", "aac", "flac"];
 
 /// Renderer-emitted events mirror the Electron IPC channel names so the shared
 /// web preload can subscribe without a second, Tauri-only contract.
 const EVENT_MAXIMIZE_CHANGED: &str = "window:maximize-changed";
 const EVENT_FULLSCREEN_CHANGED: &str = "window:fullscreen-changed";
 const EVENT_WINDOW_CLOSE_REQUESTED: &str = "window:close-requested";
-const EVENT_MINIMIZED_TO_TRAY: &str = "window:minimized-to-tray";
 const EVENT_TERMINAL_ZOOM: &str = "terminal:zoom";
 
 /// UI zoom level bookkeeping for non-main windows (Workspace Space, dashboard
@@ -181,9 +182,6 @@ struct NativeWindowState {
     close_request_sequence: AtomicU64,
     last_maximized: AtomicBool,
     last_fullscreen: AtomicBool,
-    /// Renderer pushes the persisted `minimizeToTrayOnClose` setting here so
-    /// the native close path can apply it without calling back into JS.
-    minimize_to_tray: AtomicBool,
     /// Set once the native window is destroyed so a racing debounce save
     /// cannot resurrect bounds after teardown, like Electron freeze on quit.
     window_closed: AtomicBool,
@@ -196,7 +194,6 @@ impl Default for NativeWindowState {
             close_request_sequence: AtomicU64::new(0),
             last_maximized: AtomicBool::new(false),
             last_fullscreen: AtomicBool::new(false),
-            minimize_to_tray: AtomicBool::new(false),
             window_closed: AtomicBool::new(false),
         }
     }
@@ -249,19 +246,6 @@ struct NativeAppIdentity {
 struct CloseRequestedPayload {
     is_quitting: bool,
     request_id: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct NotificationSoundPathArgs {
-    path: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NotificationSoundPathResult {
-    ok: bool,
-    path: Option<String>,
-    reason: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -418,21 +402,14 @@ fn poc_minimize(window: WebviewWindow) -> Result<(), String> {
     window.minimize().map_err(|error| error.to_string())
 }
 
-/// Renderer-drawn X on Windows with minimize-to-tray on hides through this
-/// command so the window leaves the taskbar like Electron hideToTrayIfEnabled.
-/// The title bar minimize button keeps using poc_minimize.
-#[tauri::command]
-fn poc_hide_to_tray(window: WebviewWindow) -> Result<(), String> {
-    window.hide().map_err(|error| error.to_string())
-}
-
 /// Native OS close path consults this before prompting, mirroring the Electron
 /// hideToTrayIfEnabled guard: Windows only, setting pushed from the renderer,
 /// and no confirmed close pending.
 fn close_should_hide_to_tray(state: &NativeWindowState) -> bool {
-    cfg!(target_os = "windows")
-        && state.minimize_to_tray.load(Ordering::SeqCst)
-        && !state.close_confirmed.load(Ordering::SeqCst)
+    // Tray removed: never hide on close. Kept so the CloseRequested branch and
+    // unit tests keep compiling — just returns false.
+    let _ = state;
+    false
 }
 
 #[tauri::command]
@@ -501,15 +478,6 @@ fn poc_request_close(window: WebviewWindow, state: State<Arc<NativeWindowState>>
     emit_close_request(&window, &state, false);
 }
 
-/// Keep the native close path's minimize-to-tray flag in step with the
-/// persisted renderer setting. The renderer pushes the value on startup and
-/// every settings change so the OS X button and the renderer-drawn X follow
-/// the same rule without a synchronous store read.
-#[tauri::command]
-fn poc_set_minimize_to_tray(state: State<Arc<NativeWindowState>>, enabled: bool) {
-    state.minimize_to_tray.store(enabled, Ordering::SeqCst);
-}
-
 #[tauri::command]
 fn poc_confirm_close(window: WebviewWindow, state: State<Arc<NativeWindowState>>) {
     state.inner().confirm_close();
@@ -539,65 +507,6 @@ fn poc_popup_menu(window: WebviewWindow) -> Result<(), String> {
         .ok_or_else(|| "application menu is unavailable".to_string())?;
     menu.popup(window.as_ref().window())
         .map_err(|error| error.to_string())
-}
-
-/// Validates a renderer-supplied notification sound path before the web layer
-/// hands it to an `<audio>` element, mirroring Electron's main-process checks.
-#[tauri::command]
-fn poc_notification_sound_path(args: NotificationSoundPathArgs) -> NotificationSoundPathResult {
-    let path = PathBuf::from(&args.path);
-    if !path.is_absolute() {
-        return NotificationSoundPathResult {
-            ok: false,
-            path: None,
-            reason: Some("invalid-path"),
-        };
-    }
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase());
-    if !extension
-        .as_deref()
-        .is_some_and(|value| NOTIFICATION_SOUND_EXTENSIONS.contains(&value))
-    {
-        return NotificationSoundPathResult {
-            ok: false,
-            path: None,
-            reason: Some("unsupported-type"),
-        };
-    }
-    let metadata = match fs::metadata(&path) {
-        Ok(metadata) => metadata,
-        // Why read-failed, not missing-path: main's loadSound catch reports a
-        // deleted file as read-failed; missing-path is the unconfigured path.
-        Err(_) => {
-            return NotificationSoundPathResult {
-                ok: false,
-                path: None,
-                reason: Some("read-failed"),
-            }
-        }
-    };
-    if !metadata.is_file() {
-        return NotificationSoundPathResult {
-            ok: false,
-            path: None,
-            reason: Some("invalid-path"),
-        };
-    }
-    if metadata.len() > MAX_SOUND_BYTES {
-        return NotificationSoundPathResult {
-            ok: false,
-            path: None,
-            reason: Some("too-large"),
-        };
-    }
-    NotificationSoundPathResult {
-        ok: true,
-        path: Some(args.path),
-        reason: None,
-    }
 }
 
 /// Mirrors `validateNativeFileDropPaths` in the shared renderer contract: a
@@ -686,16 +595,6 @@ fn install_window_state_bridge(
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { api, .. } => {
             if state.close_confirmed.swap(false, Ordering::SeqCst) {
-                return;
-            }
-            // Why: Electron's `close` handler runs `hideToTrayIfEnabled` before
-            // `window:close-requested` — Alt+F4 and the OS X button minimize to
-            // tray instead of prompting when the setting is on. Renderer push
-            // keeps the flag readable without a JS round-trip on close.
-            if close_should_hide_to_tray(&state) {
-                api.prevent_close();
-                let _ = window_handle.hide();
-                let _ = window_handle.emit(EVENT_MINIMIZED_TO_TRAY, ());
                 return;
             }
             // Why: Electron lets the renderer protect running terminals and
@@ -1034,51 +933,9 @@ fn handle_menu_event(app: &AppHandle, event: &tauri::menu::MenuEvent) {
             "orca:tauri-ui:checkForUpdates",
             check_for_updates_menu_options(),
         );
-    } else if let Some(route) = system_tray::tray_menu_route(id.as_ref()) {
-        // Why one branch: the id-to-action mapping lives in `system_tray` so
-        // it stays unit-testable; only an OS click can prove delivery.
-        match route {
-            system_tray::TrayMenuRoute::Open => reveal_main_window(app),
-            system_tray::TrayMenuRoute::OpenSettings => {
-                if let Some(pending) = app.try_state::<PendingOpenSettingsState>() {
-                    pending.mark();
-                }
-                emit_menu_event(app, "orca:tauri-ui:openSettings", ());
-            }
-            system_tray::TrayMenuRoute::CheckForUpdates => {
-                reveal_main_window(app);
-                emit_menu_event(app, "orca:tauri-ui:checkForUpdates", ());
-            }
-            system_tray::TrayMenuRoute::Quit => {
-                if let Some(runtime) = app.try_state::<Arc<OrcadRuntime>>() {
-                    runtime.close_owner();
-                }
-                app.exit(0);
-            }
-        }
     }
     // HELP_ABOUT is a predefined about item and needs no forwarding.
 }
-
-fn handle_tray_click(app: &AppHandle, event: &TrayIconEvent) {
-    // Why: a left-click restores the window on Windows; macOS opens the menu.
-    if let TrayIconEvent::Click {
-        id,
-        button,
-        button_state,
-        ..
-    } = event
-    {
-        if id == system_tray::TRAY_ICON_ID
-            && matches!(button, MouseButton::Left)
-            && matches!(button_state, MouseButtonState::Up)
-            && cfg!(target_os = "windows")
-        {
-            reveal_main_window(app);
-        }
-    }
-}
-
 fn install_application_menu(app: &AppHandle) -> tauri::Result<()> {
     // Why: the spec is the single source of truth; main only materializes it.
     // Hints stay display-only so chords keep reaching the terminal or DOM.
@@ -1165,25 +1022,16 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_opener::Builder::new()
                 .open_js_links_on_click(false)
                 .build(),
         )
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             handle_second_instance_launch(app, &argv, &cwd);
         }))
-        .register_uri_scheme_protocol("orca-preview", |ctx, request| {
-            let uri = request.uri().to_string();
-            doc_preview::handle_protocol_request(ctx.app_handle(), &uri)
-        })
         .on_menu_event(|app, event| {
             handle_menu_event(app, &event);
-        })
-        .on_tray_icon_event(|app, event| {
-            handle_tray_click(app, &event);
         })
         .on_window_event(|window, event| {
             // Why: the owned Node runtime shuts down gracefully on stdin EOF,
@@ -1206,7 +1054,6 @@ fn main() {
                 if let Some(runtime) = window.app_handle().try_state::<Arc<OrcadRuntime>>() {
                     runtime.close_owner();
                 }
-                agent_awake::release_agent_awake_blocker(window.app_handle());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -1217,14 +1064,17 @@ fn main() {
             poc_read_file_data_url,
             poc_platform_info,
             poc_app_identity,
-            feature_wall::poc_get_feature_wall_asset_base_url,
-            windows_admin::poc_get_windows_administrator_status,
-            windows_admin::poc_restart_as_administrator,
-            windows_admin::poc_take_elevation_restart_request,
+            // Removed for this single-developer fork: feature wall, Windows
+            // admin elevation, elevation restart.
+            // feature_wall::poc_get_feature_wall_asset_base_url,
+            // windows_admin::poc_get_windows_administrator_status,
+            // windows_admin::poc_restart_as_administrator,
+            // windows_admin::poc_take_elevation_restart_request,
             poc_is_maximized,
             poc_is_minimized,
             poc_minimize,
-            poc_hide_to_tray,
+            // Tray removed: no hide-to-tray, no tray commands.
+            // poc_hide_to_tray,
             poc_toggle_maximize,
             window_state::poc_window_get_bounds,
             window_state::poc_window_set_bounds,
@@ -1239,40 +1089,46 @@ fn main() {
             poc_resolve_opened_documents,
             poc_request_close,
             poc_confirm_close,
-            poc_set_minimize_to_tray,
+            // Tray removed: no minimize-to-tray setting.
+            // poc_set_minimize_to_tray,
             poc_popup_menu,
-            poc_notification_sound_path,
+            // Notifications removed.
+            // poc_notification_sound_path,
             poc_validate_dropped_paths,
             menu_appearance::poc_menu_set_appearance_checks,
             menu_hints::poc_menu_set_hints,
-            system_tray::poc_tray_ensure,
-            system_tray::poc_tray_set_attention,
-            system_tray::poc_tray_rebuild,
-            system_tray::poc_tray_set_visible,
-            ai_vault_delete::poc_trash_ai_vault_session,
+            // Tray, AI-vault delete removed.
+            // system_tray::poc_tray_ensure,
+            // system_tray::poc_tray_set_attention,
+            // system_tray::poc_tray_rebuild,
+            // system_tray::poc_tray_set_visible,
+            // ai_vault_delete::poc_trash_ai_vault_session,
             browser_cdp_events::poc_browser_cdp_subscribe,
             browser_cdp_events::poc_browser_cdp_unsubscribe,
             browser_identity::poc_browser_identity_get,
             browser_identity::poc_browser_identity_set,
             browser_identity::poc_browser_identity_set_renderer_user_agent,
-            browser_session::poc_browser_session_list_profiles,
-            browser_session::poc_browser_session_create_profile,
-            browser_session::poc_browser_session_delete_profile,
-            browser_session::poc_browser_session_resolve_partition,
-            browser_session::poc_browser_session_detect_browsers,
-            browser_session::poc_browser_session_import_cookies,
-            browser_session::poc_browser_session_import_from_browser,
-            browser_session::poc_browser_session_clear_default_cookies,
-            browser_client_route_sources::poc_browser_client_route_list_sources,
-            browser_client_route_sources::poc_browser_client_route_record_source,
-            browser_client_route_authority::poc_browser_client_route_close_authority,
-            browser_client_route_authority::poc_browser_client_route_note_authority,
-            browser_client_route_partitions::poc_browser_client_route_resolve_partition,
-            browser_client_route_partitions::poc_browser_client_route_import_from_browser,
-            browser_upload_staging::poc_browser_stage_upload_chunk,
-            browser_upload_staging::poc_browser_discard_staged_upload,
-            browser_upload_staging::poc_browser_relay_download_chunk,
-            browser_upload_staging::poc_browser_cleanup_relayed_download,
+            // Browser cookie profiles, client-route authority/partitions, and
+            // upload staging/relay removed. Cross-partition isolation is
+            // Windows-blocked anyway; client-hosted remote pages not needed.
+            // browser_session::poc_browser_session_list_profiles,
+            // browser_session::poc_browser_session_create_profile,
+            // browser_session::poc_browser_session_delete_profile,
+            // browser_session::poc_browser_session_resolve_partition,
+            // browser_session::poc_browser_session_detect_browsers,
+            // browser_session::poc_browser_session_import_cookies,
+            // browser_session::poc_browser_session_import_from_browser,
+            // browser_session::poc_browser_session_clear_default_cookies,
+            // browser_client_route_sources::poc_browser_client_route_list_sources,
+            // browser_client_route_sources::poc_browser_client_route_record_source,
+            // browser_client_route_authority::poc_browser_client_route_close_authority,
+            // browser_client_route_authority::poc_browser_client_route_note_authority,
+            // browser_client_route_partitions::poc_browser_client_route_resolve_partition,
+            // browser_client_route_partitions::poc_browser_client_route_import_from_browser,
+            // browser_upload_staging::poc_browser_stage_upload_chunk,
+            // browser_upload_staging::poc_browser_discard_staged_upload,
+            // browser_upload_staging::poc_browser_relay_download_chunk,
+            // browser_upload_staging::poc_browser_cleanup_relayed_download,
             browser_webview::poc_browser_create,
             browser_webview::poc_browser_close,
             browser_webview::poc_browser_proceed_certificate,
@@ -1291,8 +1147,9 @@ fn main() {
             browser_webview::poc_browser_guest_edit,
             browser_webview::poc_browser_set_zoom,
             browser_webview::poc_browser_set_handled_shortcuts,
-            browser_webview::poc_browser_agent_input_begin,
-            browser_webview::poc_browser_agent_input_end,
+            // Agent-input automation marking removed.
+            // browser_webview::poc_browser_agent_input_begin,
+            // browser_webview::poc_browser_agent_input_end,
             browser_webview::poc_browser_get_handled_shortcuts,
             browser_webview::poc_browser_cdp,
             browser_webview::poc_browser_cdp_session,
@@ -1305,34 +1162,40 @@ fn main() {
             clipboard_files::poc_clipboard_read_file_paths,
             clipboard_files::poc_clipboard_write_file,
             clipboard_files::poc_clipboard_restore_native_chat_pastes,
-            agent_awake::poc_agent_awake_set_active,
-            agent_awake::poc_agent_awake_status,
-            crash_reports::poc_crash_reports_get_latest_pending,
-            crash_reports::poc_crash_reports_get_latest,
-            crash_reports::poc_crash_reports_get_requested,
-            crash_reports::poc_crash_reports_dismiss,
-            crash_reports::poc_crash_reports_record_breadcrumb,
-            crash_reports::poc_crash_reports_record_renderer_error,
-            crash_reports::poc_crash_reports_submit,
-            crash_reports::poc_crash_reports_capture_minidump,
-            diagnostics::poc_diagnostics_get_status,
-            diagnostics::poc_diagnostics_collect_bundle,
-            diagnostics::poc_diagnostics_open_bundle_preview,
-            diagnostics::poc_diagnostics_upload_bundle,
-            diagnostics::poc_diagnostics_delete_bundle,
-            diagnostics::poc_diagnostics_discard_bundle_preview,
-            desktop_away_state::poc_desktop_away_state,
+            // Keep-awake, crash reports + minidump, diagnostics bundle, and
+            // desktop-away removed.
+            // agent_awake::poc_agent_awake_set_active,
+            // agent_awake::poc_agent_awake_status,
+            // crash_reports::poc_crash_reports_get_latest_pending,
+            // crash_reports::poc_crash_reports_get_latest,
+            // crash_reports::poc_crash_reports_get_requested,
+            // crash_reports::poc_crash_reports_dismiss,
+            // crash_reports::poc_crash_reports_record_breadcrumb,
+            // crash_reports::poc_crash_reports_record_renderer_error,
+            // crash_reports::poc_crash_reports_submit,
+            // crash_reports::poc_crash_reports_capture_minidump,
+            // diagnostics::poc_diagnostics_get_status,
+            // diagnostics::poc_diagnostics_collect_bundle,
+            // diagnostics::poc_diagnostics_open_bundle_preview,
+            // diagnostics::poc_diagnostics_upload_bundle,
+            // diagnostics::poc_diagnostics_delete_bundle,
+            // diagnostics::poc_diagnostics_discard_bundle_preview,
+            // desktop_away_state::poc_desktop_away_state,
             shell_availability::poc_shell_availability,
             system_fonts::poc_list_system_fonts,
-            settings_theme_directories::poc_list_directory,
-            keybindings_file::poc_read_keybindings_file,
-            keybindings_file::poc_write_keybindings_file,
-            host_memory::poc_memory_snapshot,
-            terminal_desync::poc_write_terminal_render_desync_evidence,
-            doc_preview::poc_doc_preview_mint_grant,
-            doc_preview::poc_doc_preview_revoke_grant,
-            doc_preview::poc_doc_preview_authorize_directory,
-            doc_preview::poc_doc_preview_cache_file,
+            // Theme-import directory listing removed (Ghostty/Warp scanners
+            // were deleted; the command is unused by this renderer build).
+            // settings_theme_directories::poc_list_directory,
+            // Keybindings file, host-memory snapshot, terminal desync
+            // evidence, and doc preview removed.
+            // keybindings_file::poc_read_keybindings_file,
+            // keybindings_file::poc_write_keybindings_file,
+            // host_memory::poc_memory_snapshot,
+            // terminal_desync::poc_write_terminal_render_desync_evidence,
+            // doc_preview::poc_doc_preview_mint_grant,
+            // doc_preview::poc_doc_preview_revoke_grant,
+            // doc_preview::poc_doc_preview_authorize_directory,
+            // doc_preview::poc_doc_preview_cache_file,
             external_editor::poc_open_external_editor,
             filesystem_download::poc_start_downloaded_folder,
             filesystem_download::poc_finish_downloaded_folder,
@@ -1345,59 +1208,37 @@ fn main() {
             filesystem_import::poc_import_external_paths,
             filesystem_upload::poc_stage_external_paths,
             filesystem_upload::poc_read_external_file_chunk,
-            local_log_tail::poc_read_local_log_tail,
-            local_log_tail::poc_read_local_log_snapshot,
-            local_log_tail::poc_start_local_log_tail,
-            local_log_tail::poc_stop_local_log_tail,
+            // Local log tail removed.
+            // local_log_tail::poc_read_local_log_tail,
+            // local_log_tail::poc_read_local_log_snapshot,
+            // local_log_tail::poc_start_local_log_tail,
+            // local_log_tail::poc_stop_local_log_tail,
             runtime_process::poc_runtime_pairing,
             runtime_process::poc_runtime_status,
-            updater::poc_updater_get_version,
-            updater::poc_updater_get_status,
-            updater::poc_updater_check,
-            updater::poc_updater_list_builds,
-            updater::poc_updater_download,
-            updater::poc_updater_quit_and_install,
-            updater::poc_updater_dismiss_nudge,
-            updater::poc_updater_dismiss_available_update,
-            workspace_space::poc_workspace_space_open,
-            workspace_space::poc_workspace_space_close,
-            workspace_space::poc_workspace_space_publish_window_state,
-            workspace_space::poc_workspace_space_request_window_state,
-            workspace_space::poc_workspace_space_reveal_worktree,
-            workspace_space::poc_workspace_space_request_worktree_refresh,
-            workspace_space::poc_workspace_space_publish_window_analysis,
-            workspace_space::poc_workspace_space_analyze,
-            workspace_space::poc_workspace_space_cancel,
-            workspace_space::poc_workspace_space_get_cached_analysis
+            // Updater and Workspace Space window removed.
+            // updater::poc_updater_get_version,
+            // updater::poc_updater_get_status,
+            // updater::poc_updater_check,
+            // updater::poc_updater_list_builds,
+            // updater::poc_updater_download,
+            // updater::poc_updater_quit_and_install,
+            // updater::poc_updater_dismiss_nudge,
+            // updater::poc_updater_dismiss_available_update,
+            // workspace_space::poc_workspace_space_open,
+            // workspace_space::poc_workspace_space_close,
+            // workspace_space::poc_workspace_space_publish_window_state,
+            // workspace_space::poc_workspace_space_request_window_state,
+            // workspace_space::poc_workspace_space_reveal_worktree,
+            // workspace_space::poc_workspace_space_request_worktree_refresh,
+            // workspace_space::poc_workspace_space_publish_window_analysis,
+            // workspace_space::poc_workspace_space_analyze,
+            // workspace_space::poc_workspace_space_cancel,
+            // workspace_space::poc_workspace_space_get_cached_analysis
         ])
         .setup(|app| {
-            // Why first: a panic anywhere later in setup must already land a
-            // pending native report for the next launch.
-            let metadata = crash_reports::feedback_metadata(&app.handle());
-            crash_reports::install_native_panic_hook(&app.handle(), metadata);
             app.manage(browser_webview::BrowserWebviewState::default());
-            app.manage(browser_cdp_events::BrowserCdpEventState::default());
-            app.manage(browser_identity::BrowserIdentityState::from_app(
-                app.handle(),
-            ));
-            app.manage(browser_session::BrowserSessionState::from_app(app.handle()));
-            app.manage(
-                browser_client_route_sources::ClientRouteImportSourceState::from_app(app.handle()),
-            );
-            app.manage(
-                browser_client_route_partitions::ClientRoutePartitionStore::from_app(app.handle()),
-            );
-            app.manage(browser_client_route_authority::ClientRouteAuthorityState::default());
-            app.manage(browser_upload_staging::BrowserUploadStagingState::default());
-            app.manage(doc_preview::DocPreviewState::default());
-            app.manage(local_log_tail::LocalLogTailState::default());
-            app.manage(diagnostics::DiagnosticsState::default());
-            app.manage(crash_reports::CrashReportState::default());
             app.manage(SecondInstanceState::default());
-            app.manage(system_tray::SystemTrayState::default());
             app.manage(PendingOpenSettingsState::default());
-            app.manage(updater::UpdaterState::default());
-            app.manage(agent_awake::AgentAwakeState::default());
             app.manage(filesystem_download::DownloadSessions::default());
             app.manage(filesystem_download::FolderDownloadSessions::default());
             let resource_root = app.path().resource_dir().ok();
@@ -1431,9 +1272,9 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        close_should_hide_to_tray, poc_copy_file, poc_host_info, poc_notification_sound_path,
+        close_should_hide_to_tray, poc_copy_file, poc_host_info,
         poc_paths_exist, poc_read_file_data_url, poc_validate_dropped_paths, step_ui_zoom_level,
-        zoom_factor_for_level, zoom_level_for_factor, NativeWindowState, NotificationSoundPathArgs,
+        zoom_factor_for_level, zoom_level_for_factor, NativeWindowState,
         PATH_EXISTENCE_BATCH_MAX, UI_ZOOM_MAX, UI_ZOOM_MIN,
     };
     use std::sync::atomic::Ordering;
@@ -1503,21 +1344,9 @@ mod tests {
     }
 
     #[test]
-    fn close_tray_guard_needs_the_pushed_setting() {
+    fn close_tray_guard_always_false_after_removal() {
+        // Tray is removed: the guard is a compile-time stub returning false.
         let state = NativeWindowState::default();
-        assert!(!close_should_hide_to_tray(&state));
-        state.minimize_to_tray.store(true, Ordering::SeqCst);
-        assert_eq!(
-            close_should_hide_to_tray(&state),
-            cfg!(target_os = "windows")
-        );
-    }
-
-    #[test]
-    fn close_tray_guard_yields_after_confirm() {
-        let state = NativeWindowState::default();
-        state.minimize_to_tray.store(true, Ordering::SeqCst);
-        state.confirm_close();
         assert!(!close_should_hide_to_tray(&state));
     }
 
@@ -1619,46 +1448,6 @@ mod tests {
             .expect_err("directory must fail");
         assert_ne!(error, "Repo icon image must be 256KB or smaller.");
         assert!(!error.is_empty());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn shell_notification_sound_gate_matches_main() {
-        let dir =
-            std::env::temp_dir().join(format!("orca-tauri-sound-probe-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("scratch dir");
-        let refused = poc_notification_sound_path(NotificationSoundPathArgs {
-            path: "relative-sound.mp3".to_string(),
-        });
-        assert!(!refused.ok);
-        assert_eq!(refused.reason, Some("invalid-path"));
-        let bad_type = poc_notification_sound_path(NotificationSoundPathArgs {
-            path: dir.join("tone.txt").to_string_lossy().into_owned(),
-        });
-        assert!(!bad_type.ok);
-        assert_eq!(bad_type.reason, Some("unsupported-type"));
-        let missing = poc_notification_sound_path(NotificationSoundPathArgs {
-            path: dir.join("gone.mp3").to_string_lossy().into_owned(),
-        });
-        assert!(!missing.ok);
-        assert_eq!(missing.reason, Some("read-failed"));
-        let big = dir.join("big.mp3");
-        std::fs::write(&big, vec![0u8; 10 * 1024 * 1024 + 1]).expect("seed oversize sound");
-        let oversize = poc_notification_sound_path(NotificationSoundPathArgs {
-            path: big.to_string_lossy().into_owned(),
-        });
-        assert!(!oversize.ok);
-        assert_eq!(oversize.reason, Some("too-large"));
-        let tiny = dir.join("TONE.MP3");
-        std::fs::write(&tiny, vec![1u8, 2u8]).expect("seed tiny sound");
-        let tiny_path = tiny.to_string_lossy().into_owned();
-        let loaded = poc_notification_sound_path(NotificationSoundPathArgs {
-            path: tiny_path.clone(),
-        });
-        assert!(loaded.ok);
-        assert_eq!(loaded.path, Some(tiny_path));
-        assert_eq!(loaded.reason, None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

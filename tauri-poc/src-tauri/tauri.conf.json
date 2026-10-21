@@ -30,21 +30,12 @@
     }
   },
   "plugins": {
-    "updater": {
-      "endpoints": [],
-      "pubkey": "",
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   },
   "bundle": {
     "active": true,
     "resources": {
       "../resources/orcad": "orcad",
-      "../../resources/tray": "tray",
-      "../resources/runtimes": "runtimes",
-      "../../resources/onboarding": "onboarding"
+      "../resources/runtimes": "runtimes"
     },
     "icon": ["icons/icon.ico"]
   }
