@@ -17,6 +17,14 @@ import type { AgentSessionTurnCompletionEvent } from '../../../shared/agent-sess
 import type { OrchestrationDb } from './db'
 import type { RoomMemberRow, RoomWithMembers } from './db/rooms/room-store'
 import { postRoomReply, runRoomRound, sendRoomTurn, type RoomRoundDeps } from './room-round'
+import {
+  parseAdminToolCalls,
+  runAdminToolCalls,
+  stripToolBlocks,
+  type AdminToolRuntime
+} from './room-admin-tools'
+import { spawnRoomBot } from './room-bot-spawn'
+import type { OrcaRuntimeService } from '../orca-runtime'
 
 const WATCHER_ID = 'orchestration-room-replies'
 const REPLY_TEXT_MAX = 4000
@@ -28,6 +36,8 @@ const roomsInFlight = new Set<string>()
 type WatcherDeps = {
   db: OrchestrationDb
   host: StructuredAgentSessionHost
+  /** Without a runtime the watcher still posts replies, but admin tool calls stay inert. */
+  runtime?: OrcaRuntimeService
 }
 
 function memberForSession(db: OrchestrationDb, sessionId: string): RoomMemberRow[] {
@@ -119,8 +129,13 @@ async function handleCompletion(
     const room = deps.db.getRoom(memberRow.room_id)
     if (!room) continue
     try {
-      const result = await postRoomReply(room, memberRow.member_id, text, roundDeps(deps, room))
-      await reportToAdmin(room, memberRow, text, deps)
+      const toolCalls = memberRow.is_admin === 1 ? parseAdminToolCalls(text) : []
+      const postText = toolCalls.length ? stripToolBlocks(text) : text
+      const result = postText
+        ? await postRoomReply(room, memberRow.member_id, postText, roundDeps(deps, room))
+        : { seq: room.seq, followUps: [] }
+      await reportToAdmin(room, memberRow, postText || text, deps)
+      await runAdminTools(room, memberRow, text, deps)
       if (result.followUps.length && !roomsInFlight.has(room.id)) {
         roomsInFlight.add(room.id)
         try {
@@ -145,6 +160,77 @@ async function handleCompletion(
   }
 }
 
+/** Execute an admin member's group tool calls, show the outcome in the room,
+ *  and hand the results back to the admin as its next turn. */
+async function runAdminTools(
+  room: RoomWithMembers,
+  speaker: RoomMemberRow,
+  replyText: string,
+  deps: WatcherDeps
+): Promise<void> {
+  if (!deps.runtime || speaker.is_admin !== 1) {
+    return
+  }
+  if (!parseAdminToolCalls(replyText).length) {
+    return
+  }
+  const runtime = deps.runtime
+  const toolRt: AdminToolRuntime = {
+    db: deps.db,
+    caller: speaker,
+    defaultWorktree: room.worktree,
+    spawnBot: async (args) => {
+      const target = deps.db.getRoom(args.roomId)
+      if (!target) {
+        throw new Error('The room is not here.')
+      }
+      return spawnRoomBot({
+        runtime,
+        db: deps.db,
+        room: target,
+        name: args.name,
+        agent: args.agent,
+        worktree: args.worktree,
+        instructions: args.instructions,
+        isAdmin: args.isAdmin
+      })
+    },
+    readLog: (roomId, limit) =>
+      (
+        deps.db.db
+          .prepare(`SELECT who, text FROM room_log WHERE room_id = ? ORDER BY seq DESC LIMIT ?`)
+          .all(roomId, limit)
+          .toReversed() as { who: string; text: string }[]
+      ),
+    sendToRoom: async (roomId, text) => {
+      const target = deps.db.getRoom(roomId)
+      if (!target) {
+        throw new Error('The room is not here.')
+      }
+      await runRoomRound(target, { text, who: 'Orca' }, roundDeps({ db: deps.db, host: deps.host }, target))
+    }
+  }
+  const { results } = await runAdminToolCalls(toolRt, replyText)
+  if (!results.length) {
+    return
+  }
+  const summary = results.map((line) => `- ${line}`).join('\n')
+  deps.db.appendRoomLine(room.id, { who: 'Orca', text: summary })
+  const admin = deps.db.getRoom(room.id)?.members.find((m) => m.member_id === speaker.member_id)
+  if (!admin) {
+    return
+  }
+  await sendRoomTurn({
+    member: admin,
+    host: deps.host,
+    callerKey: `room:${room.id}`,
+    expectedRuntimeFence: 0,
+    prompt: `Your group tools just ran:\n${summary}\n\nTell the user what happened briefly, or reply [PASS] if your room message already says it.`,
+    fromSource: { kind: 'agent', senders: [], orchestration: null }
+  }).catch(() => {
+    // Tool results are already in the room; a missed follow-up is harmless.
+  })
+}
 /** Idempotent. First call per host wires the subscription; later calls no-op. */
 export function ensureRoomReplyWatcher(deps: WatcherDeps): void {
   if (watched.has(deps.host)) return
@@ -160,7 +246,9 @@ export function ensureRoomReplyWatcher(deps: WatcherDeps): void {
 }
 
 /** Hook for callers that already hold the runtime; reads the installed host itself. */
-export function ensureRoomReplyWatcherForCurrentHost(db: OrchestrationDb): void {
+export function ensureRoomReplyWatcherForCurrentHost(db: OrchestrationDb, runtime?: OrcaRuntimeService): void {
   const host = getStructuredAgentSessionHost()
-  if (host) ensureRoomReplyWatcher({ db, host })
+  if (host) {
+    ensureRoomReplyWatcher({ db, host, runtime })
+  }
 }

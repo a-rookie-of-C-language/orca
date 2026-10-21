@@ -112,6 +112,13 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     allowedFlags: [...GLOBAL_FLAGS, 'id', 'member-id']
   },
   {
+    path: ['orchestration', 'room-ensure-main-bot'],
+    summary: 'Create the HQ room and its admin bot when missing',
+    usage:
+      'orca orchestration room-ensure-main-bot --worktree <selector> [--agent <lane>] [--room-name <name>] [--bot-name <name>] [--json]',
+    allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'agent', 'room-name', 'bot-name']
+  },
+  {
     path: ['orchestration', 'send'],
     summary: 'Send an inter-agent message',
     usage:

@@ -92,7 +92,7 @@ export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
       instructions: getOptionalStringFlag(flags, 'instructions')
     })
     printResult(result, json, (r) =>
-      `Bot ${result.memberId} in ${result.room ? roomSummary(result.room) : 'room'}`
+      `Bot ${r.memberId} in ${r.room ? roomSummary(r.room) : 'room'}`
     )
   },
 
@@ -151,5 +151,14 @@ export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
         ? r.lines.map((l) => `[${l.seq}] ${l.who}: ${l.text}`).join('\n')
         : '(empty)'
     )
+  },
+  'orchestration room-ensure-main-bot': async ({ flags, client, json }) => {
+    const result = await client.call<{ room: RoomDto }>('orchestration.roomEnsureMainBot', {
+      worktree: getRequiredStringFlag(flags, 'worktree'),
+      agent: getOptionalStringFlag(flags, 'agent'),
+      roomName: getOptionalStringFlag(flags, 'room-name'),
+      botName: getOptionalStringFlag(flags, 'bot-name')
+    })
+    printResult(result, json, (r) => `Main bot ready: ${roomSummary(r.room)}`)
   }
 }

@@ -18,6 +18,7 @@ export type RoomRow = {
   mode: RoomMode
   admin_member_id: string | null
   notice: string
+  worktree: string
   seq: number
   created_at: string
   updated_at: string
@@ -70,6 +71,7 @@ export function createRoom(
     name: string
     mode?: RoomMode
     notice?: string
+    worktree?: string
     members?: { memberId: string; name: string; isAdmin?: boolean }[]
   }
 ): RoomWithMembers {
@@ -77,6 +79,7 @@ export function createRoom(
   if (!name) throw invalid('A room needs a name')
   if (name.length > ROOM_NAME_MAX) throw invalid(`Room name is over ${ROOM_NAME_MAX} characters`)
   const notice = String(input.notice ?? '').slice(0, ROOM_NOTICE_MAX)
+  const worktree = String(input.worktree ?? '')
   const mode: RoomMode = input.mode === 'everyone' ? 'everyone' : 'admin'
   const members = input.members ?? []
   if (members.length > ROOM_MAX_MEMBERS) throw invalid(`A room has at most ${ROOM_MAX_MEMBERS} members`)
@@ -84,8 +87,8 @@ export function createRoom(
   const id = generateId('room')
   const now = new Date().toISOString()
   const insertRoom = this.db.prepare(
-    `INSERT INTO rooms (id, name, mode, admin_member_id, notice, seq, created_at, updated_at)
-     VALUES (?, ?, ?, NULL, ?, 0, ?, ?)`
+    `INSERT INTO rooms (id, name, mode, admin_member_id, notice, worktree, seq, created_at, updated_at)
+     VALUES (?, ?, ?, NULL, ?, ?, 0, ?, ?)`
   )
   const insertMember = this.db.prepare(
     `INSERT INTO room_members (room_id, member_id, name, is_admin, created_at)
@@ -99,7 +102,7 @@ export function createRoom(
 
   this.db.exec('BEGIN IMMEDIATE')
   try {
-    insertRoom.run(id, name, mode, notice, now, now)
+    insertRoom.run(id, name, mode, notice, worktree, now, now)
     for (const member of members) {
       const memberName = String(member.name ?? '').trim()
       if (!memberName) throw invalid('A member needs a name')
@@ -187,6 +190,12 @@ export function removeRoomMember(this: OrchestrationDb, roomId: string, memberId
   this.db
     .prepare(`DELETE FROM room_members WHERE room_id = ? AND member_id = ?`)
     .run(roomId, memberId)
+}
+
+export function setRoomWorktree(this: OrchestrationDb, roomId: string, worktree: string): void {
+  this.db
+    .prepare(`UPDATE rooms SET worktree = ?, updated_at = ? WHERE id = ?`)
+    .run(String(worktree ?? ''), new Date().toISOString(), roomId)
 }
 
 export function markRoomMemberSeen(
@@ -305,6 +314,7 @@ export type RoomStoreMethods = {
   deleteRoom: typeof deleteRoom
   addRoomMember: typeof addRoomMember
   removeRoomMember: typeof removeRoomMember
+  setRoomWorktree: typeof setRoomWorktree
   markRoomMemberSeen: typeof markRoomMemberSeen
   setRoomMemberSession: typeof setRoomMemberSession
   appendRoomLine: typeof appendRoomLine
@@ -321,6 +331,7 @@ export function attachRoomStore(ctor: { prototype: object }): void {
     deleteRoom,
     addRoomMember,
     removeRoomMember,
+    setRoomWorktree,
     markRoomMemberSeen,
     setRoomMemberSession,
     appendRoomLine,

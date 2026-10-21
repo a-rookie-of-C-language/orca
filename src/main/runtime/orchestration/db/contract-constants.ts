@@ -21,4 +21,5 @@ export const CURRENT_CONTRACT_VERSION = ORCHESTRATION_CONTRACT_VERSION
 // v42: structured-session Orca session id columns.
 // v43: stored `session:<id>` addresses respelled `orca_session_id:<id>`.
 // v44: group-chat rooms (rooms, room_members, room_log).
-export const SCHEMA_VERSION = 44
+// v45: rooms remember the worktree selector admin tools spawn new bots under.
+export const SCHEMA_VERSION = 45

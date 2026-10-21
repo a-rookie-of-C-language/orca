@@ -545,7 +545,7 @@ fn poc_validate_dropped_paths(paths: Vec<String>) -> Result<Vec<String>, String>
     Ok(accepted)
 }
 
-fn install_poc_badge(app: &AppHandle) -> tauri::Result<()> {
+fn apply_background_launch_visibility(app: &AppHandle) -> tauri::Result<()> {
     let Some(window) = app.get_webview_window("main") else {
         return Ok(());
     };
@@ -553,36 +553,6 @@ fn install_poc_badge(app: &AppHandle) -> tauri::Result<()> {
     if std::env::var("ORCA_BACKGROUND_LAUNCH").as_deref() == Ok("1") {
         window.hide()?;
     }
-
-    window.eval(
-        r#"(() => {
-          const install = async () => {
-            const host = await window.__TAURI_INTERNALS__.invoke('poc_host_info');
-            const badge = document.createElement('div');
-            badge.setAttribute('data-orca-tauri-poc', 'connected');
-            badge.textContent = `${host.host} host · ${host.transport}`;
-            Object.assign(badge.style, {
-              position: 'fixed',
-              right: '12px',
-              bottom: '12px',
-              zIndex: '2147483647',
-              padding: '6px 10px',
-              border: '1px solid var(--border, #444)',
-              borderRadius: '6px',
-              background: 'var(--card, #222)',
-              color: 'var(--muted-foreground, #aaa)',
-              font: '12px/1.25 system-ui, sans-serif',
-              pointerEvents: 'none'
-            });
-            document.body.appendChild(badge);
-          };
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => void install(), { once: true });
-          } else {
-            void install();
-          }
-        })();"#,
-    )?;
 
     Ok(())
 }
@@ -1271,7 +1241,7 @@ fn main() {
                 let _ = window.show();
             }
             install_application_menu(app.handle())?;
-            install_poc_badge(app.handle())?;
+            apply_background_launch_visibility(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())

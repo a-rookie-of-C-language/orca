@@ -3,21 +3,18 @@
  * message into a room and runs the opening round of member prompts.
  */
 
-import { randomUUID } from 'node:crypto'
-import type { AgentMessageSource } from '../../../../../../shared/agent-session-message-source'
-import { formatOrcaSessionAddress } from '../../../../../../shared/orca-session-address'
-import { createStructuredAgentSessionId } from '../../../../../../shared/structured-agent-session-create'
-import { createStructuredAgentSessionOperationId } from '../../../../../../shared/structured-agent-session-mutation'
 import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { defineMethod } from '../../../core'
-import { createStructuredAgentSessionForWorktree } from '../../structured-agent-session-create'
-import { runRoomRound, postRoomReply, sendRoomTurn } from '../../../../orchestration/room-round'
+import { runRoomRound, postRoomReply } from '../../../../orchestration/room-round'
+import { ROOM_SOURCE, spawnRoomBot } from '../../../../orchestration/room-bot-spawn'
+import { MAIN_BOT_NAME, MAIN_BOT_ROOM_NAME } from '../../../../orchestration/room-admin-tools'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
 import {
   RoomBotCreateParams,
   RoomCreateParams,
   RoomDeleteParams,
+  RoomEnsureMainBotParams,
   RoomListParams,
   RoomLogParams,
   RoomMemberAddParams,
@@ -35,6 +32,7 @@ const exposeRoom = (room: {
   mode: string
   admin_member_id: string | null
   notice: string
+  worktree: string
   seq: number
   created_at: string
   updated_at: string
@@ -51,6 +49,7 @@ const exposeRoom = (room: {
   mode: room.mode,
   adminMemberId: room.admin_member_id,
   notice: room.notice,
+  worktree: room.worktree,
   seq: room.seq,
   createdAt: room.created_at,
   updatedAt: room.updated_at,
@@ -79,10 +78,6 @@ const exposeRoomLine = (line: {
   createdAt: line.created_at
 })
 
-// A room prompt reaches a member as Orca speaking for the group, not as the person
-// at the member's own composer.
-const ROOM_SOURCE: AgentMessageSource = { kind: 'agent', senders: [], orchestration: null }
-
 export const ORCHESTRATION_ROOM_METHODS = [
   defineMethod({
     name: 'orchestration.roomCreate',
@@ -94,6 +89,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
         name: params.name,
         mode: params.mode,
         notice: params.notice,
+        worktree: params.worktree,
         members: params.members
       })
       return { room: exposeRoom(room) }
@@ -162,72 +158,60 @@ export const ORCHESTRATION_ROOM_METHODS = [
       const db = ctx.runtime.getOrchestrationDb()
       const room = db.getRoom(params.id)
       if (!room) throw roomError('room_not_found', 'The room is not here.')
-
-      const sessionId = createStructuredAgentSessionId(params.agent, randomUUID)
-      const callerKey = `room-bot:${room.id}`
-      const created = await createStructuredAgentSessionForWorktree({
+      const spawned = await spawnRoomBot({
         runtime: ctx.runtime,
-        ensureHost: async () => {
-          await ctx.runtime.ensureStructuredAgentSessionHost()
-          const host = getStructuredAgentSessionHost()
-          if (!host) {
-            throw roomError('room_no_chat_host', 'The agent-session host is not installed.')
-          }
-          return host
-        },
-        caller: { callerKey },
-        envelope: {
-          sessionId,
-          clientOperationId: createStructuredAgentSessionOperationId(randomUUID),
-          expectedRuntimeFence: null,
-          payloadFingerprint: ''
-        },
-        worktree: params.worktree,
-        agent: params.agent,
-        atRest: true,
-        activate: false
-      })
-      if (!created.ok) {
-        throw roomError(
-          'room_bot_refused',
-          `The bot's session was refused: ${created.refusal.message}`
-        )
-      }
-
-      const memberAddress = formatOrcaSessionAddress(sessionId)
-      db.addRoomMember(room.id, {
-        memberId: memberAddress,
+        db,
+        room,
         name: params.name,
+        agent: params.agent,
+        worktree: params.worktree,
+        instructions: params.instructions,
         isAdmin: params.isAdmin
       })
-      // member_id and session_id coincide for a spawned bot: its whole conversation IS the room
-      // session. The column stays for the separate "existing member, per-room session" path.
-      db.setRoomMemberSession(room.id, memberAddress, memberAddress)
+      ensureRoomReplyWatcherForCurrentHost(db, ctx.runtime)
+      const fresh = db.getRoom(room.id)
+      return { memberId: spawned.memberId, sessionId: spawned.sessionId, room: fresh ? exposeRoom(fresh) : null }
+    }
+  }),
 
-      const host = getStructuredAgentSessionHost()
-      if (host && params.instructions?.trim()) {
-        await sendRoomTurn({
-          member: {
-            room_id: room.id,
-            member_id: memberAddress,
-            name: params.name,
-            is_admin: params.isAdmin ? 1 : 0,
-            seen_seq: 0,
-            session_id: memberAddress,
-            created_at: new Date().toISOString()
-          },
-          host,
-          callerKey,
-          expectedRuntimeFence: 0,
-          prompt: params.instructions.trim(),
-          fromSource: ROOM_SOURCE
-        }).catch(() => {
-          // Instructions are best-effort; the bot is in the room either way.
+  defineMethod({
+    name: 'orchestration.roomEnsureMainBot',
+    permission: 'workspace',
+    params: RoomEnsureMainBotParams,
+    handler: async (params, { runtime }) => {
+      const db = runtime.getOrchestrationDb()
+      const roomName = params.roomName?.trim() || MAIN_BOT_ROOM_NAME
+      const botName = params.botName?.trim() || MAIN_BOT_NAME
+      const agent = params.agent?.trim() || 'claude'
+      let room = db.getRoomByName(roomName)
+      if (!room) {
+        room = db.createRoom({
+          name: roomName,
+          mode: 'admin',
+          notice: 'Orca HQ: talk to the admin to manage bots and group chats.',
+          worktree: params.worktree
+        })
+      } else if (!room.worktree && params.worktree) {
+        db.setRoomWorktree(room.id, params.worktree)
+      }
+      const admin = room.members.find((m) => m.is_admin === 1)
+      if (!admin) {
+        await spawnRoomBot({
+          runtime,
+          db,
+          room,
+          name: botName,
+          agent,
+          worktree: room.worktree || params.worktree,
+          isAdmin: true
         })
       }
-      ensureRoomReplyWatcherForCurrentHost(db)
+      ensureRoomReplyWatcherForCurrentHost(db, runtime)
       const fresh = db.getRoom(room.id)
-      return { memberId: memberAddress, sessionId, room: fresh ? exposeRoom(fresh) : null }
+      if (!fresh) {
+        throw roomError('room_not_found', 'The room is not here.')
+      }
+      return { room: exposeRoom(fresh) }
     }
   }),
 
@@ -272,7 +256,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
           fromSource: ROOM_SOURCE
         }
       )
-      ensureRoomReplyWatcherForCurrentHost(db)
+      ensureRoomReplyWatcherForCurrentHost(db, runtime)
       return {
         seq: result.seq,
         slots: result.slots.map((s) => ({
@@ -307,7 +291,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
         expectedRuntimeFenceFor: () => 0,
           fromSource: ROOM_SOURCE
       })
-      ensureRoomReplyWatcherForCurrentHost(db)
+      ensureRoomReplyWatcherForCurrentHost(db, runtime)
       return {
         seq: result.seq,
         followUps: result.followUps.map((m) => ({

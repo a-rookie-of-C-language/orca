@@ -11,6 +11,7 @@ export const RoomCreateParams = z.object({
   name: requiredString('Missing --name'),
   mode: z.enum(['admin', 'everyone']).optional(),
   notice: OptionalString,
+  worktree: OptionalString,
   members: z.array(RoomMemberInput).optional()
 })
 
@@ -68,4 +69,12 @@ export const RoomLogParams = z.object({
   id: requiredString('Missing --id'),
   memberId: OptionalString,
   limit: z.number().int().min(1).max(200).optional()
+})
+
+export const RoomEnsureMainBotParams = z.object({
+  /** Worktree selector new bots spawn under when the room records none. */
+  worktree: requiredString('Missing --worktree'),
+  agent: OptionalString,
+  roomName: OptionalString,
+  botName: OptionalString
 })

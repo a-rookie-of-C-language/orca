@@ -199,6 +199,8 @@ function SpawnBotForm(props: {
 function useRooms() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
+  const activeWorktreeId = useActiveWorktreeId()
+  const ensuredHq = useRef(false)
   const refresh = useCallback(async () => {
     try {
       const result = await callRuntimeRpc<{ rooms: Room[] }>(LOCAL, 'orchestration.roomList')
@@ -212,6 +214,32 @@ function useRooms() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+  // The Main Bot lives in Orca HQ: first visit seats it so plain words like
+  // "make a group with Claude and Codex" just work.
+  useEffect(() => {
+    if (ensuredHq.current || !activeWorktreeId) {
+      return
+    }
+    ensuredHq.current = true
+    void (async () => {
+      try {
+        const listed = await callRuntimeRpc<{ rooms: Room[] }>(LOCAL, 'orchestration.roomList')
+        if (listed.rooms.some((room) => room.name === 'Orca HQ')) {
+          return
+        }
+        const created = await callRuntimeRpc<{ room: Room }>(
+          LOCAL,
+          'orchestration.roomEnsureMainBot',
+          { worktree: `id:${activeWorktreeId}`, agent: 'claude' }
+        )
+        setRooms((cur) => [...cur, created.room])
+        toast.success('Orca Admin is ready in Orca HQ')
+      } catch (error) {
+        ensuredHq.current = false
+        toast.error(`Failed to seat the Main Bot: ${(error as Error).message}`)
+      }
+    })()
+  }, [activeWorktreeId])
   return { rooms, loading, refresh }
 }
 
@@ -248,6 +276,7 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
   const [busy, setBusy] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [seedAdminBot, setSeedAdminBot] = useState(true)
+  const [instructions, setInstructions] = useState('')
   const worktrees = useAllWorktrees()
   const activeWorktreeId = useActiveWorktreeId()
 
@@ -282,8 +311,7 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
             agent: 'claude',
             name: 'admin',
             isAdmin: true,
-            instructions:
-              'You are the admin of this group chat. When the user speaks, answer them or call the right member with @Name. Keep answers short; use your tools when asked to do work.'
+            instructions: instructions.trim() || undefined
           })
         } catch (error) {
           toast.error(`Room created, but its admin bot failed: ${(error as Error).message}`)
@@ -292,6 +320,7 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
       toast.success(`Room "${name.trim()}" created`)
       setName('')
       setPicked([])
+      setInstructions('')
       props.onCreated()
     } catch (error) {
       toast.error(`Failed to create room: ${(error as Error).message}`)
@@ -306,6 +335,12 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
         placeholder="Name"
         value={name}
         onChange={(e) => setName(e.target.value)}
+        disabled={busy}
+      />
+      <Input
+        placeholder="Admin brief (optional, group tools included)"
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
         disabled={busy}
       />
       <div className="space-y-1">
