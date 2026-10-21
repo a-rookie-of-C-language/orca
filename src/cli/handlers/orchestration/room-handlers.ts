@@ -78,6 +78,24 @@ export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, (r) => roomSummary(r.room))
   },
 
+  'orchestration room-bot-create': async ({ flags, client, json }) => {
+    const result = await client.call<{
+      memberId: string
+      sessionId: string
+      room: RoomDto | null
+    }>('orchestration.roomBotCreate', {
+      id: getRequiredStringFlag(flags, 'id'),
+      worktree: getRequiredStringFlag(flags, 'worktree'),
+      agent: getRequiredStringFlag(flags, 'agent'),
+      name: getRequiredStringFlag(flags, 'name'),
+      isAdmin: flags.has('admin') ? true : undefined,
+      instructions: getOptionalStringFlag(flags, 'instructions')
+    })
+    printResult(result, json, (r) =>
+      `Bot ${result.memberId} in ${result.room ? roomSummary(result.room) : 'room'}`
+    )
+  },
+
   'orchestration room-remove': async ({ flags, client, json }) => {
     const result = await client.call<{ ok: true }>('orchestration.roomMemberRemove', {
       id: getRequiredStringFlag(flags, 'id'),

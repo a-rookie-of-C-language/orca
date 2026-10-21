@@ -11,14 +11,31 @@ type Subscriber = { emit: (event: AgentSessionTurnCompletionEvent) => void }
 
 const hostWith = (snapshotItems: unknown[] = []) => {
   const subscribers: Subscriber[] = []
+  const sends: { sessionId: string; text: string }[] = []
   const host = {
     subscribeTurnCompletions: vi.fn((sub: Subscriber) => {
       subscribers.push(sub)
       return () => undefined
     }),
-    journalSnapshot: vi.fn(async () => ({ items: snapshotItems }))
+    journalSnapshot: vi.fn(async () => ({ items: snapshotItems })),
+    send: vi.fn(
+      async (_caller: unknown, message: { envelope?: { sessionId?: string }; body?: { blocks?: { text?: string }[] } }) => {
+        sends.push({
+          sessionId: message.envelope?.sessionId ?? '',
+          text: (message.body?.blocks ?? []).map((b) => b.text ?? '').join('\n')
+        })
+        return {
+          ok: true,
+          replayed: false,
+          fence: 0,
+          cursor: { epoch: 'e', sequence: 1 },
+          value: { clientMessageId: `cm-${sends.length}`, submission: { dispatchState: 'accepted' } }
+        }
+      }
+    ),
+    waitForSendSettlement: vi.fn(async () => undefined)
   }
-  return { host: host as unknown as StructuredAgentSessionHost, subscribers }
+  return { host: host as unknown as StructuredAgentSessionHost, subscribers, sends }
 }
 
 const completionFor = (sessionId: string, turnId: string): AgentSessionTurnCompletionEvent => ({
@@ -49,6 +66,16 @@ const seedRoom = (db: OrchestrationDb) =>
   db.createRoom({
     name: 'demo',
     mode: 'everyone',
+    members: [
+      { memberId: aliceMember, name: 'alice', isAdmin: true },
+      { memberId: betaMember, name: 'beta' }
+    ]
+  })
+
+const seedAdminRoom = (db: OrchestrationDb) =>
+  db.createRoom({
+    name: 'admin-room',
+    mode: 'admin',
     members: [
       { memberId: aliceMember, name: 'alice', isAdmin: true },
       { memberId: betaMember, name: 'beta' }
@@ -92,5 +119,42 @@ describe('room-reply-watcher', () => {
     ensureRoomReplyWatcher({ db, host })
     ensureRoomReplyWatcher({ db, host })
     expect(host.subscribeTurnCompletions).toHaveBeenCalledTimes(1)
+  })
+
+  it('in admin mode, a non-admin reply nudges the admin to summarize', async () => {
+    const db = new OrchestrationDb(':memory:')
+    const room = seedAdminRoom(db)
+    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'I looked it up')])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
+    await vi.waitFor(() => {
+      const adminSend = sends.find((s) => s.sessionId === 'session_alice_0001')
+      expect(adminSend?.text).toContain('beta just replied')
+      expect(adminSend?.text).toContain('I looked it up')
+    })
+    expect(room.mode).toBe('admin')
+  })
+
+  it('in everyone mode, a reply does not trigger a report-back', async () => {
+    const db = new OrchestrationDb(':memory:')
+    seedRoom(db)
+    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'hello')])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(sends).toHaveLength(0)
+  })
+
+  it('the admin\'s own reply does not loop back to itself', async () => {
+    const db = new OrchestrationDb(':memory:')
+    seedAdminRoom(db)
+    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'admin said')])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_alice_0001', 'turn-1'))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(sends).toHaveLength(0)
   })
 })

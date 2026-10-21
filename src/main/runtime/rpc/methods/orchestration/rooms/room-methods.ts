@@ -3,13 +3,19 @@
  * message into a room and runs the opening round of member prompts.
  */
 
+import { randomUUID } from 'node:crypto'
 import type { AgentMessageSource } from '../../../../../../shared/agent-session-message-source'
+import { formatOrcaSessionAddress } from '../../../../../../shared/orca-session-address'
+import { createStructuredAgentSessionId } from '../../../../../../shared/structured-agent-session-create'
+import { createStructuredAgentSessionOperationId } from '../../../../../../shared/structured-agent-session-mutation'
 import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { defineMethod } from '../../../core'
-import { runRoomRound, postRoomReply } from '../../../../orchestration/room-round'
+import { createStructuredAgentSessionForWorktree } from '../../structured-agent-session-create'
+import { runRoomRound, postRoomReply, sendRoomTurn } from '../../../../orchestration/room-round'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
 import {
+  RoomBotCreateParams,
   RoomCreateParams,
   RoomDeleteParams,
   RoomListParams,
@@ -145,6 +151,83 @@ export const ORCHESTRATION_ROOM_METHODS = [
       const room = db.getRoom(params.id)
       if (!room) throw roomError('room_not_found', 'The room is not here.')
       return { room: exposeRoom(room) }
+    }
+  }),
+
+  defineMethod({
+    name: 'orchestration.roomBotCreate',
+    permission: 'workspace',
+    params: RoomBotCreateParams,
+    handler: async (params, ctx) => {
+      const db = ctx.runtime.getOrchestrationDb()
+      const room = db.getRoom(params.id)
+      if (!room) throw roomError('room_not_found', 'The room is not here.')
+
+      const sessionId = createStructuredAgentSessionId(params.agent, randomUUID)
+      const callerKey = `room-bot:${room.id}`
+      const created = await createStructuredAgentSessionForWorktree({
+        runtime: ctx.runtime,
+        ensureHost: async () => {
+          await ctx.runtime.ensureStructuredAgentSessionHost()
+          const host = getStructuredAgentSessionHost()
+          if (!host) {
+            throw roomError('room_no_chat_host', 'The agent-session host is not installed.')
+          }
+          return host
+        },
+        caller: { callerKey },
+        envelope: {
+          sessionId,
+          clientOperationId: createStructuredAgentSessionOperationId(randomUUID),
+          expectedRuntimeFence: null,
+          payloadFingerprint: ''
+        },
+        worktree: params.worktree,
+        agent: params.agent,
+        atRest: true,
+        activate: false
+      })
+      if (!created.ok) {
+        throw roomError(
+          'room_bot_refused',
+          `The bot's session was refused: ${created.refusal.message}`
+        )
+      }
+
+      const memberAddress = formatOrcaSessionAddress(sessionId)
+      db.addRoomMember(room.id, {
+        memberId: memberAddress,
+        name: params.name,
+        isAdmin: params.isAdmin
+      })
+      // member_id and session_id coincide for a spawned bot: its whole conversation IS the room
+      // session. The column stays for the separate "existing member, per-room session" path.
+      db.setRoomMemberSession(room.id, memberAddress, memberAddress)
+
+      const host = getStructuredAgentSessionHost()
+      if (host && params.instructions?.trim()) {
+        await sendRoomTurn({
+          member: {
+            room_id: room.id,
+            member_id: memberAddress,
+            name: params.name,
+            is_admin: params.isAdmin ? 1 : 0,
+            seen_seq: 0,
+            session_id: memberAddress,
+            created_at: new Date().toISOString()
+          },
+          host,
+          callerKey,
+          expectedRuntimeFence: 0,
+          prompt: params.instructions.trim(),
+          fromSource: ROOM_SOURCE
+        }).catch(() => {
+          // Instructions are best-effort; the bot is in the room either way.
+        })
+      }
+      ensureRoomReplyWatcherForCurrentHost(db)
+      const fresh = db.getRoom(room.id)
+      return { memberId: memberAddress, sessionId, room: fresh ? exposeRoom(fresh) : null }
     }
   }),
 

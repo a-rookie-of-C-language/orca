@@ -176,7 +176,11 @@ export async function sendRoomTurn(args: {
   signal?: AbortSignal
   budgetMs?: number
 }): Promise<RoomSendOutcome> {
-  const sessionId = parseOrcaSessionAddress(args.member.member_id)
+  // A member's room session (`session_id`) wins over its own chat session
+  // (`member_id`): a spawned bot gets its own conversation per room.
+  const sessionId = parseOrcaSessionAddress(
+    args.member.session_id ?? args.member.member_id
+  )
   if (!sessionId) {
     return {
       kind: 'failed',

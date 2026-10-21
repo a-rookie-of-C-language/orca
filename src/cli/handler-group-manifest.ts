@@ -162,6 +162,7 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
       'orchestration room-show',
       'orchestration room-delete',
       'orchestration room-add',
+      'orchestration room-bot-create',
       'orchestration room-remove',
       'orchestration room-send',
       'orchestration room-post',

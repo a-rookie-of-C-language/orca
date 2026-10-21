@@ -16,7 +16,7 @@ import type { StructuredAgentSessionHost } from '../../native-chat/agent-session
 import type { AgentSessionTurnCompletionEvent } from '../../../shared/agent-session-turn-completion-wire'
 import type { OrchestrationDb } from './db'
 import type { RoomMemberRow, RoomWithMembers } from './db/rooms/room-store'
-import { postRoomReply, runRoomRound, type RoomRoundDeps } from './room-round'
+import { postRoomReply, runRoomRound, sendRoomTurn, type RoomRoundDeps } from './room-round'
 
 const WATCHER_ID = 'orchestration-room-replies'
 const REPLY_TEXT_MAX = 4000
@@ -36,9 +36,9 @@ function memberForSession(db: OrchestrationDb, sessionId: string): RoomMemberRow
   return db.db
     .prepare(
       `SELECT room_id, member_id, name, is_admin, seen_seq, session_id, created_at
-       FROM room_members WHERE member_id = ?`
+       FROM room_members WHERE member_id = ? OR session_id = ?`
     )
-    .all(address) as RoomMemberRow[]
+    .all(address, address) as RoomMemberRow[]
 }
 
 function extractAssistantText(items: AgentJournalRenderItem[], turnItemId: string): string {
@@ -71,6 +71,38 @@ function roundDeps(deps: WatcherDeps, room: RoomWithMembers): RoomRoundDeps {
   }
 }
 
+/** In admin mode, a non-admin reply is routed to the admin so it can respond to the
+ *  user's message with what the group just said — the report-back DeepSeek-Bot does
+ *  after a round. Skipped when the speaker IS the admin or no admin is set. */
+async function reportToAdmin(
+  room: RoomWithMembers,
+  speaker: RoomMemberRow,
+  replyText: string,
+  deps: WatcherDeps
+): Promise<void> {
+  if (room.mode !== 'admin' || !room.admin_member_id) return
+  if (speaker.member_id === room.admin_member_id) return
+  const admin = room.members.find((m) => m.member_id === room.admin_member_id)
+  if (!admin) return
+  const prompt = [
+    `${speaker.name} just replied in the room "${room.name}":`,
+    '',
+    replyText,
+    '',
+    'As this room\'s admin, decide whether the group needs a response. If you have a summary or a follow-up for the user, post it now with no name prefix. Reply [PASS] to stay silent.'
+  ].join('\n')
+  await sendRoomTurn({
+    member: admin,
+    host: deps.host,
+    callerKey: `room:${room.id}`,
+    expectedRuntimeFence: 0,
+    prompt,
+    fromSource: { kind: 'agent', senders: [], orchestration: null }
+  }).catch(() => {
+    // A failed report-back must not break the watcher for the rest of the roster.
+  })
+}
+
 async function handleCompletion(
   completion: Extract<AgentSessionTurnCompletionEvent, { type: 'completion' }>['completion'],
   deps: WatcherDeps
@@ -88,6 +120,7 @@ async function handleCompletion(
     if (!room) continue
     try {
       const result = await postRoomReply(room, memberRow.member_id, text, roundDeps(deps, room))
+      await reportToAdmin(room, memberRow, text, deps)
       if (result.followUps.length && !roomsInFlight.has(room.id)) {
         roomsInFlight.add(room.id)
         try {

@@ -37,6 +37,20 @@ export const RoomMemberRemoveParams = z.object({
   memberId: requiredString('Missing --member-id')
 })
 
+export const RoomBotCreateParams = z.object({
+  /** Room the bot joins. */
+  id: requiredString('Missing --id'),
+  /** Worktree selector (`id:<worktreeId>` or path) the bot's session lives under. */
+  worktree: requiredString('Missing --worktree'),
+  /** Structured agent lane (`claude`, `codex`, …). */
+  agent: requiredString('Missing --agent'),
+  /** Display name in the room. */
+  name: requiredString('Missing --name'),
+  isAdmin: z.boolean().optional(),
+  /** First-message instructions the new session receives, e.g. a role brief. */
+  instructions: OptionalString
+})
+
 export const RoomSendParams = z.object({
   id: OptionalString,
   name: OptionalString,

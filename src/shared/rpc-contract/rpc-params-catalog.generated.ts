@@ -459,6 +459,7 @@ import {
   TaskListParams
 } from './orchestration-params'
 import {
+  RoomBotCreateParams,
   RoomCreateParams,
   RoomDeleteParams,
   RoomListParams,
@@ -1302,6 +1303,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.reply': ReplyParams,
   'orchestration.requestShow': RequestShowParams,
   'orchestration.reset': ResetParams,
+  'orchestration.roomBotCreate': RoomBotCreateParams,
   'orchestration.roomCreate': RoomCreateParams,
   'orchestration.roomDelete': RoomDeleteParams,
   'orchestration.roomList': RoomListParams,

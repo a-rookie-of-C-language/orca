@@ -6,12 +6,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { Crown, Loader2, Plus, RefreshCw, SendHorizonal, Trash2, UserPlus, X } from 'lucide-react'
+import { Bot, Crown, Loader2, Plus, RefreshCw, SendHorizonal, Sparkles, Trash2, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/store'
+import { useActiveWorktreeId, useAllWorktrees } from '@/store/selectors'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { cn } from '@/lib/utils'
@@ -64,6 +65,14 @@ function memberColor(memberId: string | null): string {
 
 type AgentSessionOption = { sessionId: string; label: string; worktreeId: string }
 
+const BOT_AGENTS = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'codex', label: 'Codex' },
+  { id: 'gemini', label: 'Gemini' },
+  { id: 'opencode', label: 'OpenCode' },
+  { id: 'aider', label: 'Aider' }
+] as const
+
 /** Every mounted agent-session tab across the open workspaces — the pool room
  *  members are picked from (memberId is `orca_session_id:<entityId>`). */
 function useAgentSessionPool(): AgentSessionOption[] {
@@ -80,6 +89,111 @@ function useAgentSessionPool(): AgentSessionOption[] {
     out.sort((a, b) => b.label.localeCompare(a.label))
     return out
   }, [tabsByWorktree])
+}
+
+/** Spawn a new structured agent session into this room — the "create a bot" flow:
+ *  the host mints a fresh `orca_session_id:<id>` session at rest, registers it as
+ *  a member, and the first room turn is what starts it. */
+function SpawnBotForm(props: {
+  roomId: string
+  onSpawned: () => void
+  onCancel: () => void
+}) {
+  const worktrees = useAllWorktrees()
+  const activeWorktreeId = useActiveWorktreeId()
+  const [name, setName] = useState('')
+  const [agent, setAgent] = useState<string>('claude')
+  const [worktreeId, setWorktreeId] = useState<string>(activeWorktreeId ?? '')
+  const [instructions, setInstructions] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!worktreeId && worktrees.length > 0) {
+      setWorktreeId(worktrees[0].id)
+    }
+  }, [worktreeId, worktrees])
+
+  const submit = async () => {
+    if (!name.trim()) {
+      toast.error('Bot needs a name')
+      return
+    }
+    if (!worktreeId) {
+      toast.error('Pick a workspace for the bot')
+      return
+    }
+    setBusy(true)
+    try {
+      await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
+        id: props.roomId,
+        worktree: `id:${worktreeId}`,
+        agent,
+        name: name.trim(),
+        instructions: instructions.trim() || undefined
+      })
+      toast.success(`Bot "${name.trim()}" joined the room`)
+      props.onSpawned()
+    } catch (error) {
+      toast.error(`Failed to spawn bot: ${(error as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-card/40 p-3">
+      <div className="flex items-center gap-1.5 text-sm font-medium">
+        <Bot className="h-3.5 w-3.5" /> New bot
+      </div>
+      <Input
+        placeholder="Name (e.g. reviewer, planner)"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        disabled={busy}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          value={agent}
+          onChange={(e) => setAgent(e.target.value)}
+          disabled={busy}
+        >
+          {BOT_AGENTS.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          value={worktreeId}
+          onChange={(e) => setWorktreeId(e.target.value)}
+          disabled={busy}
+        >
+          {worktrees.length === 0 ? <option value="">(no workspace)</option> : null}
+          {worktrees.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Input
+        placeholder="Role / instructions (optional)"
+        value={instructions}
+        onChange={(e) => setInstructions(e.target.value)}
+        disabled={busy}
+      />
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={props.onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button size="sm" onClick={() => void submit()} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Spawn
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function useRooms() {
@@ -133,6 +247,9 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
   const [mode, setMode] = useState<'admin' | 'everyone'>('everyone')
   const [busy, setBusy] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
+  const [seedAdminBot, setSeedAdminBot] = useState(true)
+  const worktrees = useAllWorktrees()
+  const activeWorktreeId = useActiveWorktreeId()
 
   const toggle = (sessionId: string) =>
     setPicked((cur) => (cur.includes(sessionId) ? cur.filter((id) => id !== sessionId) : [...cur, sessionId]))
@@ -149,11 +266,29 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
         name: props.pool.find((p) => p.sessionId === sessionId)?.label || sessionId,
         isAdmin: index === 0 // first pick leads the room
       }))
-      await callRuntimeRpc(LOCAL, 'orchestration.roomCreate', {
+      const created = await callRuntimeRpc<{ room: Room }>(LOCAL, 'orchestration.roomCreate', {
         name: name.trim(),
         mode,
         members: members.length ? members : undefined
       })
+      // DeepSeek-Bot's flow: a brand-new room starts with an admin bot already
+      // seated so "create group, then talk" never means "talk to an empty room".
+      if (seedAdminBot && created.room && worktrees.length > 0) {
+        const worktreeId = activeWorktreeId ?? worktrees[0].id
+        try {
+          await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
+            id: created.room.id,
+            worktree: `id:${worktreeId}`,
+            agent: 'claude',
+            name: 'admin',
+            isAdmin: true,
+            instructions:
+              'You are the admin of this group chat. When the user speaks, answer them or call the right member with @Name. Keep answers short; use your tools when asked to do work.'
+          })
+        } catch (error) {
+          toast.error(`Room created, but its admin bot failed: ${(error as Error).message}`)
+        }
+      }
       toast.success(`Room "${name.trim()}" created`)
       setName('')
       setPicked([])
@@ -223,6 +358,16 @@ function CreateRoomForm(props: { onCreated: () => void; pool: AgentSessionOption
           Create
         </Button>
       </div>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={seedAdminBot}
+          onChange={(e) => setSeedAdminBot(e.target.checked)}
+          disabled={busy || worktrees.length === 0}
+          className="h-3.5 w-3.5"
+        />
+        <span>Spawn an admin bot (Claude) to lead the room</span>
+      </label>
     </div>
   )
 }
@@ -234,6 +379,7 @@ export default function RoomsPage(): JSX.Element {
   const [composer, setComposer] = useState('')
   const [sending, setSending] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [spawnOpen, setSpawnOpen] = useState(false)
   const closeRoomsPage = useAppStore((s) => s.closeRoomsPage)
   const selected = useMemo(
     () => rooms.find((room) => room.id === selectedId) ?? rooms[0] ?? null,
@@ -380,7 +526,21 @@ export default function RoomsPage(): JSX.Element {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setAddOpen((v) => !v)}
+                  onClick={() => {
+                    setSpawnOpen((v) => !v)
+                    setAddOpen(false)
+                  }}
+                  title="Spawn a bot into this room"
+                >
+                  <Bot className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setAddOpen((v) => !v)
+                    setSpawnOpen(false)
+                  }}
                   title="Add member"
                 >
                   <UserPlus className="h-4 w-4" />
@@ -407,6 +567,7 @@ export default function RoomsPage(): JSX.Element {
                       m.isAdmin ? 'border-amber-400/60 bg-amber-400/10' : 'border-border/60'
                     )}
                   >
+                    <Bot className="h-3 w-3 text-muted-foreground" />
                     {m.isAdmin ? <Crown className="h-3 w-3 text-amber-400" /> : null}
                     {m.name}
                     <button
@@ -421,6 +582,18 @@ export default function RoomsPage(): JSX.Element {
                 ))
               )}
             </div>
+            {spawnOpen ? (
+              <div className="border-b border-border/60 px-4 py-2">
+                <SpawnBotForm
+                  roomId={selected.id}
+                  onSpawned={() => {
+                    setSpawnOpen(false)
+                    void refresh()
+                  }}
+                  onCancel={() => setSpawnOpen(false)}
+                />
+              </div>
+            ) : null}
             {addOpen ? (
               <div className="space-y-1.5 border-b border-border/60 px-4 py-2">
                 <div className="text-xs font-medium text-muted-foreground">Add member</div>
