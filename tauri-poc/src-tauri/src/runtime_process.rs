@@ -1,4 +1,4 @@
-use crate::crash_reports::{record_runtime_exit, CrashReportState, RuntimeUncapturedExit};
+use crate::crash_reports::RuntimeUncapturedExit;
 use crate::runtime_readiness::drain_readiness;
 use serde::Serialize;
 use std::io::Write;
@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, State};
+use tauri::State;
 
 #[derive(Default)]
 struct RuntimeSlot {
@@ -302,12 +302,8 @@ pub async fn poc_runtime_pairing(runtime: State<'_, Arc<OrcadRuntime>>) -> Resul
 
 #[tauri::command]
 pub fn poc_runtime_status(
-    app: AppHandle,
     runtime: State<'_, Arc<OrcadRuntime>>,
-    crash: State<'_, CrashReportState>,
 ) -> Result<RuntimeStatus, String> {
-    // Why: AppHandle/State inject server-side, so the renderer shape is
-    // unchanged and no capability or contract update is needed.
     let runtime = Arc::clone(runtime.inner());
     let status = {
         let Ok(mut slot) = runtime.slot.try_lock() else {
@@ -330,10 +326,6 @@ pub fn poc_runtime_status(
             error: slot.error.clone(),
         }
     };
-    if let Some(exit) = runtime.take_uncaptured_exit() {
-        // Why: best-effort; a crash report must never break status polling.
-        let _ = record_runtime_exit(&app, crash.inner(), exit);
-    }
     Ok(status)
 }
 

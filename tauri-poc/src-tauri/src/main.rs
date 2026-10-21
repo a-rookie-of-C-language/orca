@@ -1237,6 +1237,13 @@ fn main() {
         ])
         .setup(|app| {
             app.manage(browser_webview::BrowserWebviewState::default());
+            app.manage(browser_cdp_events::BrowserCdpEventState::default());
+            // Browser identity is still registered: webview.rs needs the
+            // state to answer `poc_browser_identity_*` and to stamp the
+            // renderer user agent on every page load.
+            app.manage(browser_identity::BrowserIdentityState::from_app(
+                app.handle(),
+            ));
             app.manage(SecondInstanceState::default());
             app.manage(PendingOpenSettingsState::default());
             app.manage(filesystem_download::DownloadSessions::default());
