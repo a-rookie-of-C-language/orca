@@ -122,6 +122,8 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
         executionHostId
       })
     },
+    // Why: transcript decoding is local-FS only; web/runtime keeps the raw-path handoff.
+    buildHandoffPack: () => Promise.resolve({ text: null }),
     deleteSession: async (args: AiVaultDeleteSessionArgs): Promise<AiVaultDeleteSessionResult> => {
       if (!isTauriNativeHost()) {
         // A browser must not turn a session delete into a runtime-side hard delete.
