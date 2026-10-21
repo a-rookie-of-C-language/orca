@@ -20,6 +20,7 @@ import type { RuntimeDesktopWindowStatus } from '../../../shared/runtime-types'
 import type { AgentSessionClaimSigner } from '../agent-session-claim-identity'
 import type { OrchestrationEnvironmentTransport } from '../orchestration/environment-transport'
 import type { SessionSearchSettingsApply } from '../runtime-session-search-settings'
+import type { RuntimeUsageStores } from '../runtime-usage-controller'
 
 export type RuntimeConstructionDependencies = {
   getLocalProvider?: () => IPtyProvider
@@ -71,6 +72,7 @@ export type RuntimeConstructionDependencies = {
   skillTransactionRecovery?: Promise<unknown>
   applySessionSearchSettings?: SessionSearchSettingsApply
   orchestrationEnvironmentTransport?: OrchestrationEnvironmentTransport
+  usageStores?: Partial<RuntimeUsageStores>
 }
 
 export type RuntimeConstructionBindings = Required<RuntimeConstructionDependencies>

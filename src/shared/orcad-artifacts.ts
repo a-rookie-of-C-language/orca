@@ -89,7 +89,11 @@ export function orcadNodePtySlotFiles(target: string): string[] {
       'conpty.node',
       'conpty_console_list.node',
       'conpty/conpty.dll',
-      'conpty/OpenConsole.exe'
+      'conpty/OpenConsole.exe',
+      // node-pty's winpty backend, which it selects below Windows build 18309.
+      'pty.node',
+      'winpty.dll',
+      'winpty-agent.exe'
     ]
   }
   return target.startsWith('darwin-') ? ['pty.node', 'spawn-helper'] : ['pty.node']
@@ -242,6 +246,9 @@ export const ORCAD_ARTIFACTS: readonly OrcadArtifact[] = [
   // Worker threads the account services start: CLI probes off the event loop, Claude account setup.
   { filename: 'worker-thread-child-process-entry.js' },
   { filename: 'claude-profile-setup-worker-entry.js' },
+  { filename: 'plugin-host-entry.js' },
+  { filename: 'stt-worker.js' },
+  { filename: 'usage-scan-worker-entry.js' },
   // Target-specific even when the JavaScript bundle is shared across packaged slots.
   { filename: ORCAD_SERVER_TARGET_FILENAME },
   // orcad never depends on a host runtime or host-installed native module.

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-notification-sound-path"
+description = "Enables the poc_notification_sound_path command without any pre-configured scope."
+commands.allow = ["poc_notification_sound_path"]
+
+[[permission]]
+identifier = "deny-poc-notification-sound-path"
+description = "Denies the poc_notification_sound_path command without any pre-configured scope."
+commands.deny = ["poc_notification_sound_path"]

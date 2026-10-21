@@ -35,7 +35,8 @@ export type StageRuntimeUploadResult = { sources: StagedRuntimeUploadSource[] }
 
 /** Renderer → main request to pump one staged file's bytes to the runtime. */
 export type RuntimeUploadFileStreamRequest = {
-  environmentId: string
+  /** Paired runtime id; omitted when the local runtime owns a direct SSH worktree. */
+  environmentId?: string
   /** Client-local path of the dropped source (file, or root of a dropped directory). */
   sourceRootPath: string
   /** Path of this file within the dropped directory; empty when the source is a file. */

@@ -8,6 +8,10 @@ import {
   FinishClaudeSignInParams,
   AddClaudeFromConfigDirParams,
   AddCodexFromHomeParams,
+  AddClaudeAccountParams,
+  AddCodexAccountParams,
+  ReauthenticateClaudeAccountParams,
+  ReauthenticateCodexAccountParams,
   ConsumeCodexResetCreditParams,
   ListAccountsParams,
   RemoveAccountParams,
@@ -15,12 +19,25 @@ import {
   SelectCodexAccountForTargetParams
 } from '../../../../shared/rpc-contract/accounts-params'
 import { HostAccountLaunchEnvParams } from '../../../../shared/host-account-launch-env'
+import { TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY } from '../../../../shared/account-runtime-capabilities'
 
 // Why: monotonically increasing per-process counter avoids the Date.now()
 // collision that fired when two near-simultaneous accounts.subscribe calls
 // collided on the same millisecond and one evicted the other through
 // registerSubscriptionCleanup's existing-key eviction path.
 let accountsSubscriptionSeq = 0
+
+function assertAccountControlAccess(
+  clientKind: 'mobile' | 'runtime' | undefined,
+  clientCapabilities: readonly string[] | undefined
+): void {
+  if (
+    clientKind !== undefined &&
+    !clientCapabilities?.includes(TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY)
+  ) {
+    throw new Error('Account sign-in is only available on the local Orca desktop.')
+  }
+}
 
 export const ACCOUNT_METHODS = [
   // Why runtime clients only: the desktop that owns this host's accounts (a WSL host) pushes them.
@@ -34,6 +51,83 @@ export const ACCOUNT_METHODS = [
       }
       runtime.setHostAccountLaunchEnv(params)
       return {}
+    }
+  }),
+  defineMethod({
+    name: 'accounts.addClaude',
+    permission: 'accounts-admin',
+    params: AddClaudeAccountParams,
+    handler: async (params, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.addClaudeAccount(
+        { runtime: params.runtime, wslDistro: params.wslDistro },
+        params.copyLink === true
+      )
+    }
+  }),
+  defineMethod({
+    name: 'accounts.reauthenticateClaude',
+    permission: 'accounts-admin',
+    params: ReauthenticateClaudeAccountParams,
+    handler: async (params, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.reauthenticateClaudeAccount(params.accountId, params.copyLink === true)
+    }
+  }),
+  defineMethod({
+    name: 'accounts.cancelClaudePendingLogin',
+    permission: 'accounts-admin',
+    params: null,
+    handler: async (_, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.cancelClaudePendingLogin()
+    }
+  }),
+  defineMethod({
+    name: 'accounts.waitForClaudeSignInLink',
+    permission: 'accounts-admin',
+    params: null,
+    handler: async (_, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.waitForClaudeSignInLink()
+    }
+  }),
+  defineMethod({
+    name: 'accounts.addCodex',
+    permission: 'accounts-admin',
+    params: AddCodexAccountParams,
+    handler: async (params, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.addCodexAccount({ runtime: params.runtime, wslDistro: params.wslDistro })
+    }
+  }),
+  defineMethod({
+    name: 'accounts.reauthenticateCodex',
+    permission: 'accounts-admin',
+    params: ReauthenticateCodexAccountParams,
+    handler: async (params, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.reauthenticateCodexAccount(params.accountId, {
+        activateIfSelectionWasEmpty: params.activateIfSelectionWasEmpty === true
+      })
+    }
+  }),
+  defineMethod({
+    name: 'accounts.cancelCodexPendingLogin',
+    permission: 'accounts-admin',
+    params: null,
+    handler: async (_, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.cancelCodexPendingLogin()
+    }
+  }),
+  defineMethod({
+    name: 'accounts.getCodexPendingLoginUrl',
+    permission: 'accounts-admin',
+    params: null,
+    handler: async (_, { runtime, clientKind, clientCapabilities }) => {
+      assertAccountControlAccess(clientKind, clientCapabilities)
+      return runtime.getCodexPendingLoginUrl()
     }
   }),
   // Why local only: sign-in runs `claude auth login` in a terminal on the execution host.

@@ -317,6 +317,10 @@ describe('addHostSectionRows', () => {
       'done',
       'ssh-wt'
     ])
+    expect(sectioned.filter((row) => row.type === 'header')).toMatchObject([
+      { key: 'all', hostId: 'local' },
+      { key: 'done', hostId: 'ssh:ssh-1' }
+    ])
   })
 
   it('copies global pinned and all headers into each mixed-host section without duplicating pins', () => {

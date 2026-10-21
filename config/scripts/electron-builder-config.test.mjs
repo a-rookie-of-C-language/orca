@@ -616,6 +616,24 @@ describe('arch-aware packaging guard', () => {
     }
   })
 
+  it('refuses to package an orcad template marked by a dark test build', async () => {
+    const templateDir = join(scratch, 'orcad-template')
+    await mkdir(templateDir, { recursive: true })
+    await writeFile(join(templateDir, 'ORCA_LAYOUT_OWNER_MAIN'), 'dark\n')
+    try {
+      expect(() =>
+        electronBuilderConfig.beforePack(
+          { electronPlatformName: process.platform, arch: HOST_ARCH },
+          bundleDir,
+          () => undefined,
+          templateDir
+        )
+      ).toThrow(`${templateDir} holds an ORCA_LAYOUT_OWNER=main build`)
+    } finally {
+      await rm(templateDir, { recursive: true, force: true })
+    }
+  })
+
   it('requires the other architecture natives to be installed', () => {
     const otherSherpaInstalled = existsSync(
       join(REPO_ROOT, 'node_modules', otherSherpa, 'package.json')

@@ -18,6 +18,7 @@ import {
 export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMigrationCatalog {
   readonly agentTransitions = new AgentTransitionDetector({
     resolveTabWorktreeId: (tabId) => this.tabs.get(tabId)?.worktreeId,
+    subscribeToPtyExit: (ptyId, listener) => this.subscribeToPtyExit(ptyId, listener),
     now: Date.now
   })
   private readonly terminalAgentPhonePush = new TerminalAgentPhonePush({

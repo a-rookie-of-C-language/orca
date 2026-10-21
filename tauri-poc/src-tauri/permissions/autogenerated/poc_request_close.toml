@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-request-close"
+description = "Enables the poc_request_close command without any pre-configured scope."
+commands.allow = ["poc_request_close"]
+
+[[permission]]
+identifier = "deny-poc-request-close"
+description = "Denies the poc_request_close command without any pre-configured scope."
+commands.deny = ["poc_request_close"]

@@ -2,7 +2,12 @@ import type { TerminalMultiplexConnection } from './terminal-multiplex-connectio
 
 export function installMultiplexCleanup(state: TerminalMultiplexConnection): void {
   const { runtime, streams, pendingPtyWaitControllers, emit, signal } = state
-  state.detachStream = (streamId: number, endVerdict, releaseRemoteDesktopDriver = true): void => {
+  state.detachStream = (
+    streamId: number,
+    endVerdict,
+    releaseRemoteDesktopDriver = true,
+    exitCode?: number | null
+  ): void => {
     const stream = streams.get(streamId)
     if (!stream) {
       return
@@ -36,7 +41,14 @@ export function installMultiplexCleanup(state: TerminalMultiplexConnection): voi
       runtime.unregisterRemoteDesktopViewer(stream.ptyId, stream.remoteDesktopSubscriptionKey)
     }
     if (endVerdict) {
-      emit({ type: 'end', streamId, verdict: endVerdict })
+      // Why an optional code: older peers parse a bare end as `unverifiable`;
+      // a proven status rides along without changing that fallback.
+      emit({
+        type: 'end',
+        streamId,
+        verdict: endVerdict,
+        ...(typeof exitCode === 'number' && Number.isSafeInteger(exitCode) ? { exitCode } : {})
+      })
     }
   }
   state.cancelPendingPtyWaits = (streamId: number): void => {

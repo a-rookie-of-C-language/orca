@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { eraseRpcMethods, isStreamingMethod } from '../core'
 import { ACCOUNT_METHODS } from './accounts'
+import { TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY } from '../../../../shared/account-runtime-capabilities'
 
 function method(name: string) {
   const found = eraseRpcMethods(ACCOUNT_METHODS).find((candidate) => candidate.name === name)
@@ -13,7 +14,72 @@ function method(name: string) {
   return found
 }
 
+function requestMethod(name: string) {
+  const found = method(name)
+  if (isStreamingMethod(found)) {
+    throw new Error(`${name} must be a request method`)
+  }
+  return found
+}
+
 describe('account RPC methods', () => {
+  it('allows Tauri account control only with its negotiated capability', async () => {
+    const addClaudeAccount = vi.fn().mockResolvedValue({ accounts: [] })
+    const addCodexAccount = vi.fn().mockResolvedValue({ accounts: [] })
+    const reauthenticateCodexAccount = vi.fn().mockResolvedValue({ accounts: [] })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the invoked handlers only access the five account operations stubbed here.
+    const runtime = {
+      addClaudeAccount,
+      addCodexAccount,
+      reauthenticateCodexAccount,
+      cancelCodexPendingLogin: vi.fn(() => true),
+      getCodexPendingLoginUrl: vi.fn(() => 'https://example.test/login')
+    } as unknown as OrcaRuntimeService
+    const context = {
+      runtime,
+      clientKind: 'runtime' as const,
+      clientCapabilities: [TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY]
+    }
+
+    await expect(
+      requestMethod('accounts.addClaude').handler({ copyLink: true }, context)
+    ).resolves.toEqual({ accounts: [] })
+    await expect(
+      requestMethod('accounts.addCodex').handler({ runtime: 'host', wslDistro: null }, context)
+    ).resolves.toEqual({ accounts: [] })
+    await expect(
+      requestMethod('accounts.reauthenticateCodex').handler(
+        { accountId: 'account-a', activateIfSelectionWasEmpty: true },
+        context
+      )
+    ).resolves.toEqual({ accounts: [] })
+    await expect(
+      requestMethod('accounts.getCodexPendingLoginUrl').handler(undefined, context)
+    ).resolves.toBe('https://example.test/login')
+    await expect(
+      requestMethod('accounts.cancelCodexPendingLogin').handler(undefined, context)
+    ).resolves.toBe(true)
+    expect(addClaudeAccount).toHaveBeenCalledWith(
+      { runtime: undefined, wslDistro: undefined },
+      true
+    )
+    expect(addCodexAccount).toHaveBeenCalledWith({ runtime: 'host', wslDistro: null })
+    expect(reauthenticateCodexAccount).toHaveBeenCalledWith('account-a', {
+      activateIfSelectionWasEmpty: true
+    })
+
+    await expect(
+      requestMethod('accounts.addCodex').handler(
+        { runtime: 'host' },
+        {
+          runtime,
+          clientKind: 'runtime',
+          clientCapabilities: []
+        }
+      )
+    ).rejects.toThrow(/local Orca desktop/)
+  })
+
   it.each([
     {
       methodName: 'accounts.addCodexFromHome',

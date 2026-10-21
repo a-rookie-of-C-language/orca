@@ -14,6 +14,7 @@ import { uploadRelayDirectory } from './remote-install-transfers'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import { pinnedNodeRuntimeAsset } from '../../../shared/node-runtime-pin'
 import { DesktopDownloadUnreachableError } from '../../node-runtime/pinned-runtime-materializer'
+import { setNodeDistMirrorSettingReader } from '../../node-runtime/node-dist-mirror-setting'
 import {
   HOST_NODE_DOWNLOAD_FAILED,
   HOST_NODE_DOWNLOAD_OK,
@@ -103,7 +104,33 @@ describe('pinned Node when this computer cannot download it', () => {
     expect(message).toContain(OFFLINE_PATH)
     expect(message).toContain('Settings > Advanced > Network > Node.js download mirror')
     expect(message).toContain("NODEJS_ORG_MIRROR in this computer's environment")
+    expect(failure).toMatchObject({ mirror: 'unset' })
     expect(uploadRelayDirectory).not.toHaveBeenCalled()
+  })
+
+  it('records that both attempts went through the configured mirror', async () => {
+    freshHost(`${HOST_NODE_DOWNLOAD_FAILED}\nmirror: curl exit 7`)
+    setNodeDistMirrorSettingReader(() => 'https://npmmirror.com/mirrors/node')
+    try {
+      const failure = await ensure(refused).catch((error: unknown) => error)
+      expect(failure).toMatchObject({ name: 'NodeRuntimeUnreachableError', mirror: 'tried' })
+      expect(String(failure)).toContain('check the mirror of nodejs.org/dist in Settings')
+    } finally {
+      setNodeDistMirrorSettingReader(null)
+    }
+  })
+
+  it('offers no mirror for a build nodejs.org/dist does not carry', async () => {
+    freshHost(`${HOST_NODE_DOWNLOAD_FAILED}\nnodejs.org: curl exit 7`)
+    const failure = await ensureRemoteOrcadNodeRuntime({
+      conn,
+      host: getRemoteHostPlatform('linux-arm64'),
+      slotDir: '/home/me/.orca-remote/orcad-0.1.0+abc',
+      target: 'linux-arm64-musl',
+      archivePath: refused
+    }).catch((error: unknown) => error)
+    expect(failure).toMatchObject({ name: 'NodeRuntimeUnreachableError', mirror: 'unsupported' })
+    expect(String(failure)).not.toContain('Node.js download mirror')
   })
 
   it("quotes only this computer's short reason, not its standalone advice", async () => {

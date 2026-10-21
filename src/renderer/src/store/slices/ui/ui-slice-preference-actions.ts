@@ -1,4 +1,5 @@
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
+import { syncTauriAppearanceMenuAfterSettingsSaved } from '../../../web/tauri-native-menu-appearance'
 import { workspaceHostScopeForVisibleHosts } from '../../../../../shared/workspace-view/workspace-host-visibility'
 import { createAgentsViewPreferenceActions } from './ui-slice-agents-view-preference-actions'
 import {
@@ -244,6 +245,8 @@ export function createUiPreferenceActions(set: UISliceSet, get: UISliceGet): Par
     statusBarVisible: true,
     setStatusBarVisible: (v) => {
       window.api.ui.set({ statusBarVisible: v }).catch(console.error)
+      // Appearance saves also refresh the native application-menu checkboxes.
+      void syncTauriAppearanceMenuAfterSettingsSaved({ statusBarVisible: v }).catch(() => {})
       set({ statusBarVisible: v })
     },
     usagePercentageDisplay: DEFAULT_USAGE_PERCENTAGE_DISPLAY,

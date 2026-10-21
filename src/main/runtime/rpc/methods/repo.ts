@@ -5,7 +5,8 @@ import {
   includesQualifiedSearchRefs,
   projectRepoSearchRefsForClient
 } from './repo-search-ref-projection'
-import { RepoSelector } from '../../../../shared/rpc-contract/github-repo-target-params'
+import { RepoSelector, RepoShow } from '../../../../shared/rpc-contract/github-repo-target-params'
+import { hostQualifiedRepoSelector } from '../../runtime-repo-selector'
 import {
   projectRepoResultVisibilityForClient,
   projectRepoVisibilityForClient
@@ -24,6 +25,7 @@ import {
   RepoReorder,
   RepoSearchRefs,
   RepoSetBaseRef,
+  RepoSparsePresetRemove,
   RepoSparsePresetSave,
   RepoUpdate
 } from '../../../../shared/rpc-contract/repo-params'
@@ -122,6 +124,15 @@ export const REPO_METHODS = [
     })
   }),
   defineMethod({
+    name: 'repo.removeSparsePreset',
+    permission: 'workspace',
+    params: RepoSparsePresetRemove,
+    handler: async (params, { runtime }) => {
+      await runtime.removeSparsePreset(params.repo, params.presetId)
+      return undefined
+    }
+  }),
+  defineMethod({
     name: 'repo.add',
     permission: 'workspace',
     params: RepoPath,
@@ -172,9 +183,12 @@ export const REPO_METHODS = [
   defineMethod({
     name: 'repo.show',
     permission: 'workspace',
-    params: RepoSelector,
+    params: RepoShow,
     handler: async (params, context) => ({
-      repo: projectRepoVisibilityForClient(await context.runtime.showRepo(params.repo), context)
+      repo: projectRepoVisibilityForClient(
+        await context.runtime.showRepo(hostQualifiedRepoSelector(params.repo, params.repoHostId)),
+        context
+      )
     })
   }),
   defineMethod({

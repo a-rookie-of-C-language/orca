@@ -4,12 +4,15 @@ import type {
   WorktreeSetupLaunch,
   WorktreeStartupLaunch
 } from './worktree/launch-types'
-import type { SshConnectionState } from './ssh-types'
+import type { PortForwardEntry, SshConnectionState } from './ssh-types'
 import type { TerminalSideEffectBatch } from './terminal-side-effect-facts'
 import type { RuntimeNativeChatLaunchDraftResolution } from './runtime-types'
 import type { RuntimeNavigationTarget } from './runtime-navigation'
 import type { WorktreeSortOrderUpdate } from './worktree/sort-order-update'
 import type { SidebarInputsChangedEvent } from './sidebar-list/sidebar-inputs-feed-contract'
+import type { WslHostStatus } from './wsl-host-types'
+import type { AiVaultScanProgressUpdate } from './ai-vault-scan-progress'
+import type { LegacyRelayBridgedPane } from './legacy-relay-bridge-contract'
 
 export type RuntimeClientEvent =
   | { type: 'reposChanged' }
@@ -30,6 +33,29 @@ export type RuntimeClientEvent =
   // channel for ssh:state-changed, so without this event their reconnect
   // overlays never learn the host connected (STA-1468).
   | { type: 'sshStateChanged'; targetId: string; state: SshConnectionState }
+  | {
+      type: 'sshPortForwardsChanged'
+      targetId: string
+      forwards: PortForwardEntry[]
+    }
+  // Why: the legacy relay bridge lives on the runtime host on Tauri too, so its
+  // pane lifecycle reaches paired clients over the same stream as the other SSH events.
+  | { type: 'legacyRelayBridgedPanesChanged'; panes: LegacyRelayBridgedPane[] }
+  | { type: 'legacyRelayBridgedPaneData'; ptyId: string; data: string }
+  | { type: 'legacyRelayBridgedPaneReplay'; ptyId: string; replay: string }
+  | { type: 'legacyRelayBridgedPaneExit'; ptyId: string; code: number }
+  | {
+      type: 'sshCredentialRequest'
+      requestId: string
+      targetId: string
+      kind: 'passphrase' | 'password' | 'keyboard-interactive'
+      detail: string
+      echo?: boolean
+    }
+  | { type: 'sshCredentialResolved'; requestId: string }
+  | { type: 'wslHostStatusChanged'; status: WslHostStatus }
+  /** Live local Agent Session History scan progress for paired desktop clients. */
+  | ({ type: 'aiVaultScanProgress' } & AiVaultScanProgressUpdate)
   | {
       type: 'worktreeTerminalSleepState'
       worktreeId: string

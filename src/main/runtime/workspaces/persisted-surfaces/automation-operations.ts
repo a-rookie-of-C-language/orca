@@ -5,7 +5,12 @@ import type {
   AutomationOwnerPrecondition,
   AutomationDestination
 } from '../../../../shared/automation-owner-precondition'
-import type { Automation, AutomationRun } from '../../../../shared/automations-types'
+import type {
+  Automation,
+  AutomationDispatchResult,
+  AutomationPrecheckResult,
+  AutomationRun
+} from '../../../../shared/automations-types'
 import type {
   RuntimeAutomationCreateInput,
   RuntimeAutomationUpdateInput
@@ -134,6 +139,17 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
     return this.automation.withExternalProbePriority(() =>
       this.automation.runNow(id, expectedOwner)
     )
+  }
+
+  runAutomationPrecheck(
+    automationId: string,
+    runId: string
+  ): Promise<AutomationPrecheckResult | null> {
+    return this.automation.runPrecheck(automationId, runId)
+  }
+
+  markAutomationDispatchResult(result: AutomationDispatchResult): Promise<AutomationRun> {
+    return this.automation.markDispatchResult(result)
   }
 
   listAutomationsForScope(params = {}): AutomationListResult {

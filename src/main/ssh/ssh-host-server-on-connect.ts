@@ -16,6 +16,7 @@ import type {
 import type {
   SshManagedServerRelayReason,
   SshManagedServerLinkedProject,
+  SshManagedServerNodeDownloadBlocked,
   SshManagedServerServingNote,
   SshManagedServerUpdateNote,
   SshTarget
@@ -68,6 +69,7 @@ export type HostServerOnConnectResult =
       held?: true
       /** Setup lost contact with the host, so it is not known to have failed there. */
       contactLost?: true
+      nodeDownloadBlocked?: SshManagedServerNodeDownloadBlocked
       /** COMPAT(legacy-relay-bridge): the connect stays up so the bridge serves the terminals. */
       bridged?: true
     }
@@ -344,6 +346,7 @@ async function unfinished(
       reason,
       detail: boundedDetail(failure.detail),
       ...(failure.contactLost ? { contactLost: true as const } : {}),
+      ...(failure.nodeDownloadBlocked ? { nodeDownloadBlocked: failure.nodeDownloadBlocked } : {}),
       ...(held ? { held: true as const } : {})
     }
   }

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Orca",
+  "version": "0.1.0",
+  "identifier": "com.stablyai.orca.tauri-poc",
+  "build": {
+    "beforeDevCommand": "pnpm exec vite --config vite.web.config.ts --host 127.0.0.1 --port 5174 --strictPort",
+    "devUrl": "http://127.0.0.1:5174/web-index.html",
+    "beforeBuildCommand": "pnpm run build:web && pnpm run build:orcad && node tauri-poc/scripts/prepare-release-runtime.mjs && node tauri-poc/scripts/prepare-web-dist.mjs",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Orca",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "decorations": false,
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 16, "y": 12 }
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "resources": {
+      "../resources/orcad": "orcad",
+      "../../resources/tray": "tray",
+      "../resources/runtimes": "runtimes",
+      "../../resources/onboarding": "onboarding"
+    },
+    "icon": ["icons/icon.ico"]
+  }
+}

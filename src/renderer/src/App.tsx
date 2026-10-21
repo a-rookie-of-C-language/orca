@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ConfirmationDialogProvider } from './components/confirmation-dialog'
+import { PlainEditableDomContextMenuHost } from './components/editor/plain-editable-dom-context-menu'
 import { BrowserWebAuthnAccountDialog } from './components/browser-webauthn-account-dialog'
 import { DocPreviewExternalLinkConfirmation } from './components/browser-pane/workspace-doc/doc-preview-external-link-confirmation'
 import { BrowserPagePrompts } from './components/browser-pane/browser-page-prompts'
@@ -30,6 +31,8 @@ import { startNativeChatDraftLoad } from './app-shell/native-chat-draft-startup'
 import { useDocumentAppearance } from './app-shell/use-document-appearance'
 import { useFloatingWorkspacePanel } from './app-shell/use-floating-workspace-panel'
 import { useGlobalKeybindings } from './app-shell/use-global-keybindings'
+import { useTauriGuestHandledShortcuts } from './web/tauri-guest-handled-shortcuts'
+import { useTauriMenuText } from './web/tauri-native-menu-hints'
 import { useOnboardingAndFeatureTips } from './app-shell/use-onboarding-and-feature-tips'
 import { usePersistedUIWriter } from './app-shell/use-persisted-ui-writer'
 import { useRuntimeGraphSync } from './app-shell/use-runtime-graph-sync'
@@ -55,6 +58,10 @@ function App(): React.JSX.Element {
   useGlobalKeybindings({ layout, floatingWorkspace })
   // Why App, not store creation: the Space window mirrors this store's selection but owns none.
   useEffect(() => installActiveWorktreeRemovalSuccessor(), [])
+  // Why: guest WebViews suppress only published chords, so keep the set in sync with the registry.
+  useTauriGuestHandledShortcuts()
+  // Why: the Tauri menu is built once, so rebindable hints ride a separate channel.
+  useTauriMenuText()
 
   // Why: the same vars are set inline on .app-layout below, but portaled surfaces
   // (sheets, dialogs) mount outside it and would otherwise fall back to 0px and
@@ -100,6 +107,7 @@ function App(): React.JSX.Element {
           <BrowserPagePrompts />
           <LinkRoutingPreferenceDialogProvider>
             <AppBackgroundServices />
+            <PlainEditableDomContextMenuHost />
             <SpaceWindowStatePublisher />
             <AppWorkspaceShell layout={layout} floatingWorkspace={floatingWorkspace} />
             <AppRootSurfaces

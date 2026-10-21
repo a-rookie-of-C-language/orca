@@ -2,9 +2,8 @@ import '../assets/main.css'
 
 import './web-tablet.css'
 
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
-import ReactDOM from 'react-dom/client'
 import { useTranslation } from 'react-i18next'
 import WebConnect from './WebConnect'
 import { WebTabletShell } from './web-tablet-shell'
@@ -25,10 +24,31 @@ import { WebPairingSecurityNotice } from './WebPairingSecurityNotice'
 import { I18nProvider } from '../i18n/I18nProvider'
 import { translate } from '../i18n/i18n'
 import { installOsFileDropCancellationGuard } from '../lib/os-file-drop-cancellation-guard'
+import { getOrCreateRendererRoot } from '../lib/react-renderer-root'
+import { initializeTauriRuntime } from './tauri-runtime-startup'
+import {
+  installBrowserClientPageRenderer,
+  type BrowserClientPageRendererInstallation
+} from '../components/browser-pane/browser-client-page-renderer-installation'
+import { isTauriNativeHost } from './tauri-native-bridge'
 
 const disposeOsFileDropGuard = installOsFileDropCancellationGuard()
 import.meta.hot?.dispose(disposeOsFileDropGuard)
 const App = lazy(() => import('../App'))
+
+let tauriBrowserClientPageRenderer: BrowserClientPageRendererInstallation | null = null
+
+function installTauriBrowserClientPageRenderer(): void {
+  if (!isTauriNativeHost() || tauriBrowserClientPageRenderer) {
+    return
+  }
+  tauriBrowserClientPageRenderer = installBrowserClientPageRenderer({ document })
+}
+
+import.meta.hot?.dispose(() => {
+  tauriBrowserClientPageRenderer?.dispose()
+  tauriBrowserClientPageRenderer = null
+})
 
 function WebRoot(): React.JSX.Element {
   const initialPairingInput = useMemo(() => readPairingInputFromLocation(window.location), [])
@@ -62,20 +82,18 @@ function WebRoot(): React.JSX.Element {
   })
 
   if (!hasEnvironment) {
-    // Why: the shell owns the html-level tablet class, so pairing is touch-styled too.
     return (
-      <WebTabletShell>
-        <WebConnect
-          initialPairingInput={
-            startupDecision.kind === 'show-connect' ? startupDecision.initialPairingInput : null
-          }
-          onConnected={() => setHasEnvironment(true)}
-        />
-      </WebTabletShell>
+      <WebConnect
+        initialPairingInput={
+          startupDecision.kind === 'show-connect' ? startupDecision.initialPairingInput : null
+        }
+        onConnected={() => setHasEnvironment(true)}
+      />
     )
   }
 
   installWebPreloadApi()
+  installTauriBrowserClientPageRenderer()
   return (
     <WebTabletShell>
       <Suspense fallback={<div className="min-h-dvh bg-background" />}>
@@ -84,6 +102,32 @@ function WebRoot(): React.JSX.Element {
       <WebPairingSecurityNotice />
     </WebTabletShell>
   )
+}
+
+function LocalRuntimeGate(): React.JSX.Element {
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  useEffect(() => {
+    let disposed = false
+    void initializeTauriRuntime()
+      .then(() => {
+        if (!disposed) {
+          setReady(true)
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setError(new Error('The local Orca runtime could not start.'))
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [])
+  if (error) {
+    throw error
+  }
+  return ready ? <WebRoot /> : <div className="min-h-dvh bg-background" />
 }
 
 function WebRootBoundary(): React.JSX.Element {
@@ -98,7 +142,7 @@ function WebRootBoundary(): React.JSX.Element {
         'Retry the web client or reconnect to the paired runtime.'
       )}
     >
-      <WebRoot />
+      <LocalRuntimeGate />
     </RecoverableRenderErrorBoundary>
   )
 }
@@ -107,7 +151,11 @@ function WebRootBoundary(): React.JSX.Element {
 void initWebDeviceKeySupport()
   .catch((error: unknown) => console.warn('[web] Device key probe failed', error))
   .finally(() => {
-    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    const rootElement = document.getElementById('root')
+    if (!rootElement) {
+      throw new Error('Web renderer root element not found.')
+    }
+    getOrCreateRendererRoot(rootElement, import.meta.hot?.data).render(
       <I18nProvider>
         <WebRootBoundary />
       </I18nProvider>

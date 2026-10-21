@@ -192,9 +192,13 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     performNativeSelectionAction: (action) => {
       document.execCommand?.(action === 'copy' ? 'copy' : 'selectAll')
     },
+    performNativeEditAction: (action) => {
+      document.execCommand?.(action)
+    },
     onExportPdfRequested: () => noopUnsubscribe,
     onAppMenuPaste: () => noopUnsubscribe,
     onAppMenuSelectionAction: () => noopUnsubscribe,
+    onAppMenuEditAction: () => noopUnsubscribe,
     onEditableContextPaste: () => noopUnsubscribe,
     getZoomLevel: () => zoomLevel,
     setZoomLevel: (level) => {
@@ -212,6 +216,7 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     onOpenSetupGuide: () => noopUnsubscribe,
     onOpenFeatureTour: () => noopUnsubscribe,
     onOpenCrashReport: () => noopUnsubscribe,
+    onToggleAppearance: () => noopUnsubscribe,
     // No desktop main process to push state changes; the web client re-reads via ui.get on interaction.
     onStateChanged: () => noopUnsubscribe,
     onToggleLeftSidebar: () => noopUnsubscribe,
@@ -278,6 +283,7 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     respondSessionTabClose: () => {},
     onMoveSessionTab: () => noopUnsubscribe,
     onOpenFileFromMobile: () => noopUnsubscribe,
+    onRevealEditorTabFromRuntime: () => noopUnsubscribe,
     onOpenDiffFromMobile: () => noopUnsubscribe,
     onMobileMarkdownRequest: () => noopUnsubscribe,
     respondMobileMarkdownRequest: () => {},

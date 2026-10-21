@@ -66,6 +66,28 @@ export type WorkspaceSpaceAnalysis = {
   worktrees: WorkspaceSpaceWorktree[]
 }
 
+/** Host-owned catalog snapshot supplied to the native Space scanner. */
+export type WorkspaceSpaceAnalyzeInput = {
+  repos: {
+    id: string
+    path: string
+    displayName: string
+    connectionId?: string | null
+    executionHostId?: ExecutionHostId | null
+  }[]
+  worktrees: {
+    id: string
+    repoId: string
+    displayName: string
+    path: string
+    branch: string
+    isMainWorktree: boolean
+    isSparse?: boolean
+    lastActivityAt: number
+    hostId?: ExecutionHostId | null
+  }[]
+}
+
 export type WorkspaceSpaceAnalyzeResult =
   | { ok: true; analysis: WorkspaceSpaceAnalysis }
   | { ok: false; cancelled: true }

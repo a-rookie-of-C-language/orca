@@ -17,6 +17,8 @@ export type RuntimeFileReadArgs = {
   relativePath?: string
   worktreeId?: string
   connectionId?: string
+  /** SSH connection generation captured with the owning workspace route. */
+  expectedSshConnectionGeneration?: number
   expectedExternalSshTargetId?: string
   includeLocalLogMetadata?: boolean
   /** File access of the local fallback read; remote reads stay root-relative. */

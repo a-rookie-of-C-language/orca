@@ -76,7 +76,9 @@ export type TerminalMultiplexCleanup = {
   detachStream: (
     streamId: number,
     endVerdict: TerminalStreamEndVerdict | null,
-    releaseRemoteDesktopDriver?: boolean
+    releaseRemoteDesktopDriver?: boolean,
+    /** Numeric exit status forwarded on the `end` event when the host proved it. */
+    exitCode?: number | null
   ) => void
   cancelPendingPtyWaits: (streamId: number) => void
   cancelAllPendingPtyWaits: () => void

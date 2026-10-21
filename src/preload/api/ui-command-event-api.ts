@@ -1,4 +1,7 @@
-import type { RuntimeFileOpenPosition } from '../../shared/runtime-file-contracts'
+import type {
+  RuntimeEditorTabReveal,
+  RuntimeFileOpenPosition
+} from '../../shared/runtime-file-contracts'
 import type { JiraQuickFilterState } from '../../shared/jira-quick-filters'
 import type { JiraSavedFilterState, JiraSavedFilterMutation } from '../../shared/jira-saved-filters'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
@@ -88,6 +91,11 @@ export type UiCommandEventApi = {
   onOpenSetupGuide: (callback: () => void) => () => void
   onOpenFeatureTour: (callback: () => void) => () => void
   onOpenCrashReport: (callback: () => void) => () => void
+  onToggleAppearance?: (
+    callback: (
+      key: 'showTasksButton' | 'showAutomationsButton' | 'showMobileButton' | 'showTitlebarAppName'
+    ) => void
+  ) => () => void
   onToggleLeftSidebar: (callback: () => void) => () => void
   onToggleRightSidebar: (callback: () => void) => () => void
   onToggleWorktreePalette: (callback: () => void) => () => void
@@ -168,6 +176,8 @@ export type UiCommandEventApi = {
   onExportPdfRequested: (callback: () => void) => () => void
   onAppMenuPaste: (callback: () => void) => () => void
   onAppMenuSelectionAction: (callback: (action: 'copy' | 'select-all') => void) => () => void
+  onAppMenuEditAction: (callback: (action: 'undo' | 'redo') => void) => () => void
+  performNativeEditAction: (action: 'undo' | 'redo') => void
   onEditableContextPaste: (callback: (data: { plainTextOnly: boolean }) => void) => () => void
   onActivateWorktree: (
     callback: (data: {
@@ -272,6 +282,8 @@ export type UiCommandEventApi = {
       position?: RuntimeFileOpenPosition
     }) => void
   ) => () => void
+  /** Layout-owner builds: shows a tab main wrote for a file it opened. */
+  onRevealEditorTabFromRuntime: (callback: (data: RuntimeEditorTabReveal) => void) => () => void
   onOpenDiffFromMobile: (
     callback: (data: {
       worktreeId: string

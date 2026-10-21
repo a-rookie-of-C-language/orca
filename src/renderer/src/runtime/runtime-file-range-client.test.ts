@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readRuntimeFileRange, statRuntimeReadTarget } from './runtime-file-range-client'
 import {
   readEditorCsvFileContent,
@@ -9,6 +9,7 @@ import {
   fsReadFileChunk,
   fsStat,
   runtimeEnvironmentCall,
+  runtimeCall,
   installRuntimeFileClientEnvironment
 } from './runtime-file-client-test-harness'
 
@@ -81,6 +82,38 @@ describe('CSV range routing', () => {
         }
       })
     )
+    expect(fsReadFileChunk).not.toHaveBeenCalled()
+  })
+  it('routes Tauri direct SSH range reads through the local runtime', async () => {
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke: vi.fn() } })
+    runtimeCall.mockResolvedValue({
+      id: 'ssh-chunk',
+      ok: true,
+      result: { contentBase64: 'YWJj', bytesRead: 3, eof: false, size: 100, mtime: 1 }
+    })
+
+    await expect(
+      readRuntimeFileRange(
+        {
+          ...localArgs,
+          connectionId: 'ssh-1',
+          expectedSshConnectionGeneration: 4
+        },
+        10,
+        3
+      )
+    ).resolves.toEqual(new Uint8Array([97, 98, 99]))
+
+    expect(runtimeCall).toHaveBeenCalledWith({
+      method: 'ssh.readFileChunk',
+      params: {
+        targetId: 'ssh-1',
+        filePath: localArgs.filePath,
+        offset: 10,
+        length: 3,
+        expectedGeneration: 4
+      }
+    })
     expect(fsReadFileChunk).not.toHaveBeenCalled()
   })
   it('does not substitute a local file for an unavailable or changed remote owner', async () => {

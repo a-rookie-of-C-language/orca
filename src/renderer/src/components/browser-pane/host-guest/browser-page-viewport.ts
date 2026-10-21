@@ -4,6 +4,12 @@
 // (chrome inset spacer + flex-1 container) that mirrors the in-tree layout
 // without reparenting the webview or using fixed/float-over positioning.
 
+import {
+  isTauriNativeHost,
+  setTauriNativeBrowserWebviewVisible,
+  syncTauriNativeBrowserWebviewBounds
+} from '../../../web/tauri-native-bridge'
+
 const slotViewportRoots = new Map<string, HTMLDivElement>()
 
 type BrowserPageViewport = {
@@ -22,6 +28,7 @@ export type BrowserPageViewportScrollState = {
 }
 
 const browserPageViewports = new Map<string, BrowserPageViewport>()
+const browserPageViewportResizeObservers = new Map<string, ResizeObserver>()
 
 // Why: React measures the chrome only on mount, but shells are rebuilt without a
 // re-measure (guest recovery/replacement, profile switch, slot remount). Remembering
@@ -94,6 +101,8 @@ export function ensureBrowserPageViewport(
     }
     // Why: a remounted slot strands this shell after Electron destroys its detached guest (STA-3228).
     existing.shell.remove()
+    browserPageViewportResizeObservers.get(browserPageId)?.disconnect()
+    browserPageViewportResizeObservers.delete(browserPageId)
     browserPageViewports.delete(browserPageId)
   }
   if (!root) {
@@ -134,6 +143,11 @@ export function ensureBrowserPageViewport(
 
   const viewport = { shell, chromeInset, container, scroller, content }
   browserPageViewports.set(browserPageId, viewport)
+  if (isTauriNativeHost() && typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(() => syncTauriNativeBrowserWebviewBounds(browserPageId))
+    observer.observe(shell)
+    browserPageViewportResizeObservers.set(browserPageId, observer)
+  }
   applyViewportPresetSizeStyles(viewport, browserPageViewportPresetSizes.get(browserPageId) ?? null)
   return viewport
 }
@@ -229,6 +243,8 @@ export function removeBrowserPageViewport(browserPageId: string): void {
     viewport.shell.remove()
     browserPageViewports.delete(browserPageId)
   }
+  browserPageViewportResizeObservers.get(browserPageId)?.disconnect()
+  browserPageViewportResizeObservers.delete(browserPageId)
 }
 
 export type BrowserPageViewportLayout = {
@@ -248,6 +264,9 @@ export function applyBrowserPageViewportLayout(
     viewport.shell.style.display = 'none'
     viewport.shell.inert = true
     viewport.shell.setAttribute('aria-hidden', 'true')
+    if (isTauriNativeHost()) {
+      setTauriNativeBrowserWebviewVisible(browserPageId, false)
+    }
     return
   }
   viewport.shell.inert = !layout.active
@@ -260,6 +279,10 @@ export function applyBrowserPageViewportLayout(
   viewport.shell.style.opacity = layout.active ? '1' : '0'
   viewport.shell.style.pointerEvents = layout.active ? 'auto' : 'none'
   viewport.shell.style.zIndex = layout.active ? '1' : '0'
+  if (isTauriNativeHost()) {
+    syncTauriNativeBrowserWebviewBounds(browserPageId)
+    setTauriNativeBrowserWebviewVisible(browserPageId, layout.active)
+  }
 }
 
 export function syncBrowserPageChromeInset(browserPageId: string, heightPx: number): void {
@@ -287,6 +310,9 @@ export function parkBrowserPageViewport(browserPageId: string): void {
     viewport.shell.setAttribute('aria-hidden', 'true')
     viewport.shell.style.pointerEvents = 'none'
     viewport.shell.style.opacity = '0'
+    if (isTauriNativeHost()) {
+      setTauriNativeBrowserWebviewVisible(browserPageId, false)
+    }
   }
 }
 

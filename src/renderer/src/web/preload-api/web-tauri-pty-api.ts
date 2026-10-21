@@ -1,0 +1,329 @@
+import type { PreloadApi } from '../../../../preload/api-types'
+import type { RuntimeTerminalCreate } from '../../../../shared/runtime-terminal-contracts'
+import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
+import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { callRuntimeResult } from './web-runtime-calls'
+import { requireActiveEnvironment } from './web-runtime-session'
+import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
+import type { RemoteRuntimeMultiplexedTerminal } from '../../runtime/remote-runtime-terminal-multiplexer-types'
+import {
+  addTauriPtyDataListener,
+  addTauriPtyExitListener,
+  addTauriPtyReplayListener,
+  addTauriPtySpawnedListener,
+  addTauriPtyWriteUnavailableListener,
+  emitTauriPtyData,
+  emitTauriPtyExit,
+  emitTauriPtyReplay,
+  emitTauriPtySpawned,
+  notifyTauriPtyWriteUnavailable
+} from './web-tauri-pty-event-channel'
+import { createTauriPtyInputSession, tauriPtyInputSessionKey } from './web-tauri-pty-input-session'
+import type { TauriPtyInputSession } from './web-tauri-pty-input-session'
+import {
+  tauriPtyRuntimeCreateParams,
+  type TauriPtySpawnOptions
+} from './web-tauri-pty-runtime-params'
+import type { TauriPtyState } from './web-tauri-pty-state'
+import { stopTauriPtyOnHost } from './web-tauri-pty-stop'
+import { readTauriPtyCwd } from './web-tauri-pty-cwd'
+import { callTauriPtyHost } from './web-tauri-pty-host'
+import { writeTauriPtyInputAccepted } from './web-tauri-pty-input'
+import { createTauriPtySnapshotHandshake } from './web-tauri-pty-snapshot-handshake'
+
+type SpawnResult = Awaited<ReturnType<NonNullable<PreloadApi['pty']>['spawn']>>
+type TauriPtyApi = Pick<
+  PreloadApi['pty'],
+  | 'spawn'
+  | 'write'
+  | 'writeAccepted'
+  | 'onWriteUnavailable'
+  | 'resize'
+  | 'claimViewport'
+  | 'reportGeometry'
+  | 'signal'
+  | 'clearBuffer'
+  | 'resetInputModes'
+  | 'kill'
+  | 'getCwd'
+  | 'getSize'
+  | 'onData'
+  | 'onReplay'
+  | 'onExit'
+  | 'onSpawned'
+>
+
+const tauriPtyStates = new Map<string, TauriPtyState>()
+const tauriPtyInputSessions = new Map<string, TauriPtyInputSession>()
+
+function retireTauriPty(
+  id: string,
+  inputSession: TauriPtyInputSession,
+  stream: RemoteRuntimeMultiplexedTerminal | null,
+  code: number,
+  discardInput: boolean,
+  preserveRendererBinding = false
+): void {
+  if (!stream || tauriPtyStates.get(id)?.stream !== stream) {
+    return
+  }
+  tauriPtyStates.delete(id)
+  inputSession.current = null
+  if (discardInput) {
+    inputSession.journal.discard()
+    tauriPtyInputSessions.delete(inputSession.key)
+  }
+  emitTauriPtyExit(id, code, preserveRendererBinding)
+}
+
+async function spawnTauriPty(opts: TauriPtySpawnOptions): Promise<SpawnResult> {
+  const environment = requireActiveEnvironment()
+  const result = await callRuntimeResult<{ terminal: RuntimeTerminalCreate }>(
+    'terminal.create',
+    tauriPtyRuntimeCreateParams(opts)
+  )
+  const terminal = result.terminal
+  const id = toRemoteRuntimePtyId(terminal.handle, environment.id)
+  const key = tauriPtyInputSessionKey(environment.id, opts, terminal)
+  const inputSession = tauriPtyInputSessions.get(key) ?? createTauriPtyInputSession(key)
+  tauriPtyInputSessions.set(key, inputSession)
+  let subscribedStream: RemoteRuntimeMultiplexedTerminal | null = null
+  const isCurrentStream = (): boolean =>
+    subscribedStream === null || tauriPtyStates.get(id)?.stream === subscribedStream
+  const snapshotHandshake = createTauriPtySnapshotHandshake()
+  const stream = await getRemoteRuntimeTerminalMultiplexer(environment.id)
+    .subscribeTerminal({
+      terminal: terminal.handle,
+      client: { id: `tauri-pty:${id}`, type: 'desktop' },
+      viewport: { cols: opts.cols, rows: opts.rows },
+      inputSessionId: inputSession.journal.sessionId,
+      callbacks: {
+        onSnapshot: (data, meta) => {
+          if (!snapshotHandshake.accept(data, meta) && isCurrentStream()) {
+            emitTauriPtyReplay(id, data)
+          }
+        },
+        onData: (data, meta) =>
+          isCurrentStream() &&
+          emitTauriPtyData({
+            id,
+            data,
+            ...meta,
+            rawLength: meta?.rawLength ?? data.length
+          }),
+        onEnd: (verdict, exitCode) => {
+          snapshotHandshake.fail(new Error(`terminal_initial_snapshot_${verdict}`))
+          const exited = verdict === 'exited'
+          // Why ?? 0: legacy hosts end codeless; Electron reports 0 for a clean finish.
+          const code = exited ? (exitCode ?? 0) : 1
+          retireTauriPty(id, inputSession, subscribedStream, code, exited, !exited)
+        },
+        onError: () => {
+          snapshotHandshake.fail(new Error('terminal_initial_snapshot_unavailable'))
+          retireTauriPty(id, inputSession, subscribedStream, 1, false, true)
+        },
+        onTransportClose: () => {
+          snapshotHandshake.fail(new Error('terminal_initial_snapshot_disconnected'))
+          retireTauriPty(id, inputSession, subscribedStream, 1, false, true)
+        },
+        onInputAck: (appliedSeq, kind) => {
+          if (subscribedStream && inputSession.current?.stream === subscribedStream) {
+            inputSession.journal.acknowledge(appliedSeq, kind)
+          }
+        },
+        onSubscribeAcknowledged: () => {
+          if (
+            inputSession.current?.stream === subscribedStream &&
+            subscribedStream?.acknowledgesInput()
+          ) {
+            inputSession.journal.resume(subscribedStream, inputSession.current.endpoint)
+          }
+        }
+      }
+    })
+    .catch((error: unknown) => {
+      snapshotHandshake.fail(error instanceof Error ? error : new Error(String(error)))
+      throw error
+    })
+  subscribedStream = stream
+  let initialSnapshot
+  try {
+    initialSnapshot = await snapshotHandshake.wait()
+  } catch (error) {
+    stream.close()
+    throw error
+  }
+  const state: TauriPtyState = {
+    id,
+    handle: terminal.handle,
+    ptyId: terminal.ptyId ?? undefined,
+    worktreeId: terminal.worktreeId,
+    cwd: opts.cwd ?? '',
+    size: { cols: opts.cols, rows: opts.rows },
+    stream,
+    endpoint: { handle: terminal.handle, incarnationId: terminal.incarnationId ?? null },
+    inputSession
+  }
+  inputSession.current = { stream, endpoint: state.endpoint }
+  const previousState = tauriPtyStates.get(id)
+  tauriPtyStates.set(id, state)
+  for (const [oldId, oldState] of tauriPtyStates) {
+    if (oldState.inputSession === inputSession && oldId !== id) {
+      tauriPtyStates.delete(oldId)
+      oldState.stream.close()
+    }
+  }
+  if (previousState && previousState !== state) {
+    previousState.stream.close()
+  }
+  if (stream.acknowledgesInput()) {
+    inputSession.journal.resume(stream, state.endpoint)
+  }
+  emitTauriPtySpawned(id)
+  if (!terminal.isReattach && initialSnapshot.snapshot) {
+    emitTauriPtyData({ id, data: initialSnapshot.snapshot, rawLength: 0, transformed: true })
+  }
+  return {
+    id,
+    incarnationId: terminal.incarnationId ?? undefined,
+    isReattach: terminal.isReattach,
+    ...(terminal.isReattach ? initialSnapshot : {}),
+    launchConfig: opts.launchConfig,
+    shellReadyArmed: undefined
+  }
+}
+
+function sendTauriPty(id: string, text: string, inputKind: TerminalInputKind): boolean {
+  const state = tauriPtyStates.get(id)
+  if (!state) {
+    return false
+  }
+  if (!text) {
+    return true
+  }
+  if (state.stream.acknowledgesInput()) {
+    state.inputSession.journal.send(state.stream, state.endpoint, [
+      { text, queryReply: inputKind === 'query-reply' }
+    ])
+    return true
+  }
+  return state.stream.sendInput(text)
+}
+
+function stateFor(id: string): TauriPtyState | null {
+  return tauriPtyStates.get(id) ?? null
+}
+
+export function createTauriPtyApi(): TauriPtyApi {
+  return {
+    spawn: spawnTauriPty,
+    write: (id, data, inputKind) => {
+      if (!sendTauriPty(id, data, inputKind)) {
+        notifyTauriPtyWriteUnavailable(id)
+      }
+    },
+    writeAccepted: async (id, data, inputKind, options) => {
+      const state = tauriPtyStates.get(id)
+      if (!state) {
+        notifyTauriPtyWriteUnavailable(id)
+        return false
+      }
+      return writeTauriPtyInputAccepted(state, data, inputKind, options)
+    },
+    onWriteUnavailable: (callback) => {
+      return addTauriPtyWriteUnavailableListener(callback)
+    },
+    resize: (id, cols, rows) => {
+      const state = stateFor(id)
+      if (!state) {
+        return
+      }
+      state.size = { cols, rows }
+      state.stream.resize(cols, rows)
+    },
+    claimViewport: (id, cols, rows) => {
+      const state = stateFor(id)
+      if (!state) {
+        return
+      }
+      state.size = { cols, rows }
+      state.stream.claimViewport(cols, rows)
+    },
+    reportGeometry: (id, cols, rows) => {
+      const state = stateFor(id)
+      if (state) {
+        state.size = { cols, rows }
+      }
+    },
+    signal: (id, signal) => {
+      const state = stateFor(id)
+      if (!state) {
+        return
+      }
+      if (signal === 'SIGWINCH') {
+        state.stream.resize(state.size.cols, state.size.rows)
+      } else if (signal === 'SIGINT') {
+        // Why true signal first: ConPTY ignores the ETX byte the legacy interrupt send
+        // writes, while the daemon signal path ends the pane like Electron.
+        const legacyInterrupt = (): Promise<unknown> =>
+          callTauriPtyHost(state.id, 'terminal.send', {
+            terminal: state.handle,
+            interrupt: true
+          }).catch(() => {})
+        void callTauriPtyHost<{ signal: { signaled: boolean } }>(state.id, 'terminal.signal', {
+          terminal: state.handle,
+          signal: 'SIGINT'
+        }).then(
+          (result) => (result?.signal?.signaled === true ? undefined : legacyInterrupt()),
+          () => legacyInterrupt()
+        )
+      }
+    },
+    clearBuffer: (id) => {
+      const state = stateFor(id)
+      if (state) {
+        void callTauriPtyHost(state.id, 'terminal.clearBuffer', { terminal: state.handle }).catch(
+          () => {}
+        )
+      }
+    },
+    resetInputModes: (id) => {
+      const state = stateFor(id)
+      if (state) {
+        void callTauriPtyHost(state.id, 'terminal.resetInputModes', {
+          terminal: state.handle
+        }).catch(() => {})
+      }
+    },
+    kill: async (id, opts) => {
+      const state = stateFor(id)
+      if (!state) {
+        return
+      }
+      await stopTauriPtyOnHost(state, opts?.keepHistory === true)
+      // A replacement binding may have arrived while the host stopped the old PTY.
+      if (stateFor(id) !== state) {
+        return
+      }
+      tauriPtyStates.delete(id)
+      state.inputSession.current = null
+      state.inputSession.journal.discard()
+      tauriPtyInputSessions.delete(state.inputSession.key)
+      state.stream.close()
+    },
+    getCwd: (id) => readTauriPtyCwd(id, stateFor),
+    getSize: async (id) => stateFor(id)?.size ?? null,
+    onData: (callback) => {
+      return addTauriPtyDataListener(callback)
+    },
+    onReplay: (callback) => {
+      return addTauriPtyReplayListener(callback)
+    },
+    onExit: (callback) => {
+      return addTauriPtyExitListener(callback)
+    },
+    onSpawned: (callback) => {
+      return addTauriPtySpawnedListener(callback)
+    }
+  }
+}

@@ -96,3 +96,41 @@ export const AiVaultSessionTitlesParams = z.object({
     )
     .max(AI_VAULT_SESSION_TITLE_REQUEST_MAX_COUNT)
 })
+
+export const AiVaultSubagentListParams = z
+  .object({
+    agent: z.enum(AI_VAULT_AGENTS),
+    parentFilePath: z.string().min(1).max(AI_VAULT_SCOPE_PATH_MAX_LENGTH),
+    executionHostId: executionHostIdSchema.optional()
+  })
+  .strict()
+
+export const AiVaultFirstUserPromptParams = z
+  .object({
+    agent: z.enum(AI_VAULT_AGENTS),
+    filePath: z.string().min(1).max(AI_VAULT_SCOPE_PATH_MAX_LENGTH),
+    sessionId: z.string().min(1).max(512).optional(),
+    executionHostId: executionHostIdSchema.optional(),
+    codexHome: z.string().min(1).max(AI_VAULT_SCOPE_PATH_MAX_LENGTH).nullable().optional()
+  })
+  .strict()
+
+// Deletion is a two-step operation for Tauri: the runtime validates the
+// scanner-owned target, then the native shell moves the approved paths to the
+// OS trash.
+export const AiVaultPrepareSessionDeleteParams = z
+  .object({
+    agent: z.enum(AI_VAULT_AGENTS),
+    sessionId: z.string().min(1).max(512).optional(),
+    filePath: z.string().min(1).max(AI_VAULT_SCOPE_PATH_MAX_LENGTH),
+    executionHostId: executionHostIdSchema.optional()
+  })
+  .strict()
+
+export const AiVaultDeleteSessionParams = AiVaultPrepareSessionDeleteParams
+
+export const AiVaultScanProgressParams = z
+  .object({
+    scanKey: z.string().min(1).max(16_384)
+  })
+  .strict()

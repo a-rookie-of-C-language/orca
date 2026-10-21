@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-crash-reports-capture-minidump"
+description = "Enables the poc_crash_reports_capture_minidump command without any pre-configured scope."
+commands.allow = ["poc_crash_reports_capture_minidump"]
+
+[[permission]]
+identifier = "deny-poc-crash-reports-capture-minidump"
+description = "Denies the poc_crash_reports_capture_minidump command without any pre-configured scope."
+commands.deny = ["poc_crash_reports_capture_minidump"]

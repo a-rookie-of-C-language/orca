@@ -3,7 +3,8 @@ import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from '../se
 import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged } from '../session-tabs/session-tabs-change-publication'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import { OrcaRuntimeWithGetStatus } from '../orca-runtime-get-status'
-import type { SshConnectionState } from '../../../shared/ssh-types'
+import type { PortForwardEntry, SshConnectionState } from '../../../shared/ssh-types'
+import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { getPublicSshState } from '../public-ssh-state'
 import { splitWorktreeId } from '../../../shared/worktree/id'
 import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
@@ -55,6 +56,40 @@ export abstract class OrcaRuntimeWithNotifySshStateChanged extends OrcaRuntimeWi
       this.legacyWorkerRecovery.cancelScope(`ssh:${targetId}`)
     }
     this.emitClientEvent({ type: 'sshStateChanged', targetId, state: getPublicSshState(state)! })
+  }
+
+  notifySshCredentialRequest(request: {
+    requestId: string
+    targetId: string
+    kind: 'passphrase' | 'password' | 'keyboard-interactive'
+    detail: string
+    echo?: boolean
+  }): void {
+    this.emitClientEvent({ type: 'sshCredentialRequest', ...request })
+  }
+
+  notifySshCredentialResolved(requestId: string): void {
+    this.emitClientEvent({ type: 'sshCredentialResolved', requestId })
+  }
+
+  notifySshPortForwardsChanged(targetId: string, forwards: PortForwardEntry[]): void {
+    this.emitClientEvent({ type: 'sshPortForwardsChanged', targetId, forwards })
+  }
+
+  notifyLegacyRelayBridgedPanesChanged(panes: LegacyRelayBridgedPane[]): void {
+    this.emitClientEvent({ type: 'legacyRelayBridgedPanesChanged', panes })
+  }
+
+  notifyLegacyRelayBridgedPaneData(ptyId: string, data: string): void {
+    this.emitClientEvent({ type: 'legacyRelayBridgedPaneData', ptyId, data })
+  }
+
+  notifyLegacyRelayBridgedPaneReplay(ptyId: string, replay: string): void {
+    this.emitClientEvent({ type: 'legacyRelayBridgedPaneReplay', ptyId, replay })
+  }
+
+  notifyLegacyRelayBridgedPaneExit(ptyId: string, code: number): void {
+    this.emitClientEvent({ type: 'legacyRelayBridgedPaneExit', ptyId, code })
   }
 
   notifySshRelayReady(targetId: string): void {

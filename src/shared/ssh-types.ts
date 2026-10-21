@@ -1,5 +1,6 @@
 import type { SshPendingPtyKill } from './ssh-pending-pty-kill'
 import type { OrcadSshProvisioningIntent } from './orcad-ssh-provisioning'
+import type { NodeDistMirrorAttempt } from './node-dist-mirror'
 
 // ─── SSH Connection Types ───────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export type SshTarget = {
    */
   /** Main-owned: managed orcad can't run on this host; retried once this app version changes. */
   managedServerUnavailable?: { reason: string; appVersion: string }
-  /** Main-owned: the one-time "move now" offer was shown under this app version. */
+  /** Retired with the move offer (hosts convert on connect); kept so a downgraded build doesn't re-offer. */
   managedServerMoveOffered?: { appVersion: string }
   /**
    * Main-owned: the user confirmed "Move anyway", so saved state the move can't carry stays in this
@@ -144,6 +145,15 @@ export type SshTargetSummary = Pick<SshTarget, 'id' | 'label' | 'generation'> & 
   /** Current SSH lifecycle state, when the desktop has one for this target. */
   connectionStatus?: SshConnectionStatus
 }
+
+/** The validated authority a desktop editor uses for an SSH worktree. */
+export type SshExternalEditorAuthorityResult =
+  | { ok: true; authority: string }
+  | {
+      ok: false
+      reason: 'ssh-target-not-found' | 'ssh-target-invalid' | 'remote-runtime-unsupported'
+    }
+  | { ok: false; reason: 'ssh-alias-required'; host: string; port: number }
 
 /** Identity of a removed SSH target, recorded so that re-adding the same host
  *  can re-point orphaned repos/worktrees from the old (deleted) target id to
@@ -354,9 +364,14 @@ export type SshManagedServerStatus =
       held?: true
       /** Setup lost contact with the host, so nothing proves it failed there. */
       contactLost?: true
+      /** Neither this computer nor the host could download the pinned Node runtime. */
+      nodeDownloadBlocked?: SshManagedServerNodeDownloadBlocked
       /** COMPAT(legacy-relay-bridge): the connect stayed up so the bridge serves those terminals. */
       bridged?: true
     }
+
+/** `mirror`: whether that download went through a mirror; admission drops an unknown value. */
+export type SshManagedServerNodeDownloadBlocked = { mirror: NodeDistMirrorAttempt }
 
 /** Plain SSH terminals and SFTP browsing only; `reason` is the ladder's classified cause. */
 export type SshPlainSshMode = {

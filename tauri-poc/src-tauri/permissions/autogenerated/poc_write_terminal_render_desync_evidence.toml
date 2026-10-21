@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-write-terminal-render-desync-evidence"
+description = "Enables the poc_write_terminal_render_desync_evidence command without any pre-configured scope."
+commands.allow = ["poc_write_terminal_render_desync_evidence"]
+
+[[permission]]
+identifier = "deny-poc-write-terminal-render-desync-evidence"
+description = "Denies the poc_write_terminal_render_desync_evidence command without any pre-configured scope."
+commands.deny = ["poc_write_terminal_render_desync_evidence"]

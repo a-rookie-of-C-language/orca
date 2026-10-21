@@ -16,6 +16,7 @@ import {
   attachPtyFromRuntimeController,
   clearBufferFromRuntimeController,
   resetInputModesFromRuntimeController,
+  signalPtyFromRuntimeController,
   confirmForegroundProcessFromRuntimeController,
   confirmShellForegroundFromRuntimeController,
   getCwdFromRuntimeController,
@@ -73,6 +74,7 @@ export function installPtyRuntimeController(deps: PtyRuntimeControllerDeps): voi
     hasChildProcesses: (ptyId) => hasChildProcessesFromRuntimeController(ptyId),
     clearBuffer: (ptyId) => clearBufferFromRuntimeController(deps, ptyId),
     resetInputModes: (ptyId) => resetInputModesFromRuntimeController(deps, ptyId),
+    signal: (ptyId, signal) => signalPtyFromRuntimeController(ptyId, signal),
     hasPty: (ptyId) => hasPtyFromRuntimeController(deps, ptyId),
     listProcesses: (hostId, opts) => listProcessesFromRuntimeController(deps, hostId, opts),
     listProcessesWithHostScope: (opts) =>

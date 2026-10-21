@@ -44,6 +44,7 @@ export abstract class CliInstallLocation {
   protected readonly resourcesPath: string
   protected readonly execPathValue: string
   protected readonly appPathValue: string
+  protected readonly launcherPathOverride: string | null
   protected readonly homePath: string
   protected readonly localAppDataPath: string
   protected readonly processPathEnv: string | null
@@ -71,12 +72,17 @@ export abstract class CliInstallLocation {
   }
 
   constructor(options: CliInstallerOptions = {}) {
+    const appEnvironment = getAppEnvironment()
     this.platform = options.platform ?? process.platform
-    this.isPackaged = options.isPackaged ?? getAppEnvironment().isPackaged()
-    this.userDataPath = options.userDataPath ?? getAppEnvironment().getPath('userData')
-    this.resourcesPath = options.resourcesPath ?? process.resourcesPath
+    this.isPackaged = options.isPackaged ?? appEnvironment.isPackaged()
+    this.userDataPath = options.userDataPath ?? appEnvironment.getPath('userData')
+    // Node/Tauri does not define Electron's resourcesPath; the server bundle is its equivalent.
+    this.resourcesPath =
+      options.resourcesPath ?? process.resourcesPath ?? appEnvironment.getAppPath()
     this.execPathValue = options.execPath ?? process.execPath
-    this.appPathValue = options.appPath ?? getAppEnvironment().getAppPath()
+    this.appPathValue = options.appPath ?? appEnvironment.getAppPath()
+    this.launcherPathOverride =
+      options.launcherPathOverride ?? appEnvironment.getCliLauncherPath?.() ?? null
     this.homePath = options.homePath ?? homedir()
     this.localAppDataPath =
       options.localAppDataPath ??
@@ -246,6 +252,10 @@ export abstract class CliInstallLocation {
 
     if (this.hasUnverifiedAppImageRuntime) {
       return null
+    }
+
+    if (this.launcherPathOverride) {
+      return existsSync(this.launcherPathOverride) ? this.launcherPathOverride : null
     }
 
     if (this.isLinuxAppImage()) {

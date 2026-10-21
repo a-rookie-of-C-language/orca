@@ -28,6 +28,12 @@ import {
   readRemoteFileInChunks,
   readRemoteFilePreview
 } from './runtime-paged-file-read'
+import {
+  downloadDirectSshFile,
+  isDirectSshFileContext,
+  readDirectSshFileContent,
+  readDirectSshFilePreview
+} from './runtime-direct-ssh-file-read'
 
 const REMOTE_DOWNLOAD_CHUNK_BYTES = 384 * 1024
 const REMOTE_DOWNLOAD_UPDATE_REQUIRED_MESSAGE =
@@ -49,6 +55,7 @@ export async function readRuntimeFileContent({
   relativePath,
   worktreeId,
   connectionId,
+  expectedSshConnectionGeneration,
   expectedExternalSshTargetId,
   includeLocalLogMetadata,
   access,
@@ -56,6 +63,14 @@ export async function readRuntimeFileContent({
   pageOversizedBinary
 }: RuntimeFileReadArgs): Promise<RuntimeReadableFileContent> {
   assertExternalSshReadOwnership(target, connectionId, expectedExternalSshTargetId)
+  if (isDirectSshFileContext({ target, connectionId })) {
+    return readDirectSshFileContent({
+      target,
+      filePath,
+      connectionId,
+      expectedSshConnectionGeneration
+    })
+  }
   if (target.kind !== 'environment' || !worktreeId) {
     return window.api.fs.readFile({
       filePath,
@@ -131,6 +146,9 @@ export async function readRuntimeFilePreview(
     context.connectionId,
     context.expectedExternalSshTargetId
   )
+  if (isDirectSshFileContext(context)) {
+    return readDirectSshFilePreview(context, filePath)
+  }
   const remoteArgs = getRemoteFileArgs(context, filePath)
   const runtimeTarget = context.target
   // A chat attachment lives in the paired server's store, outside every worktree; that server
@@ -177,6 +195,9 @@ export async function downloadRuntimeFile(
     context.connectionId,
     context.expectedExternalSshTargetId
   )
+  if (isDirectSshFileContext(context)) {
+    return downloadDirectSshFile(context, filePath, suggestedName)
+  }
   const remoteArgs = getRemoteFileArgs(context, filePath)
   if (!remoteArgs) {
     if (hasRemoteRuntimeOwner(context)) {

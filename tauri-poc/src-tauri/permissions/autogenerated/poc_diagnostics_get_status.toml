@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-diagnostics-get-status"
+description = "Enables the poc_diagnostics_get_status command without any pre-configured scope."
+commands.allow = ["poc_diagnostics_get_status"]
+
+[[permission]]
+identifier = "deny-poc-diagnostics-get-status"
+description = "Denies the poc_diagnostics_get_status command without any pre-configured scope."
+commands.deny = ["poc_diagnostics_get_status"]

@@ -35,7 +35,10 @@ export default defineConfig({
     emptyOutDir: true,
     reportCompressedSize: false,
     rollupOptions: {
-      input: resolve('src/renderer/web-index.html')
+      input: {
+        'web-index': resolve('src/renderer/web-index.html'),
+        space: resolve('src/renderer/space.html')
+      }
     }
   },
   worker: {

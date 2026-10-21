@@ -1,17 +1,33 @@
 import {
   connectRegisteredSshTarget,
+  disconnectRegisteredSshTarget,
   getRegisteredSshState,
   getRegisteredSshTargetMutations,
   getSshConnectionManager,
+  importRegisteredSshConfig,
   listRegisteredRemovedSshTargetLabels,
+  listRegisteredSuppressedSshConfigAliases,
   listRegisteredSshTargets,
   SshTargetManagementUnservedError
 } from '../../../ssh/targets/ssh-target-registry'
 import { isManagedOrcadSshTarget } from '../../../ssh/connection/ssh-connection-store'
 import { browseSshDirectory } from '../../../ssh/ssh-remote-directory-browse'
+import {
+  listUserSshConfigHostSummaries,
+  resolveUserSshConfigHost
+} from '../../../ssh/config/ssh-config-host-picker'
+import { submitSshRuntimeCredential } from '../../../ssh/ssh-runtime-credential-bridge'
+import { resolveVsCodeSshAuthority } from '../../../ssh/config/vscode-ssh-authority'
+import { SSH_LEGACY_RELAY_BRIDGE_METHODS } from './ssh-legacy-relay-bridge'
+import { SSH_NEEDS_PASSPHRASE_METHODS } from './ssh-needs-passphrase'
+import { SSH_TEST_CONNECTION_METHODS } from './ssh-test-connection'
 import { defineMethod } from '../core'
 import { getPublicSshError, getPublicSshState } from '../../public-ssh-state'
-import type { SshTarget as SshTargetRecord, SshTargetSummary } from '../../../../shared/ssh-types'
+import type {
+  SshExternalEditorAuthorityResult,
+  SshTarget as SshTargetRecord,
+  SshTargetSummary
+} from '../../../../shared/ssh-types'
 import { isRemoteCliControlAllowed } from '../../../../shared/ssh-remote-cli-control'
 import type {
   SshEditableTarget,
@@ -20,6 +36,13 @@ import type {
 } from '../../../../shared/ssh-target-management'
 import {
   SshBrowseDir,
+  SshConfigHostList,
+  SshFileReadChunk,
+  SshFolderDownload,
+  SshImportConfig,
+  SshResolveConfigHost,
+  SshResolveExternalEditorAuthority,
+  SshSubmitCredential,
   SshConnect,
   SshTarget,
   SshTargetAdd,
@@ -108,6 +131,21 @@ export const SSH_METHODS = [
     }
   }),
   defineMethod({
+    name: 'ssh.disconnect',
+    permission: 'host-admin',
+    params: SshTarget,
+    handler: async (params) => {
+      await disconnectRegisteredSshTarget(params.targetId)
+      return { disconnected: true }
+    }
+  }),
+  defineMethod({
+    name: 'ssh.submitCredential',
+    permission: 'host-admin',
+    params: SshSubmitCredential,
+    handler: (params) => ({ submitted: submitSshRuntimeCredential(params.requestId, params.value) })
+  }),
+  defineMethod({
     name: 'ssh.listTargets',
     permission: 'workspace',
     params: null,
@@ -134,6 +172,47 @@ export const SSH_METHODS = [
     permission: 'workspace',
     params: null,
     handler: () => ({ targets: listRegisteredSshTargets().map(toSshEditableTarget) })
+  }),
+  defineMethod({
+    name: 'ssh.importConfig',
+    permission: 'workspace',
+    params: SshImportConfig,
+    handler: (params) => importRegisteredSshConfig(params)
+  }),
+  defineMethod({
+    name: 'ssh.listConfigHosts',
+    permission: 'workspace',
+    params: SshConfigHostList,
+    handler: (params) =>
+      listUserSshConfigHostSummaries(
+        listRegisteredSshTargets(),
+        params.query,
+        listRegisteredSuppressedSshConfigAliases(),
+        { refresh: params.refresh === true }
+      )
+  }),
+  defineMethod({
+    name: 'ssh.resolveConfigHost',
+    permission: 'workspace',
+    params: SshResolveConfigHost,
+    handler: (params) => resolveUserSshConfigHost(params.alias)
+  }),
+  defineMethod({
+    name: 'ssh.resolveExternalEditorAuthority',
+    permission: 'workspace',
+    params: SshResolveExternalEditorAuthority,
+    handler: (params): SshExternalEditorAuthorityResult => {
+      const target = listRegisteredSshTargets().find(
+        (candidate) => candidate.id === params.targetId
+      )
+      if (!target) {
+        return { ok: false, reason: 'ssh-target-not-found' }
+      }
+      if (target.owner?.type === 'on-demand-runtime') {
+        return { ok: false, reason: 'remote-runtime-unsupported' }
+      }
+      return resolveVsCodeSshAuthority(target)
+    }
   }),
   defineMethod({
     name: 'ssh.addTarget',
@@ -186,5 +265,53 @@ export const SSH_METHODS = [
       }
       return browseSshDirectory(manager, params.targetId, params.dirPath)
     }
-  })
+  }),
+  defineMethod({
+    name: 'ssh.readFileChunk',
+    permission: 'workspace',
+    params: SshFileReadChunk,
+    handler: async (params) => {
+      const target = listRegisteredSshTargets().find(
+        (candidate) => candidate.id === params.targetId
+      )
+      const manager = getSshConnectionManager()
+      const connection = manager?.getConnection(params.targetId)
+      if (!target || !manager || !connection) {
+        throw new Error(`SSH connection "${params.targetId}" not found`)
+      }
+      if (
+        params.expectedGeneration !== undefined &&
+        target.generation !== params.expectedGeneration
+      ) {
+        throw new Error('SSH target changed while reading the file')
+      }
+      return connection.readFileChunk(params.filePath, params.offset, params.length)
+    }
+  }),
+  defineMethod({
+    name: 'ssh.downloadFolder',
+    permission: 'workspace',
+    params: SshFolderDownload,
+    handler: async (params) => {
+      const target = listRegisteredSshTargets().find(
+        (candidate) => candidate.id === params.targetId
+      )
+      const manager = getSshConnectionManager()
+      const connection = manager?.getConnection(params.targetId)
+      if (!target || !manager || !connection) {
+        throw new Error(`SSH connection "${params.targetId}" not found`)
+      }
+      if (
+        params.expectedGeneration !== undefined &&
+        target.generation !== params.expectedGeneration
+      ) {
+        throw new Error('SSH target changed while downloading the folder')
+      }
+      await connection.downloadFolder(params.dirPath, params.destinationPath)
+      return { destinationPath: params.destinationPath }
+    }
+  }),
+  ...SSH_LEGACY_RELAY_BRIDGE_METHODS,
+  ...SSH_NEEDS_PASSPHRASE_METHODS,
+  ...SSH_TEST_CONNECTION_METHODS
 ]

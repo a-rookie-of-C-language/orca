@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-open-external-editor"
+description = "Enables the poc_open_external_editor command without any pre-configured scope."
+commands.allow = ["poc_open_external_editor"]
+
+[[permission]]
+identifier = "deny-poc-open-external-editor"
+description = "Denies the poc_open_external_editor command without any pre-configured scope."
+commands.deny = ["poc_open_external_editor"]

@@ -40,8 +40,12 @@ export type RemoteFileWriteParams = {
   expectedSshConnectionGeneration?: number
 }
 
+// Why: Tauri routes local targets through the local runtime too; pairing fencing only applies to environments.
+function targetEnvironmentId(target: RemoteFileContext['target']): string {
+  return target.kind === 'environment' ? target.environmentId : 'local'
+}
 type RemoteFileContext = RuntimeFileOperationArgs & {
-  target: RuntimeClientTarget & { kind: 'environment' }
+  target: RuntimeClientTarget & ({ kind: 'environment' } | { kind: 'local' })
 }
 
 function readRemoteFile(
@@ -66,7 +70,7 @@ async function diskHoldsWrittenContent(
 ): Promise<boolean> {
   // Why the save's pairing: a host the environment was re-paired to proves nothing about this write.
   const samePairing = (): boolean =>
-    getRuntimeEnvironmentRevision(context.target.environmentId) === pairingRevision
+    getRuntimeEnvironmentRevision(targetEnvironmentId(context.target)) === pairingRevision
   try {
     if (!samePairing()) {
       return false
@@ -94,7 +98,7 @@ export async function writeRemoteFileIfUnchanged(
   precondition: FileWriteDiskPrecondition
 ): Promise<FileWriteResult> {
   // Why once per save: a retry may follow a reconnect, never a re-pair to another host.
-  const pairingRevision = captureRuntimeEnvironmentRequestRevision(context.target.environmentId)
+  const pairingRevision = captureRuntimeEnvironmentRequestRevision(targetEnvironmentId(context.target))
   const attempt = async (): Promise<FileWriteResult> =>
     parseFileWriteResult(
       await callRuntimeFileMutationWithCapabilities<unknown>(
@@ -123,7 +127,7 @@ export async function writeRemoteFileIfUnchanged(
   } catch (error) {
     if (
       isRuntimeConnectionChangedError(error) &&
-      getRuntimeEnvironmentRevision(context.target.environmentId) === pairingRevision
+      getRuntimeEnvironmentRevision(targetEnvironmentId(context.target)) === pairingRevision
     ) {
       // Why: nothing was sent; one retry re-probes the new connection's capabilities.
       return attempt()

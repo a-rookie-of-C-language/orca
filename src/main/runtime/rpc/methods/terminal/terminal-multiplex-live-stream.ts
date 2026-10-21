@@ -125,11 +125,14 @@ export function activateMultiplexStream(
     })
     .then((wait) => {
       if (streams.get(request.streamId) === stream) {
+        // Why forward the proven status: Tauri panes only learn the exit
+        // through this verdict, and Electron reports the numeric code.
+        const exited = wait.satisfied && wait.condition === 'exit' && wait.status === 'exited'
         state.detachStream(
           request.streamId,
-          wait.satisfied && wait.condition === 'exit' && wait.status === 'exited'
-            ? 'exited'
-            : 'unverifiable'
+          exited ? 'exited' : 'unverifiable',
+          true,
+          exited ? wait.exitCode : null
         )
       }
     })

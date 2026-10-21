@@ -8,7 +8,7 @@ import {
   normalizeComputerAwakeMode,
   type ComputerAwakeStatus
 } from '../../shared/computer-awake-mode'
-import { AgentAwakeStatusLease } from '../agent-awake-status-lease'
+import { AgentAwakeStatusLease, type AgentAwakeStatus } from '../agent-awake-status-lease'
 import type { AgentHookServer } from '../agent-hooks/server'
 import type { ProfilePreferences } from '../persistence/loading-store/profile-preferences'
 
@@ -39,11 +39,11 @@ export class OrcadAgentAwakeService {
 
   start(): void {
     this.unsubscribers.push(
-      this.hookServer.subscribeStatusChanges((statuses) => {
+      this.hookServer.subscribeStatusChanges((statuses: AgentAwakeStatus[]) => {
         this.lease.replace(statuses)
         this.refresh()
       }),
-      this.hookServer.subscribeStatusFreshness((status) => {
+      this.hookServer.subscribeStatusFreshness((status: AgentAwakeStatus) => {
         if (this.lease.renew(status)) {
           this.refresh()
         }

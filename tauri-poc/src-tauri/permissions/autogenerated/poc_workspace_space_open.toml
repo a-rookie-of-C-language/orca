@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-workspace-space-open"
+description = "Enables the poc_workspace_space_open command without any pre-configured scope."
+commands.allow = ["poc_workspace_space_open"]
+
+[[permission]]
+identifier = "deny-poc-workspace-space-open"
+description = "Denies the poc_workspace_space_open command without any pre-configured scope."
+commands.deny = ["poc_workspace_space_open"]

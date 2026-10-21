@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-read-local-log-tail"
+description = "Enables the poc_read_local_log_tail command without any pre-configured scope."
+commands.allow = ["poc_read_local_log_tail"]
+
+[[permission]]
+identifier = "deny-poc-read-local-log-tail"
+description = "Denies the poc_read_local_log_tail command without any pre-configured scope."
+commands.deny = ["poc_read_local_log_tail"]

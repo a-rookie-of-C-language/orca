@@ -3,18 +3,17 @@ import {
   type BrowserClientPageRendererIdentity as RendererPageIdentity
 } from '../../../../shared/browser-client-page-renderer-protocol'
 import {
-  createBrowserClientPageRetainedHost,
   createBrowserClientPageRetainedRoot,
-  createBrowserClientPageWebview,
   hasBrowserClientPageAttachedGuest,
-  readBrowserClientPageAttachedGuestId
+  readBrowserClientPageAttachedGuestId,
+  type BrowserClientPageWebviewFactory
 } from './browser-client-page-retained-elements'
 import { browserClientPageRetainedKey } from './browser-client-page-retained-key'
+import { createBrowserClientPageRetainedPage } from './browser-client-page-retained-page-creation'
 import { rekeyBrowserClientRetainedPage } from './browser-client-page-retained-rekey'
 import type { BrowserClientRetainedRendererPage as RetainedPage } from './browser-client-page-retained-state'
 import {
   attachBrowserClientRetainedPage,
-  enrolRetainedHostDragPassthrough,
   findBrowserClientRetainedPageForAttachment,
   type BrowserClientPageVisibleAttachment
 } from './browser-client-page-visible-attachment'
@@ -42,7 +41,8 @@ export class BrowserClientPageRetainedRegistry {
   constructor(
     private readonly options: {
       document: Document
-      createWebview?: () => Electron.WebviewTag
+      createWebview?: BrowserClientPageWebviewFactory
+      onWebviewMounted?: (browserPageId: string) => void
       maxPages?: number
       maxPagesPerPartition?: number
       attachTimeoutMs?: number
@@ -158,59 +158,27 @@ export class BrowserClientPageRetainedRegistry {
   }
 
   private createPage(identity: RendererPageIdentity, key: string): RetainedPage {
-    const host = createBrowserClientPageRetainedHost(this.options.document, identity.browserPageId)
-    const webview = createBrowserClientPageWebview({
-      createWebview: this.options.createWebview,
+    return createBrowserClientPageRetainedPage({
       document: this.options.document,
-      partition: identity.partition
-    })
-
-    let resolveMount!: RetainedPage['resolveMount']
-    let rejectMount!: RetainedPage['rejectMount']
-    const mount = new Promise<{ webContentsId: number }>((resolve, reject) => {
-      resolveMount = resolve
-      rejectMount = reject
-    })
-    const page = {} as RetainedPage
-    const onAttached = (): void => this.observeAttachment(page)
-    const onReady = (): void => this.finishAttachment(page)
-    const onDestroyed = (): void => this.handleDestroyed(page)
-    const onRendererGone = (): void => this.fenceRendererLoss(page)
-    Object.assign(page, {
-      key,
       identity,
-      host,
-      webview,
-      status: 'attaching',
-      webContentsId: null,
-      metadataRevision: 0,
-      attachmentObserved: false,
-      visibleAttachment: null,
-      mount,
-      resolveMount,
-      rejectMount,
-      attachTimer: setTimeout(
-        () => this.failAttachment(page, 'browser_client_page_renderer_attach_timeout'),
-        this.attachTimeoutMs
-      ),
-      onAttached,
-      onReady,
-      onDestroyed,
-      onRendererGone
+      key,
+      attachTimeoutMs: this.attachTimeoutMs,
+      createWebview: this.options.createWebview,
+      onAttached: (page) => this.observeAttachment(page),
+      onReady: (page) => this.finishAttachment(page),
+      onDestroyed: (page) => this.handleDestroyed(page),
+      onRendererGone: (page) => this.fenceRendererLoss(page),
+      onAttachmentTimeout: (page) =>
+        this.failAttachment(page, 'browser_client_page_renderer_attach_timeout'),
+      registerPage: (page) => this.pages.set(key, page),
+      incrementPartitionCount: (partition) =>
+        this.partitionCounts.set(partition, (this.partitionCounts.get(partition) ?? 0) + 1),
+      appendHost: (host, webview) => {
+        host.appendChild(webview)
+        this.ensureRoot().appendChild(host)
+      },
+      onWebviewMounted: this.options.onWebviewMounted
     })
-    page.releaseDragPassthroughSurface = enrolRetainedHostDragPassthrough(page)
-    webview.addEventListener('did-attach', onAttached)
-    webview.addEventListener('dom-ready', onReady)
-    webview.addEventListener('destroyed', onDestroyed)
-    webview.addEventListener('render-process-gone', onRendererGone)
-    this.pages.set(key, page)
-    this.partitionCounts.set(
-      identity.partition,
-      (this.partitionCounts.get(identity.partition) ?? 0) + 1
-    )
-    host.appendChild(webview)
-    this.ensureRoot().appendChild(host)
-    return page
   }
 
   private observeAttachment(page: RetainedPage): void {

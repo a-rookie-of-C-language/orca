@@ -7,7 +7,7 @@ import {
   type RuntimeFileImportSession
 } from './runtime-file-mutation-rpc'
 import {
-  getRemoteFileArgs,
+  getRemoteFileMutationArgs,
   joinRuntimeRelativePath,
   withSshMutationExpectation
 } from './runtime-file-routing'
@@ -39,7 +39,9 @@ export async function uploadRuntimeFileWithoutClobber(
     // body in slices; the renderer never holds the whole file.
     try {
       await window.api.fs.uploadExternalFileToRuntime({
-        environmentId: session.target.environmentId,
+        ...(session.target.kind === 'environment'
+          ? { environmentId: session.target.environmentId }
+          : {}),
         sourceRootPath: source.sourceRootPath,
         entryRelativePath: source.entryRelativePath,
         expected: source.expected,
@@ -101,7 +103,7 @@ export async function ensureRuntimeDirectory(
   destinationDir: string,
   session: RuntimeFileImportSession
 ): Promise<void> {
-  const destinationArgs = getRemoteFileArgs(context, destinationDir)
+  const destinationArgs = getRemoteFileMutationArgs(context, destinationDir)
   if (!destinationArgs) {
     return
   }

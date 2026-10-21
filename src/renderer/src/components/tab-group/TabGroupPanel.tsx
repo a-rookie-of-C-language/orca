@@ -20,6 +20,7 @@ import { useClientHostedBrowserRows } from '@/lib/pane-manager/client-hosted-bro
 import { resolveClientHostedBrowserRowStripGroupId } from '../tab-bar/client-hosted-browser-row-strip-placement'
 import { useEditorGroupFileDropOwner } from '../editor/use-editor-group-file-drop-owner'
 import { cn } from '@/lib/utils'
+import { ChatPanelHeader } from './ChatPanelHeader'
 
 const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
@@ -68,6 +69,13 @@ export default function TabGroupPanel({
   hoveredTabInsertion?: HoveredTabInsertion | null
 }): React.JSX.Element {
   const rightSidebarOpen = useAppStore((state) => state.rightSidebarOpen)
+  const toolsSidebarOnLeft = useAppStore((state) => state.settings?.toolsSidebarPosition === 'left')
+  const windowControlsSpacerStyle = {
+    width: toolsSidebarOnLeft
+      ? 'var(--window-controls-width, 0px)'
+      : 'calc(40px + var(--window-controls-width, 0px))',
+    WebkitAppRegion: 'no-drag'
+  }
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
   const model = useTabGroupWorkspaceModel({ groupId, worktreeId })
   const {
@@ -79,6 +87,10 @@ export default function TabGroupPanel({
     tabBarOrder,
     terminalTabs
   } = model
+  const isChatPanel =
+    model.group?.isChatPanel === true &&
+    activeTab?.contentType === 'agent-session' &&
+    model.groupTabs.every((tab) => tab.contentType === 'agent-session')
   // Why: one strip owns the worktree's client-hosted rows, or every split repeats them.
   const ownsClientHostedRows = useAppStore(
     (state) =>
@@ -279,7 +291,9 @@ export default function TabGroupPanel({
         >
           <div className="flex h-full items-stretch pr-1.5">
             {/* Why: Electron drag hit-test respects no-drag only on DOM descendants, not z-index siblings, so this no-drag spacer keeps the collapsed left-sidebar's floating toggle clickable. */}
-            {reserveCollapsedSidebarHeaderSpace && !sidebarOpen ? (
+            {reserveCollapsedSidebarHeaderSpace &&
+            !sidebarOpen &&
+            !(toolsSidebarOnLeft && rightSidebarOpen) ? (
               <div
                 className="shrink-0"
                 style={
@@ -290,31 +304,36 @@ export default function TabGroupPanel({
                 }
               />
             ) : null}
-            <div className="min-w-0 flex-1 h-full">{tabBar}</div>
+            <div className="min-w-0 flex-1 h-full">
+              {isChatPanel ? (
+                <ChatPanelHeader
+                  chats={agentSessionItems}
+                  activeTabId={activeTab.id}
+                  onActivate={commands.activateAgentSession}
+                  onClose={commands.closeItem}
+                />
+              ) : (
+                tabBar
+              )}
+            </div>
             <div
               className={actionChromeClassName}
               style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
-              <TabBarQuickCommandsButton
-                worktreeId={worktreeId}
-                groupId={groupId}
-                isFocused={isFocused}
-              />
-              {hasSplitGroups ? (
+              {!isChatPanel ? (
+                <TabBarQuickCommandsButton
+                  worktreeId={worktreeId}
+                  groupId={groupId}
+                  isFocused={isFocused}
+                />
+              ) : null}
+              {hasSplitGroups && !isChatPanel ? (
                 <TabGroupPaneActionsMenu isFocused={isFocused} onCloseGroup={commands.closeGroup} />
               ) : null}
             </div>
             {/* Why: Electron drag hit-test respects no-drag only on DOM descendants, not z-index siblings, so this no-drag spacer keeps the floating right-sidebar toggle + window controls clickable. */}
-            {reserveClosedExplorerToggleSpace && !rightSidebarOpen ? (
-              <div
-                className="shrink-0"
-                style={
-                  {
-                    width: 'calc(40px + var(--window-controls-width, 0px))',
-                    WebkitAppRegion: 'no-drag'
-                  } as React.CSSProperties
-                }
-              />
+            {reserveClosedExplorerToggleSpace && (toolsSidebarOnLeft || !rightSidebarOpen) ? (
+              <div className="shrink-0" style={windowControlsSpacerStyle} />
             ) : null}
           </div>
         </div>

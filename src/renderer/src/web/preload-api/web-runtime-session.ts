@@ -30,7 +30,9 @@ export const webRuntimeState: {
   cachedWorktrees: { loadedAt: number; worktrees: Worktree[] } | null
   cachedDetectedWorktrees: { loadedAt: number; worktrees: Worktree[] } | null
 } = {
-  activeEnvironment: readStoredWebRuntimeEnvironment(),
+  // Why null outside the DOM: node-pool unit tests import this module through the
+  // store without a window, and there is no stored environment to read there.
+  activeEnvironment: typeof window === 'undefined' ? null : readStoredWebRuntimeEnvironment(),
   zcodePlanSiteRuntimeOwner: null,
   zcodePlanSiteRuntimeValue: null,
   worktreeVisibilityDefaultsRuntimeEnvironmentId: null,

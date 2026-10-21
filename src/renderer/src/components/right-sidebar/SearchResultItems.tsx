@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import { ChevronRight, Copy } from 'lucide-react'
 import { basename, dirname } from '@/lib/path'
 import { cn } from '@/lib/utils'
-import { FileTypeIcon } from '@/components/FileTypeIcon'
+import { WorkspaceFileIcon } from '@/components/WorkspaceFileIcon'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import {
@@ -86,10 +86,7 @@ export function FileResultRow({
                       !collapsed && 'rotate-90'
                     )}
                   />
-                  {React.createElement(FileTypeIcon, {
-                    filePath: fileResult.relativePath,
-                    className: 'size-3.5 flex-shrink-0 text-muted-foreground'
-                  })}
+                  <WorkspaceFileIcon path={fileResult.relativePath} />
                   <div className="min-w-0 flex-1 text-xs">
                     <span className="min-w-0 block truncate">
                       <span className="text-foreground">{fileName}</span>

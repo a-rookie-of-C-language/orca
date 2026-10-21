@@ -25,6 +25,18 @@ describe('web pairing input', () => {
     expect(parseWebPairingInput(`orca://pair#${encodeOffer()}`)).toEqual(offer)
   })
 
+  it('accepts runtime pairing offers with a snake_case device token', () => {
+    const input = `orca://pair?code=${encodeOffer({
+      deviceToken: undefined,
+      device_token: 'runtime-token'
+    })}`
+
+    expect(parseWebPairingInput(input)).toEqual({
+      ...offer,
+      deviceToken: 'runtime-token'
+    })
+  })
+
   it('preserves optional device scope metadata', () => {
     expect(parseWebPairingInput(`orca://pair?code=${encodeOffer({ scope: 'mobile' })}`)).toEqual({
       ...offer,

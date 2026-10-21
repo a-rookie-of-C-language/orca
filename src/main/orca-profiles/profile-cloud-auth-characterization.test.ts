@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type * as ProfileCloudClient from './profile-cloud-client'
 import type * as SecureFile from '../../shared/secure-file'
 import type { OrcaCloudSession } from './profile-cloud-session-store'
+import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 
 // Pins the auth behaviour that must not change, through public entry points only, so the
 // same file runs unchanged before and after a refactor of session storage.
@@ -134,6 +135,12 @@ async function signIn(expiresIn = 600_000): Promise<void> {
 
 describe('cloud auth characterization', () => {
   beforeEach(() => {
+    setSecretStore({
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(value, 'utf-8'),
+      decryptString: (value) => value.toString('utf-8'),
+      describeProtectionGap: () => null
+    })
     vi.stubEnv('ORCA_CLOUD_API_URL', 'http://localhost:4100')
     vi.stubEnv('ORCA_CLOUD_CLIENT_ID', 'desktop-client')
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -146,6 +153,7 @@ describe('cloud auth characterization', () => {
   })
 
   afterEach(() => {
+    _resetSecretStoreForTests()
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
     rmSync(userDataPath, { recursive: true, force: true })

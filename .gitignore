@@ -69,6 +69,8 @@ desktop.ini
 .oxlintcache
 /.cache/vite/
 /.cache/vite.lock/
+/.cache/*.mjs
+/.cache/tauri-env.*
 
 # Logs
 *.log

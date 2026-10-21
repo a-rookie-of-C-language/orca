@@ -6,7 +6,7 @@
  */
 import { copyFile, link, mkdtemp } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { nodeDistMirrorUrl } from '../../../shared/node-dist-mirror'
+import { nodeDistMirrorUrl, type NodeDistMirrorAttempt } from '../../../shared/node-dist-mirror'
 import {
   NODE_RUNTIME_PIN,
   nodeRuntimeReleaseUrl,
@@ -131,7 +131,8 @@ export class NodeRuntimeUnreachableError extends Error {
     readonly hostReport: string,
     readonly offlineArchivePath: string | undefined,
     cause: unknown,
-    mirrorable = true
+    /** Whether both attempts tried a mirror; the setup failure reads this, never the text. */
+    readonly mirror: NodeDistMirrorAttempt = 'unset'
   ) {
     const desktop =
       cause instanceof DesktopDownloadUnreachableError
@@ -139,17 +140,19 @@ export class NodeRuntimeUnreachableError extends Error {
         : cause instanceof Error
           ? cause.message
           : String(cause)
-    const mirror = mirrorable
-      ? ', set a mirror of nodejs.org/dist in Settings > Advanced > Network > Node.js download mirror ' +
-        "(or NODEJS_ORG_MIRROR in this computer's environment)"
-      : ''
+    const mirrorAdvice =
+      mirror === 'unsupported'
+        ? ''
+        : `, ${mirror === 'tried' ? 'check the' : 'set a'} mirror of nodejs.org/dist in Settings > ` +
+          'Advanced > Network > Node.js download mirror ' +
+          "(or NODEJS_ORG_MIRROR in this computer's environment)"
     const offline = offlineArchivePath
       ? `, or download that file on another machine and copy it to ${offlineArchivePath} on this computer.`
       : '.'
     super(
       `Neither this computer nor the host could download Node from ${url}. ` +
         `This computer: ${desktop}. The host: ${hostReport}. ` +
-        `Check the network or proxy on either machine and connect again${mirror}${offline}`,
+        `Check the network or proxy on either machine and connect again${mirrorAdvice}${offline}`,
       { cause }
     )
     this.name = 'NodeRuntimeUnreachableError'
@@ -170,11 +173,12 @@ export async function downloadNodeRuntimeOnHost(args: {
   timeoutMs: number
   signal?: AbortSignal
 }): Promise<string> {
+  const mirror = configuredNodeDistMirror()
   const output = await args.exec(
     hostDownloadNodeRuntimeCommand(args.host, {
       stageDir: args.stageDir,
       target: args.target,
-      mirror: configuredNodeDistMirror()
+      mirror
     }),
     { signal: args.signal, timeoutMs: args.timeoutMs }
   )
@@ -185,7 +189,11 @@ export async function downloadNodeRuntimeOnHost(args: {
       result.report,
       args.offlineArchivePath,
       args.desktopError,
-      pinnedNodeRuntimeAsset(args.target).source === 'official'
+      pinnedNodeRuntimeAsset(args.target).source !== 'official'
+        ? 'unsupported'
+        : mirror
+          ? 'tried'
+          : 'unset'
     )
   }
   console.warn(

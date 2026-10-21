@@ -17,6 +17,12 @@ import {
 } from '../../../shared/protocol-version'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from '../../../shared/agent-session-background-task-child-views-capability'
 import { TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY } from '../../../shared/terminal-quick-command-capabilities'
+import { TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY } from '../../../shared/account-runtime-capabilities'
+import {
+  BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+  BROWSER_CLIENT_PAGE_METADATA_RUNTIME_CAPABILITY
+} from '../../../shared/protocol-version'
+import { isTauriNativeHost } from './tauri-native-host'
 
 /** What the browser client advertises in its handshake with the host it is paired to. */
 export const WEB_RUNTIME_CLIENT_CAPABILITIES = [
@@ -38,5 +44,18 @@ export const WEB_RUNTIME_CLIENT_CAPABILITIES = [
   WORKTREE_BACKGROUND_REMOVAL_RUNTIME_CAPABILITY,
   TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY,
   // Same renderer as the desktop: a restored, unconfirmed agent row shows as identity only.
-  AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY
+  AGENT_STATUS_RESTORED_UNCONFIRMED_RUNTIME_CAPABILITY,
+  ...(isTauriNativeHost()
+    ? [
+        TAURI_DESKTOP_ACCOUNT_CONTROL_RUNTIME_CAPABILITY,
+        // Tauri hosts client pages in native child webviews like Electron.
+        BROWSER_CLIENT_HOST_RUNTIME_CAPABILITY,
+        BROWSER_CLIENT_PAGE_METADATA_RUNTIME_CAPABILITY
+        // Automation and file channel stay unadvertised at pairing time even
+        // though the attach handshake already claims them: the v1 engine
+        // still fail-closes exec, intercept, capture and setDevice, so
+        // advertising would route commands this host has to refuse.
+        // Advertise once the engine covers them.
+      ]
+    : [])
 ] as const

@@ -4,6 +4,7 @@ import { normalizeNodeDistMirrorUrl } from '../../../../shared/node-dist-mirror'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { translate } from '@/i18n/i18n'
+import { nodeDistMirrorRefusalText } from '@/ssh/ssh-host-node-download-copy'
 
 type MirrorDraft = { source: string; text: string; error: string | null }
 
@@ -29,7 +30,7 @@ export function NodeDistMirrorSettingField({
   const commit = (): void => {
     const normalized = normalizeNodeDistMirrorUrl(current.text)
     if (!normalized.ok) {
-      setDraft({ ...current, error: normalized.message })
+      setDraft({ ...current, error: nodeDistMirrorRefusalText(normalized.reason) })
       return
     }
     setDraft({ source, text: normalized.value, error: null })

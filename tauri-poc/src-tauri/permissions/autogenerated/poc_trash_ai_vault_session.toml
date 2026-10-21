@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-trash-ai-vault-session"
+description = "Enables the poc_trash_ai_vault_session command without any pre-configured scope."
+commands.allow = ["poc_trash_ai_vault_session"]
+
+[[permission]]
+identifier = "deny-poc-trash-ai-vault-session"
+description = "Denies the poc_trash_ai_vault_session command without any pre-configured scope."
+commands.deny = ["poc_trash_ai_vault_session"]

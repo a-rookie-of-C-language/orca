@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-get-feature-wall-asset-base-url"
+description = "Enables the poc_get_feature_wall_asset_base_url command without any pre-configured scope."
+commands.allow = ["poc_get_feature_wall_asset_base_url"]
+
+[[permission]]
+identifier = "deny-poc-get-feature-wall-asset-base-url"
+description = "Denies the poc_get_feature_wall_asset_base_url command without any pre-configured scope."
+commands.deny = ["poc_get_feature_wall_asset_base_url"]

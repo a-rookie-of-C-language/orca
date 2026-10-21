@@ -2,12 +2,15 @@
 import { Client as SshClient } from 'ssh2'
 import {
   createSshFileUploadSession,
+  downloadSshFolder,
   downloadSshFile,
+  readSshFileChunk,
   uploadSshDirectory,
   writeSshBuffer,
   writeSshFile,
   type SshFileTransferHost,
-  type SshRemoteFileOptions
+  type SshRemoteFileOptions,
+  type SshRemoteFileReadChunkResult
 } from './ssh-connection-file-transfers'
 import { trackSshConnectionChannelLifetime } from './ssh-connection-channel-lifetime'
 import type { ChildProcess } from 'node:child_process'
@@ -411,6 +414,27 @@ export class SshConnection {
   ): Promise<void> {
     return this.runAdmitted(() =>
       downloadSshFile(this.fileTransferHost(), remotePath, localPath, options)
+    )
+  }
+
+  downloadFolder(
+    remotePath: string,
+    localPath: string,
+    options?: SshRemoteFileOptions & { signal?: AbortSignal }
+  ): Promise<void> {
+    return this.runAdmitted(() =>
+      downloadSshFolder(this.fileTransferHost(), remotePath, localPath, options)
+    )
+  }
+
+  readFileChunk(
+    remotePath: string,
+    offset: number,
+    length: number,
+    options?: SshRemoteFileOptions
+  ): Promise<SshRemoteFileReadChunkResult> {
+    return this.runAdmitted(() =>
+      readSshFileChunk(this.fileTransferHost(), remotePath, offset, length, options)
     )
   }
 

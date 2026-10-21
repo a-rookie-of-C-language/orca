@@ -151,6 +151,27 @@ describe('fetchWorkspaceSessionFromHosts', () => {
     })
   })
 
+  it('attributes a runtime workspace from active pointers when no keyed maps exist', async () => {
+    const worktreeId = 'remote-repo::/srv/active-only'
+    const get = vi.fn(async (hostId?: string): Promise<WorkspaceSessionState> => {
+      if (hostId === 'runtime:env-1') {
+        return {
+          ...getDefaultWorkspaceSession(),
+          activeWorktreeId: worktreeId,
+          activeWorkspaceKey: worktreeWorkspaceKey(worktreeId),
+          tabsByWorktree: {}
+        }
+      }
+      return getDefaultWorkspaceSession()
+    })
+
+    const read = await fetchWorkspaceSessionWithRuntimeHostOwners({ get }, [], ['runtime:env-1'])
+
+    expect(read.runtimeHostIdByWorkspaceSessionKey).toEqual({
+      [worktreeId]: 'runtime:env-1'
+    })
+  })
+
   it('returns runtime owners for sleeping-agent-only runtime worktrees', async () => {
     const worktreeId = 'remote-repo::/srv/sleeping-wt'
     const get = vi.fn(async (hostId?: string): Promise<WorkspaceSessionState> => {

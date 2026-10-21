@@ -5,6 +5,7 @@ import {
 import { getPublicSshState } from '../../public-ssh-state'
 import { defineMethod, defineStreamingMethod } from '../core'
 import { ClientEventsUnsubscribeParams } from '../../../../shared/rpc-contract/client-events-params'
+import { getWslHostService } from '../../../wsl/wsl-host-service-instance'
 
 let clientEventSubscriptionSeq = 0
 
@@ -19,6 +20,15 @@ export const CLIENT_EVENT_METHODS = [
         // per-OSC batch frames from crossing the relay.
         const unsubscribe = runtime.onClientEvent(
           (event) => {
+            // SSH credentials are an interactive desktop prompt, never a phone surface.
+            if (
+              clientKind === 'mobile' &&
+              (event.type === 'sshCredentialRequest' ||
+                event.type === 'sshCredentialResolved' ||
+                event.type === 'wslHostStatusChanged')
+            ) {
+              return
+            }
             emit(event)
           },
           { consumesTerminalSideEffects: clientKind !== 'mobile' }
@@ -43,6 +53,9 @@ export const CLIENT_EVENT_METHODS = [
         for (const event of runtime.getNativeChatLaunchDraftResolutionClientEventSnapshot?.() ??
           []) {
           emit(event)
+        }
+        for (const status of getWslHostService()?.getStatuses() ?? []) {
+          emit({ type: 'wslHostStatusChanged', status })
         }
         const sshStates = listRegisteredSshTargets().flatMap((target) => {
           const state = getPublicSshState(getRegisteredSshState(target.id) ?? null)

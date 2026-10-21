@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-popup-menu"
+description = "Enables the poc_popup_menu command without any pre-configured scope."
+commands.allow = ["poc_popup_menu"]
+
+[[permission]]
+identifier = "deny-poc-popup-menu"
+description = "Denies the poc_popup_menu command without any pre-configured scope."
+commands.deny = ["poc_popup_menu"]

@@ -1,6 +1,6 @@
 import type { OpenFile } from '@/store/slices/editor'
 import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route'
-import { resolveWriteRoute } from '@/lib/resolve-owner'
+import { resolveWorktreeOperationRoute } from '@/lib/worktree-operation-route'
 import { toRuntimeExecutionHostId, toSshExecutionHostId } from '../../../../shared/execution-host'
 
 export function getEditorModelOwnerKey(file: OpenFile, state: WorktreeOperationRouteState): string {
@@ -8,7 +8,7 @@ export function getEditorModelOwnerKey(file: OpenFile, state: WorktreeOperationR
   const route =
     captured ??
     // The same focus-free owner the file's writes take, so retained text keys on that host.
-    resolveWriteRoute(
+    resolveWorktreeOperationRoute(
       state.activeWorktreeId === file.worktreeId ? { ...state, activeWorktreeId: null } : state,
       file.worktreeId
     )

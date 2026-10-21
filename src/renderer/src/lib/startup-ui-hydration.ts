@@ -20,6 +20,9 @@ export function hydratePersistedUIAfterStartupRead({
   }
 
   hydratePersistedUI(persistedUI, 'startup')
+  // Why: Electron's main applies the stored zoom on `dom-ready`; the Tauri
+  // shell has no persisted zoom state, so replay it after hydration.
+  globalThis.window?.api?.ui?.setZoomLevel?.(persistedUI.uiZoomLevel ?? 0)
   return true
 }
 

@@ -2,6 +2,8 @@ import type { AutomationService } from '../automations/service'
 import type {
   Automation,
   AutomationCreateInput,
+  AutomationDispatchResult,
+  AutomationPrecheckResult,
   AutomationRun,
   AutomationUpdateInput,
   AutomationWorkspaceMode
@@ -215,6 +217,20 @@ export class RuntimeAutomationController {
       service: this.service,
       fence: () => this.assertOwner(id, expectedOwner, 'execute')
     })
+  }
+
+  async runPrecheck(automationId: string, runId: string): Promise<AutomationPrecheckResult | null> {
+    if (!this.service) {
+      throw new Error('runtime_unavailable')
+    }
+    return this.service.runPrecheck(automationId, runId)
+  }
+
+  async markDispatchResult(result: AutomationDispatchResult): Promise<AutomationRun> {
+    if (!this.service) {
+      throw new Error('runtime_unavailable')
+    }
+    return this.service.markDispatchResult(result)
   }
 
   assertOwner(

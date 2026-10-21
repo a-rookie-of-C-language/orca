@@ -6,6 +6,7 @@ import {
   unregisterPersistentWebview,
   webviewRegistry
 } from '@/components/browser-pane/host-guest/webview-registry'
+import { createTauriNativeBrowserWebview, isTauriNativeHost } from '@/web/tauri-native-bridge'
 
 export function attachDocPreviewWebview({
   previewId,
@@ -30,11 +31,22 @@ export function attachDocPreviewWebview({
   onTitleUpdated: (event: Electron.PageTitleUpdatedEvent) => void
   onViewportMessage: (event: { message?: string }) => void
 }): { webview: Electron.WebviewTag; detach: () => void; reload: () => void } {
-  const webview = document.createElement('webview') as Electron.WebviewTag
-  // Why no allowpopups: the guest's preload intercepts a trusted click on a link before Chromium
-  // considers a popup at all, so target="_blank" needs no popup path and every one stays denied.
-  webview.setAttribute('partition', DOC_PREVIEW_PARTITION)
-  webview.setAttribute('webpreferences', ORCA_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE)
+  const webview = isTauriNativeHost()
+    ? createTauriNativeBrowserWebview({
+        browserPageId: previewId,
+        container,
+        partition: DOC_PREVIEW_PARTITION,
+        visible: true
+      })
+    : // SAFETY: Electron upgrades this custom element to WebviewTag at attach time.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the Electron custom element exposes WebviewTag methods after insertion.
+      (document.createElement('webview') as Electron.WebviewTag)
+  if (!isTauriNativeHost()) {
+    // Why no allowpopups: the guest's preload intercepts a trusted click on a link before Chromium
+    // considers a popup at all, so target="_blank" needs no popup path and every one stays denied.
+    webview.setAttribute('partition', DOC_PREVIEW_PARTITION)
+    webview.setAttribute('webpreferences', ORCA_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE)
+  }
   webview.setAttribute('aria-label', ariaLabel)
   // Browsers paint an undeclared page canvas white; the guest is transparent, so without this the
   // editor's dark surface shows through and default black text becomes unreadable.
@@ -56,7 +68,9 @@ export function attachDocPreviewWebview({
   webview.addEventListener('console-message', onViewportMessage)
   // Register before append so a guest attached mid-drag cannot swallow the pointer stream.
   registerPersistentWebview(previewId, webview)
-  container.appendChild(webview)
+  if (!isTauriNativeHost()) {
+    container.appendChild(webview)
+  }
   webview.setAttribute('src', url)
 
   return {

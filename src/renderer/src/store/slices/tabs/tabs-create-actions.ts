@@ -20,8 +20,8 @@ import {
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import { emptySplitGroup, insertSplitGroup } from './tabs-group-actions'
 import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
-import { applyDefaultChatPanelLayout } from './chat-panel-layout'
 import { createdTabPreviewFlag } from './tab-preview-flag'
+import { applyDefaultChatPanelLayout } from './chat-panel-layout'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -46,14 +46,9 @@ export function createTabsCreateActions(
           contentType === 'agent-session' && !init?.targetGroupId && !init?.split
             ? current.groupsByWorktree[worktreeId]?.find((group) => group.isChatPanel)
             : undefined
-        // Why: Code keeps chat right, so a file opened from the chat column splits left into the center.
-        const isCodeMode = current.settings?.workspaceMode === 'code'
         const implicitSplit =
           needsContentGroup && !contentGroup
-            ? {
-                sourceGroupId: requestedGroup.id,
-                splitDirection: isCodeMode ? ('left' as const) : ('right' as const)
-              }
+            ? { sourceGroupId: requestedGroup.id, splitDirection: 'right' as const }
             : undefined
         const split = init?.split ?? implicitSplit
         const createdSplitGroupId =
@@ -183,8 +178,7 @@ export function createTabsCreateActions(
               }
             }
           },
-          worktreeId,
-          current.settings?.workspaceMode
+          worktreeId
         )
       })
       if (init?.recordInteraction !== false) {
@@ -265,8 +259,7 @@ export function createTabsCreateActions(
               layoutByWorktree: nextLayoutByWorktree,
               activeGroupIdByWorktree: nextActiveGroupIdByWorktree
             },
-            worktreeId,
-            state.settings?.workspaceMode
+            worktreeId
           ),
           ...(shouldActivate && state.activeWorktreeId === worktreeId
             ? buildActiveSurfacePatch(

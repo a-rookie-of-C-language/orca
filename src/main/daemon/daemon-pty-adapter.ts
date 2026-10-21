@@ -23,7 +23,12 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
   }
 
   async getAsyncIoHealth(): Promise<DaemonAsyncIoStatus> {
-    if (!this.client.isConnected()) {
+    // The Tauri runtime can ask for daemon health before the first terminal is
+    // opened. Connect here so an idle but healthy daemon is not reported as
+    // unverifiable simply because no PTY has initialized the adapter yet.
+    try {
+      await this.ensureConnected()
+    } catch {
       return { state: 'unverifiable' }
     }
     try {

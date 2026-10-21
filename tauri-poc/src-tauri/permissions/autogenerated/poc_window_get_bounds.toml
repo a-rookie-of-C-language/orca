@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-window-get-bounds"
+description = "Enables the poc_window_get_bounds command without any pre-configured scope."
+commands.allow = ["poc_window_get_bounds"]
+
+[[permission]]
+identifier = "deny-poc-window-get-bounds"
+description = "Denies the poc_window_get_bounds command without any pre-configured scope."
+commands.deny = ["poc_window_get_bounds"]

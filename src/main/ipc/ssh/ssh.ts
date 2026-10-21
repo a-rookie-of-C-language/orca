@@ -8,6 +8,7 @@ import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
 import {
   getSshTargetRegistryStore,
   setSshConnectionManagerResolver,
+  setSshPortForwardManagerResolver,
   setSshTargetMutations,
   setSshTargetRegistryHandlers,
   setSshTargetRegistryStore
@@ -115,6 +116,7 @@ export function registerSshHandlers(
     awaitSignInForCredentialHosts(getSshTargetRegistryStore()!)
   }
   setPortForwardManager(portForwardManager ?? new SshPortForwardManager())
+  setSshPortForwardManagerResolver(() => portForwardManager)
   portForwardManager!.setCallbacks({
     onForwardClosed: (entry, reason) => {
       if (reason.kind === 'unexpected-exit') {
@@ -184,9 +186,10 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
   setConnectionManager(null)
   setSshConnectionManagerResolver(null)
   setPortForwardManager(null)
+  setSshPortForwardManagerResolver(null)
   setSshTargetRegistryStore(null)
   setPersistedStore(null)
-  setSshTargetRegistryHandlers({ connect: null, getState: null })
+  setSshTargetRegistryHandlers({ connect: null, getState: null, disconnect: null })
   setSshTargetMutations(null)
   setCurrentGetMainWindow(() => null)
   setCurrentRuntime(undefined)

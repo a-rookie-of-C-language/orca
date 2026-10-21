@@ -16,6 +16,7 @@
  */
 import { existsSync, accessSync, constants } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { join as posixJoin } from 'node:path/posix'
 import process from 'node:process'
 import { runProcessSync } from '@orca/process-host'
 import type { ProcessResult } from '@orca/process-host/process-spec'
@@ -187,8 +188,8 @@ export function classifyLoaderMessage(message: string): NodePtyProbeFailure {
  * whole indirection exists for.
  */
 export function buildNodePtyLoadProbeScript(nodePtyDir: string): string {
-  const entry = JSON.stringify(join(nodePtyDir, 'lib', 'index.js'))
-  const utils = JSON.stringify(join(nodePtyDir, 'lib', 'utils.js'))
+  const entry = JSON.stringify(posixJoin(nodePtyDir, 'lib', 'index.js'))
+  const utils = JSON.stringify(posixJoin(nodePtyDir, 'lib', 'utils.js'))
   const root = JSON.stringify(nodePtyDir)
   // Same directory order node-pty's own loader walks, so the file opened here is the file
   // it would load. Windows defers conpty.node to the first spawn, which is why the name is

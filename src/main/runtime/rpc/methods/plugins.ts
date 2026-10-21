@@ -8,11 +8,53 @@ import {
   type PluginConsentRequest
 } from '../../../../shared/plugins/plugin-consent-request'
 import {
+  PluginInstallParams,
+  PluginLogsParams,
+  PluginMarketplaceInstalledPluginParams,
+  PluginMarketplaceInstallParams,
+  PluginMarketplacePluginParams,
+  PluginMarketplaceRefreshParams,
+  PluginMarketplaceSourceIdParams,
+  PluginMarketplaceSourceParams,
+  PluginRemoveParams,
   PluginInvokeCommandParams,
   PluginReadPanelEntryParams,
   PluginSetEnabledParams,
   PluginsPanelActionParams
 } from '../../../../shared/rpc-contract/plugins-params'
+import type {
+  PluginHostInstallResult,
+  PluginHostInstallSource,
+  PluginHostListEntry,
+  PluginHostLogLine,
+  PluginMarketplaceHostInstallPreview,
+  PluginMarketplaceHostListing,
+  PluginMarketplaceHostSourceState
+} from '../../../../preload/api/plugin-host-api'
+import type { PluginMarketplaceGitSource } from '../../../../shared/plugins/plugin-marketplace'
+
+export type PluginManagementForRpc = {
+  install: (source: PluginHostInstallSource) => Promise<PluginHostInstallResult>
+  remove: (pluginKey: string) => Promise<PluginHostListEntry[]>
+  getLogs: (pluginKey: string) => Promise<PluginHostLogLine[]>
+  listMarketplaces: () => Promise<PluginMarketplaceHostSourceState[]>
+  addMarketplace: (source: PluginMarketplaceGitSource) => Promise<PluginMarketplaceHostSourceState>
+  removeMarketplace: (sourceId: string) => Promise<PluginMarketplaceHostSourceState[]>
+  refreshMarketplaces: (sourceId?: string) => Promise<PluginMarketplaceHostSourceState[]>
+  listMarketplacePlugins: () => Promise<PluginMarketplaceHostListing[]>
+  previewMarketplacePlugin: (
+    marketplaceSourceId: string,
+    pluginKey: string
+  ) => Promise<PluginMarketplaceHostInstallPreview>
+  installMarketplacePlugin: (preview: {
+    marketplaceSourceId: string
+    marketplaceCommit: string
+    pluginKey: string
+    resolvedCommit: string
+  }) => Promise<PluginHostInstallResult>
+  previewMarketplaceUpdate: (pluginKey: string) => Promise<PluginMarketplaceHostInstallPreview>
+  rollbackMarketplacePlugin: (pluginKey: string) => Promise<PluginHostInstallResult>
+}
 
 /**
  * Serve/headless parity surface: the same consent, enablement, panel-action,
@@ -29,17 +71,20 @@ let pluginServiceForRpc: PluginService | null = null
 // closures instead of the store itself.
 let pluginConsentForRpc: ((request: PluginConsentRequest) => Promise<void>) | null = null
 let pluginEnablementForRpc: ((pluginKey: string, enabled: boolean) => Promise<void>) | null = null
+let pluginManagementForRpc: PluginManagementForRpc | null = null
 
 export function setPluginServiceForRpc(
   service: PluginService | null,
   writes?: {
     applyConsent: (request: PluginConsentRequest) => Promise<void>
     applyEnablement: (pluginKey: string, enabled: boolean) => Promise<void>
-  }
+  },
+  management?: PluginManagementForRpc
 ): void {
   pluginServiceForRpc = service
   pluginConsentForRpc = writes?.applyConsent ?? null
   pluginEnablementForRpc = writes?.applyEnablement ?? null
+  pluginManagementForRpc = management ?? null
 }
 
 function requirePluginService(): PluginService {
@@ -71,6 +116,27 @@ export const PLUGIN_METHODS = [
     permission: 'workspace',
     params: null,
     handler: async () => listForRpc()
+  }),
+  defineMethod({
+    name: 'plugins.listLanguagePacks',
+    permission: 'workspace',
+    params: null,
+    handler: async () => {
+      const service = requirePluginService()
+      await service.whenReady()
+      return service.contentPacks.languagePacks.list()
+    }
+  }),
+  defineMethod({
+    name: 'plugins.install',
+    permission: 'host-admin',
+    params: PluginInstallParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin installation is not available on this runtime')
+      }
+      return pluginManagementForRpc.install(params)
+    }
   }),
   defineMethod({
     // Why: headless serve has no consent dialog — an explicit consent call is
@@ -143,6 +209,130 @@ export const PLUGIN_METHODS = [
       const service = requirePluginService()
       await service.whenReady()
       return service.invokeCommand(params.pluginKey, params.commandId, params.args)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.remove',
+    permission: 'host-admin',
+    params: PluginRemoveParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin removal is not available on this runtime')
+      }
+      return pluginManagementForRpc.remove(params.pluginKey)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.getLogs',
+    permission: 'workspace',
+    params: PluginLogsParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin logs are not available on this runtime')
+      }
+      return pluginManagementForRpc.getLogs(params.pluginKey)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.listMarketplaces',
+    permission: 'workspace',
+    params: null,
+    handler: async () => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.listMarketplaces()
+    }
+  }),
+  defineMethod({
+    name: 'plugins.addMarketplace',
+    permission: 'host-admin',
+    params: PluginMarketplaceSourceParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.addMarketplace(params)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.removeMarketplace',
+    permission: 'host-admin',
+    params: PluginMarketplaceSourceIdParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.removeMarketplace(params.sourceId)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.refreshMarketplaces',
+    permission: 'host-admin',
+    params: PluginMarketplaceRefreshParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.refreshMarketplaces(params.sourceId)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.listMarketplacePlugins',
+    permission: 'workspace',
+    params: null,
+    handler: async () => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.listMarketplacePlugins()
+    }
+  }),
+  defineMethod({
+    name: 'plugins.previewMarketplacePlugin',
+    permission: 'workspace',
+    params: PluginMarketplacePluginParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.previewMarketplacePlugin(
+        params.marketplaceSourceId,
+        params.pluginKey
+      )
+    }
+  }),
+  defineMethod({
+    name: 'plugins.installMarketplacePlugin',
+    permission: 'host-admin',
+    params: PluginMarketplaceInstallParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.installMarketplacePlugin(params)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.previewMarketplaceUpdate',
+    permission: 'workspace',
+    params: PluginMarketplaceInstalledPluginParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.previewMarketplaceUpdate(params.pluginKey)
+    }
+  }),
+  defineMethod({
+    name: 'plugins.rollbackMarketplacePlugin',
+    permission: 'host-admin',
+    params: PluginMarketplaceInstalledPluginParams,
+    handler: async (params) => {
+      if (!pluginManagementForRpc) {
+        throw new Error('Plugin marketplaces are not available on this runtime')
+      }
+      return pluginManagementForRpc.rollbackMarketplacePlugin(params.pluginKey)
     }
   })
 ]

@@ -36,7 +36,7 @@ type GitHubRepositoryQueryCommandName =
 export type RuntimeRepositoryCommandSurface = {
   listProjects: RuntimeProjectHostSetupController['listProjects']
   updateProject: RuntimeProjectHostSetupController['updateProject']
-  listProjectHostSetups: RuntimeProjectHostSetupController['listSetups']
+  listVisibleProjectHostSetups: RuntimeProjectHostSetupController['listVisibleSetups']
   createProjectHostSetup: RuntimeProjectHostSetupController['createSetup']
   setupProjectExistingFolder: RuntimeProjectHostSetupController['setupExistingFolder']
   setupProjectClone: RuntimeProjectHostSetupController['setupClone']
@@ -61,6 +61,7 @@ export type RuntimeRepositoryCommandSurface = {
   isGitAvailable: RuntimeServerEnvironmentCommands['isGitAvailable']
   listSparsePresets: RuntimeRepositorySparsePresets['list']
   saveSparsePreset: RuntimeRepositorySparsePresets['save']
+  removeSparsePreset: RuntimeRepositorySparsePresets['remove']
   addRepo: RuntimeRepositoryRegistrationController['add']
   createRepo: RuntimeRepositoryRegistrationController['create']
   cloneRepo: RuntimeRepositoryCloneController['clone']
@@ -114,7 +115,7 @@ export function installRuntimeRepositoryCommandSurface(
   Object.assign(target, {
     listProjects: host.listProjects.bind(host),
     updateProject: host.updateProject.bind(host),
-    listProjectHostSetups: host.listSetups.bind(host),
+    listVisibleProjectHostSetups: host.listVisibleSetups.bind(host),
     createProjectHostSetup: host.createSetup.bind(host),
     setupProjectExistingFolder: host.setupExistingFolder.bind(host),
     setupProjectClone: host.setupClone.bind(host),
@@ -139,6 +140,7 @@ export function installRuntimeRepositoryCommandSurface(
     isGitAvailable: server.isGitAvailable.bind(server),
     listSparsePresets: sparse.list.bind(sparse),
     saveSparsePreset: sparse.save.bind(sparse),
+    removeSparsePreset: sparse.remove.bind(sparse),
     addRepo: registrations.add.bind(registrations),
     createRepo: registrations.create.bind(registrations),
     cloneRepo: clones.clone.bind(clones),

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-poc-finish-downloaded-file"
+description = "Enables the poc_finish_downloaded_file command without any pre-configured scope."
+commands.allow = ["poc_finish_downloaded_file"]
+
+[[permission]]
+identifier = "deny-poc-finish-downloaded-file"
+description = "Denies the poc_finish_downloaded_file command without any pre-configured scope."
+commands.deny = ["poc_finish_downloaded_file"]
