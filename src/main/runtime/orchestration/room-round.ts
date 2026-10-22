@@ -142,6 +142,11 @@ function openingSpeakers(room: RoomWithMembers, text: string): RoomMemberRow[] {
     const admin = room.members.find((m) => m.member_id === room.admin_member_id)
     return admin ? [admin] : []
   }
+  if (room.mode === 'admin') {
+    // Older rooms can carry an admin row before `rooms.admin_member_id` was filled.
+    const admin = room.members.find((m) => m.is_admin === 1)
+    return admin ? [admin] : []
+  }
   // everyone mode with no @-mentions: the whole roster in roster order.
   return room.members
 }
@@ -232,15 +237,24 @@ export type RoomRoundDeps = {
  */
 export async function runRoomRound(
   room: RoomWithMembers,
-  trigger: { text: string; who?: string; memberId?: string | null },
+  trigger: {
+    text: string
+    who?: string
+    memberId?: string | null
+    targetMemberId?: string
+  },
   deps: RoomRoundDeps
 ): Promise<{ seq: number; slots: RoomSlot[] }> {
   const { db, host } = deps
-  const opening = openingSpeakers(room, trigger.text)
+  const targetMember = trigger.targetMemberId
+    ? room.members.find((m) => m.member_id === trigger.targetMemberId)
+    : undefined
+  const opening = targetMember ? [targetMember] : openingSpeakers(room, trigger.text)
   const startSeq = db.appendRoomLine(room.id, {
     who: trigger.who ?? 'User',
     memberId: trigger.memberId ?? null,
-    text: trigger.text
+    text: trigger.text,
+    ...(targetMember ? { payload: JSON.stringify({ targetMemberId: targetMember.member_id }) } : {})
   })
 
   const slots: RoomSlot[] = opening.map((m) => ({
@@ -282,16 +296,19 @@ export async function runRoomRound(
 
     switch (sent.kind) {
       case 'sent':
+        deps.db.setRoomMemberStatus(room.id, member.member_id, 'working')
         slot.status = 'speaking' // still speaking; reply comes back through the room mailbox
         break
       case 'queued':
         // Busy chat holds our prompt as a draft: surface it as working so the
         // room shows "it is working" instead of silently looking idle.
         slot.status = 'working'
+        deps.db.setRoomMemberStatus(room.id, member.member_id, 'working')
         break
       case 'refused':
       case 'failed':
         slot.status = 'failed'
+        deps.db.setRoomMemberStatus(room.id, member.member_id, 'failed')
         db.appendRoomLine(room.id, {
           who: member.name,
           memberId: member.member_id,
@@ -318,6 +335,7 @@ export async function postRoomReply(
   const member = room.members.find((m) => m.member_id === memberId)
   if (!member) throw new Error(`Member ${memberId} is not in room ${room.id}`)
   const stripped = stripRoomSpeakerName(member.name, text.trim())
+  deps.db.setRoomMemberStatus(room.id, memberId, 'idle')
   if (isPass(stripped)) return { seq: room.seq, followUps: [] }
   const seq = deps.db.appendRoomLine(room.id, {
     who: member.name,

@@ -97,6 +97,19 @@ describe('room-admin-tools', () => {
     expect(db.getRoomByName('hq')?.members.map((m) => m.name)).not.toContain('scout')
   })
 
+  it('passes a natural-language model choice to spawned bots', async () => {
+    const { rt } = runtimeFor(new OrchestrationDb(':memory:'))
+    await runAdminToolCalls(
+      rt,
+      fence(
+        '{"tool": "room_bot_create", "room": "hq", "name": "planner", "model": "gpt-5.2-codex", "effort": "high"}'
+      )
+    )
+    expect(rt.spawnBot).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gpt-5.2-codex', effort: 'high' })
+    )
+  })
+
   it('sends, adds, removes, and reads the log', async () => {
     const { db, rt, sent } = runtimeFor(new OrchestrationDb(':memory:'))
     const room = db.getRoomByName('hq')!

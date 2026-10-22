@@ -8,6 +8,8 @@ export type RoomMember = {
   memberId: string
   name: string
   isAdmin: boolean
+  status?: 'idle' | 'working' | 'waiting' | 'failed'
+  statusUpdatedAt?: string
 }
 
 export type Room = {
@@ -16,6 +18,8 @@ export type Room = {
   mode: 'admin' | 'everyone'
   adminMemberId: string | null
   notice: string
+  seq?: number
+  latestLine?: RoomPreviewLine | null
   members: RoomMember[]
 }
 
@@ -25,7 +29,12 @@ export type RoomLine = {
   memberId: string | null
   text: string
   kind: string | null
+  targetMemberId?: string | null
   createdAt: string
+}
+
+export type RoomPreviewLine = Pick<RoomLine, 'who' | 'text' | 'createdAt'> & {
+  memberId: string | null
 }
 
 export type AgentSessionOption = { sessionId: string; label: string; worktreeId: string }

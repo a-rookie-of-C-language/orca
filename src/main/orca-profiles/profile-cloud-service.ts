@@ -19,13 +19,13 @@ import {
   exchangeOrcaCloudAuthCode,
   revokeOrcaCloudSession
 } from './profile-cloud-client'
-import { beginOrcaCloudPkceFlow } from './profile-cloud-pkce'
 import {
   createCloudLinkedOrcaProfileRecord,
   linkOrcaProfileToCloud,
   unlinkOrcaProfileFromCloud
 } from './profile-cloud-index'
 import { runWithFreshOrcaCloudSession } from './profile-cloud-session-refresh'
+import { createRequire } from 'node:module'
 import {
   connectDevOrcaCloudProfile,
   createDevCloudLinkedOrcaProfile,
@@ -50,6 +50,11 @@ function invalidateOutstandingCloudConnectAttempts(): void {
   linkedCloudConnectAttempt = nextCloudConnectAttempt
   endOrcaCloudSignInProgress()
 }
+
+// Why: `createRequire` is not statically traced by esbuild, so the electron-importing
+// pkce module stays out of the orcad bundle graph. Desktop (electron present) resolves it.
+const requirePkce = (): typeof import('./profile-cloud-pkce') =>
+  createRequire(__filename)('./profile-cloud-pkce') as typeof import('./profile-cloud-pkce')
 
 function activeAuth(
   active: ReturnType<typeof ensureActiveOrcaProfile>,
@@ -88,6 +93,10 @@ export async function connectCurrentOrcaProfile(
   const browserWait = new AbortController()
   startOrcaCloudSignInProgress(attempt, () => browserWait.abort())
   try {
+    // Why createRequire: profile-cloud-pkce statically imports electron, which the orcad
+    // bundle forbids in any traced import edge. Dev-auth returns above, so only the
+    // real-OAuth desktop path ever loads it — resolved lazily so esbuild sees no edge.
+    const { beginOrcaCloudPkceFlow } = requirePkce()
     const code = await beginOrcaCloudPkceFlow(configState.config, active.profile.id, {
       signal: browserWait.signal,
       onAuthorizeUrl: (link) => setOrcaCloudSignInLink(attempt, link)

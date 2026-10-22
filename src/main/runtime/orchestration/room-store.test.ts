@@ -18,6 +18,7 @@ describe('room store', () => {
     expect(room.admin_member_id).toBe(alice.memberId)
     expect(room.members).toHaveLength(2)
     expect(room.members.map((m) => m.name).sort()).toEqual(['alice', 'beta'])
+    expect(room.members.map((m) => m.status)).toEqual(['idle', 'idle'])
   })
 
   it('finds a room by name case-insensitively', () => {
@@ -66,6 +67,17 @@ describe('room store', () => {
     expect(aliceUnseen.map((l) => l.text)).toEqual(['l1', 'l3'])
   })
 
+  it('tracks whether a member is working', () => {
+    const db = open()
+    const room = db.createRoom({ name: 'status', members: [alice] })
+
+    db.setRoomMemberStatus(room.id, alice.memberId, 'working')
+    expect(db.getRoom(room.id)?.members[0].status).toBe('working')
+
+    db.setRoomMemberStatus(room.id, alice.memberId, 'idle')
+    expect(db.getRoom(room.id)?.members[0].status).toBe('idle')
+  })
+
   it('removes members and rooms', () => {
     const db = open()
     const room = db.createRoom({ name: 'x', members: [alice, beta] })
@@ -74,5 +86,15 @@ describe('room store', () => {
     db.deleteRoom(room.id)
     expect(db.getRoom(room.id)).toBeUndefined()
     expect(db.getRoomByName('x')).toBeUndefined()
+  })
+
+  it('keeps the room admin pointer in sync with admin rows', () => {
+    const db = open()
+    const room = db.createRoom({ name: 'admin-pointer', members: [] })
+    db.addRoomMember(room.id, { ...alice, isAdmin: true })
+    expect(db.getRoom(room.id)?.admin_member_id).toBe(alice.memberId)
+
+    db.removeRoomMember(room.id, alice.memberId)
+    expect(db.getRoom(room.id)?.admin_member_id).toBeNull()
   })
 })

@@ -13,6 +13,8 @@ import type { SidebarInputsChangedEvent } from './sidebar-list/sidebar-inputs-fe
 import type { WslHostStatus } from './wsl-host-types'
 import type { AiVaultScanProgressUpdate } from './ai-vault-scan-progress'
 import type { LegacyRelayBridgedPane } from './legacy-relay-bridge-contract'
+import type { MobileRelayStatusDetail } from './mobile-relay-status'
+import type { OrcaCloudSignInProgress } from './orca-profiles'
 
 export type RuntimeClientEvent =
   | { type: 'reposChanged' }
@@ -88,6 +90,9 @@ export type RuntimeClientEvent =
       /** Absent on older hosts; clients must not infer navigation intent from a broadcast. */
       navigation?: RuntimeNavigationTarget
     }
+  | ({ type: 'mobileRelayStatusChanged' } & MobileRelayStatusDetail)
+  | { type: 'orcaProfileAuthStatusChanged' }
+  | { type: 'orcaProfileSignInProgressChanged'; progress: OrcaCloudSignInProgress | null }
 
 export type RuntimeClientEventStreamMessage =
   | ({ type: 'ready'; subscriptionId: string } & {

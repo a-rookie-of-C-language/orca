@@ -18,7 +18,7 @@ const viteEntry = resolve(root, 'node_modules/vite/bin/vite.js')
 const cargo = process.env.CARGO ?? 'cargo'
 const environment = {
   ...process.env,
-  ORCA_BACKGROUND_LAUNCH: process.env.ORCA_BACKGROUND_LAUNCH ?? '1',
+  ORCA_BACKGROUND_LAUNCH: process.env.ORCA_BACKGROUND_LAUNCH ?? '0',
   ORCA_DEV_REPO_ROOT: root,
   ORCA_TAURI_DEV_SUPERVISED: '1',
   ORCA_TAURI_NODE: process.execPath

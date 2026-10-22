@@ -14,20 +14,26 @@ export function useRooms() {
   const activeWorktreeId = useActiveWorktreeId()
   const worktrees = useAllWorktrees()
   const ensuredHq = useRef(false)
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     try {
       const result = await callRuntimeRpc<{ rooms: Room[] }>(LOCAL, 'orchestration.roomList')
       setRooms(result.rooms)
     } catch (error) {
-      toast.error(
-        `${translate('auto.components.rooms.useRooms.listFailed', 'Failed to list rooms')}: ${(error as Error).message}`
-      )
+      if (!options?.silent) {
+        toast.error(
+          `${translate('auto.components.rooms.useRooms.listFailed', 'Failed to list rooms')}: ${(error as Error).message}`
+        )
+      }
     } finally {
       setLoading(false)
     }
   }, [])
   useEffect(() => {
     void refresh()
+  }, [refresh])
+  useEffect(() => {
+    const timer = setInterval(() => void refresh({ silent: true }), 3_000)
+    return () => clearInterval(timer)
   }, [refresh])
   const ensureWorktreeId = activeWorktreeId ?? worktrees[0]?.id
   useEffect(() => {
@@ -37,12 +43,6 @@ export function useRooms() {
     ensuredHq.current = true
     void (async () => {
       try {
-        const listed = await callRuntimeRpc<{ rooms: Room[] }>(LOCAL, 'orchestration.roomList')
-        const hq = listed.rooms.find((room) => room.name === 'Orca HQ')
-        if (hq && hq.members.length > 0) {
-          setRooms(listed.rooms)
-          return
-        }
         const created = await callRuntimeRpc<{ room: Room; adminSeated: boolean }>(
           LOCAL,
           'orchestration.roomEnsureMainBot',

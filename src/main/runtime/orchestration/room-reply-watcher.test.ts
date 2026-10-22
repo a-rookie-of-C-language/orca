@@ -7,7 +7,11 @@ import { ensureRoomReplyWatcher } from './room-reply-watcher'
 const aliceMember = 'orca_session_id:session_alice_0001'
 const betaMember = 'orca_session_id:session_beta_0002'
 
-type Subscriber = { emit: (event: AgentSessionTurnCompletionEvent) => void }
+type Subscriber = {
+  includePrompts?: boolean
+  onState?: (state: { sessionId: string; pendingPromptIds: readonly string[] }) => void
+  emit: (event: AgentSessionTurnCompletionEvent) => void
+}
 
 const hostWith = (snapshotItems: unknown[] = []) => {
   const subscribers: Subscriber[] = []
@@ -52,6 +56,16 @@ const completionFor = (sessionId: string, turnId: string): AgentSessionTurnCompl
     turnId,
     outcome: { kind: 'success' } as never,
     completedAt: Date.now()
+  }
+})
+
+const promptFor = (sessionId: string): AgentSessionTurnCompletionEvent => ({
+  type: 'prompt',
+  prompt: {
+    scope: { kind: 'local', hostId: 'h', workspaceId: 'w' } as never,
+    sessionId,
+    promptId: 'prompt-1',
+    raisedAt: Date.now()
   }
 })
 
@@ -127,6 +141,37 @@ describe('room-reply-watcher', () => {
     expect(host.subscribeTurnCompletions).toHaveBeenCalledTimes(1)
   })
 
+  it('marks a member waiting while a prompt is pending and idle when it completes', async () => {
+    const db = new OrchestrationDb(':memory:')
+    const room = seedRoom(db)
+    const { host, subscribers } = hostWith([assistantItem('turn-1', 'after approval')])
+    ensureRoomReplyWatcher({ db, host })
+
+    expect(subscribers[0].includePrompts).toBe(true)
+    subscribers[0].emit(promptFor('session_beta_0002'))
+    await vi.waitFor(() => {
+      expect(roomStatus(db, room.id, 'beta')).toBe('waiting')
+    })
+
+    subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
+    await vi.waitFor(() => {
+      expect(roomStatus(db, room.id, 'beta')).toBe('idle')
+    })
+  })
+
+  it('restores waiting state from the host attention snapshot', () => {
+    const db = new OrchestrationDb(':memory:')
+    const room = seedRoom(db)
+    const { host, subscribers } = hostWith()
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].onState?.({
+      sessionId: 'session_beta_0002',
+      pendingPromptIds: ['prompt-1']
+    })
+    expect(roomStatus(db, room.id, 'beta')).toBe('waiting')
+  })
+
   it('in admin mode, a non-admin reply nudges the admin to summarize', async () => {
     const db = new OrchestrationDb(':memory:')
     const room = seedAdminRoom(db)
@@ -164,3 +209,11 @@ describe('room-reply-watcher', () => {
     expect(sends).toHaveLength(0)
   })
 })
+
+function roomStatus(db: OrchestrationDb, roomId: string, name: string): string | undefined {
+  return (
+    db.db
+      .prepare(`SELECT status FROM room_members WHERE room_id = ? AND name = ?`)
+      .get(roomId, name) as { status?: string } | undefined
+  )?.status
+}

@@ -16,6 +16,8 @@ import { limitRuntimeRpcReplySize } from './runtime-rpc-reply-size-limit'
 import { MOBILE_RPC_METHOD_ALLOWLIST } from './runtime-rpc-mobile-method-allowlist'
 import { MOBILE_RPC_METHOD_ROUTES } from './runtime-rpc-mobile-method-routing'
 import { parseExecutionHostId } from '../../../shared/execution-host'
+import type { RuntimeRpcPairing } from './runtime-rpc-pairing'
+import type { RuntimeRpcMobilePairing } from './runtime-rpc-mobile-pairing'
 
 // Why: status.get has no per-connection context in the dispatcher, so stamp the scope here at the transport boundary.
 function injectDeviceScope(response: string, scope: DeviceScope): string {
@@ -32,6 +34,17 @@ function injectDeviceScope(response: string, scope: DeviceScope): string {
 }
 
 export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
+  // Why: the surface the mobile RPC context binds to; assigned by the concrete server once its
+  // pairing methods exist. Never touched before the first dispatch since the server installs it in
+  // its constructor before any socket can authenticate.
+  protected mobileRpcSurface!: {
+    createMobilePairingOffer: RuntimeRpcMobilePairing['createMobilePairingOffer']
+    createPairingOffer: RuntimeRpcPairing['createPairingOffer']
+    getWebSocketEndpoint: () => string | null
+    getNetworkExposureBindHost: () => string
+    ensureNetworkExposure: () => Promise<void>
+  }
+
   // Why: a phone names a server's workspace with `executionHost`; only configured servers are reached,
   // and a target the desktop cannot reach is an error, never a silent local run.
   // Returns the request to dispatch locally, or null once it was relayed or answered.
@@ -249,6 +262,19 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
               }
             : undefined,
         pairing: pairingContext,
+        mobile: {
+          // Why: dispatch sits below the pairing classes in the chain; these resolve on the
+          // concrete server instance at runtime, so bind through its public surface.
+          createMobilePairingOffer: (args) => this.mobileRpcSurface.createMobilePairingOffer(args),
+          listPairedDevices: () => this.deviceRegistry?.listDevices() ?? [],
+          listRuntimeAccessGrants: () => this.deviceRegistry?.listDevices() ?? [],
+          revokeMobileDevice: (deviceId) => this.revokeMobileDevice(deviceId),
+          revokeRuntimeAccess: (deviceId) => this.revokeRuntimeAccess(deviceId),
+          getWebSocketEndpoint: () => this.mobileRpcSurface.getWebSocketEndpoint(),
+          getNetworkExposureBindHost: () => this.mobileRpcSurface.getNetworkExposureBindHost(),
+          ensureNetworkExposure: () => this.mobileRpcSurface.ensureNetworkExposure(),
+          createPairingOffer: (args) => this.mobileRpcSurface.createPairingOffer(args)
+        },
         deviceSelf:
           authenticatedSocket && this.deviceRegistry
             ? {

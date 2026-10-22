@@ -5,9 +5,12 @@ import { pathToFileURL } from 'node:url'
 
 // Reuse orcad's launcher-disconnect contract; never terminate the persistent PTY daemon.
 export function superviseRuntime({ entry, input, owner = process, spawn = spawnProcess }) {
+  // ORCA_RUNTIME_BIND_HOST widens the WS listener (e.g. '0.0.0.0' for Tailscale/LAN
+  // pairing); loopback stays the default.
+  const bindHost = process.env.ORCA_RUNTIME_BIND_HOST || '127.0.0.1'
   const child = spawn({
     program: process.execPath,
-    args: [entry, '--bind', '127.0.0.1', '--port', '0', '--json'],
+    args: [entry, '--bind', bindHost, '--port', '0', '--json'],
     env: { ...process.env, ORCA_BUNDLED_LAUNCHER_CHANNEL: '1' },
     detached: true,
     stdio: ['ignore', 'inherit', 'inherit', 'ipc']

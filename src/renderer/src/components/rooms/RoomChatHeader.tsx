@@ -1,90 +1,114 @@
-import { Bot, Crown, Trash2, UserPlus } from 'lucide-react'
+import { ArrowLeft, EllipsisVertical, Settings2, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { Room } from './room-types'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import type { Room, RoomMember } from './room-types'
+import { RoomMemberAvatar } from './RoomMemberAvatar'
 
-/** Room title row: name, mode, admin, and the spawn / add / delete actions. */
+/** Chat-first header; setup and destructive actions stay in a quiet menu. */
 export function RoomChatHeader(props: {
   selected: Room
   adminName: string | null
-  onToggleSpawn: () => void
-  onToggleAdd: () => void
+  directMember: RoomMember | null
+  onExitDirect: () => void
+  onOpenMembers: () => void
   onDelete: () => void
 }) {
-  // Why: this memo boundary needs its own language subscription, while
-  // translate() preserves Orca's pseudo-localization behavior.
   useTranslation()
-  const { selected, adminName } = props
+  const { selected, adminName, directMember } = props
+  const isHome = selected.name === 'Orca HQ'
+
   return (
-    <header className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-2">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 font-semibold">
-          {selected.name === 'Orca HQ' ? <Crown className="h-4 w-4 text-amber-500" /> : null}
-          <span className="truncate">{selected.name}</span>
-          <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[11px] text-muted-foreground">
-            {selected.mode}
-          </span>
-        </div>
-        {adminName ? (
-          <div className="truncate text-xs text-muted-foreground">
-            {translate('auto.components.rooms.page.adminLabel', 'admin: {{name}}', {
-              name: adminName
-            })}
-          </div>
+    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-2">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {directMember ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={props.onExitDirect}
+            aria-label={translate('auto.components.rooms.page.backToRoom', 'Back to room')}
+          >
+            <ArrowLeft />
+          </Button>
         ) : null}
+        <RoomMemberAvatar
+          member={
+            directMember
+              ? { ...directMember }
+              : {
+                  name: adminName ?? selected.name,
+                  isAdmin: Boolean(adminName)
+                }
+          }
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <span className="truncate">
+              {directMember
+                ? directMember.name
+                : isHome
+                  ? (adminName ?? selected.name)
+                  : selected.name}
+            </span>
+            {!directMember && isHome && adminName ? (
+              <span className="rounded-full border border-annotation-highlight/50 bg-annotation-highlight/10 px-1.5 py-px text-2xs text-annotation-highlight dark:text-annotation-highlight">
+                {translate('auto.components.rooms.page.adminRole', 'Admin')}
+              </span>
+            ) : null}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {directMember
+              ? translate('auto.components.rooms.page.directRoomHint', 'Focused chat in {{room}}', {
+                  room: selected.name
+                })
+              : isHome
+                ? translate(
+                    'auto.components.rooms.page.homeHint',
+                    'Ask in plain language to create bots or group chats'
+                  )
+                : adminName
+                  ? translate('auto.components.rooms.page.adminLeads', '{{name}} leads this team', {
+                      name: adminName
+                    })
+                  : translate('auto.components.rooms.page.memberCountOnly', '{{count}} members', {
+                      count: selected.members.length
+                    })}
+          </div>
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={props.onToggleSpawn}
-              aria-label={translate(
-                'auto.components.rooms.page.spawnBot',
-                'Spawn a bot into this room'
-              )}
-            >
-              <Bot className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.components.rooms.page.spawnBot', 'Spawn a bot into this room')}
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={props.onToggleAdd}
-              aria-label={translate('auto.components.rooms.page.addMember', 'Add member')}
-            >
-              <UserPlus className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.components.rooms.page.addMember', 'Add member')}
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={props.onDelete}
-              aria-label={translate('auto.components.rooms.page.deleteRoom', 'Delete room')}
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {translate('auto.components.rooms.page.deleteRoom', 'Delete room')}
-          </TooltipContent>
-        </Tooltip>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={translate('auto.components.rooms.page.actions', 'Room actions')}
+          >
+            <EllipsisVertical />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={props.onOpenMembers}>
+            <Settings2 />
+            {translate('auto.components.rooms.page.manageMembers', 'Manage members')}
+          </DropdownMenuItem>
+          {!isHome ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={props.onDelete}>
+                <Trash2 />
+                {translate('auto.components.rooms.page.deleteRoom', 'Delete room')}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   )
 }

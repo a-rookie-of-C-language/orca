@@ -16,10 +16,10 @@ export function RoomWelcomeHero(props: {
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col items-center px-6 py-10 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
-        <Crown className="h-5 w-5 text-amber-500" />
+        <Crown className="h-5 w-5 text-annotation-highlight" />
       </div>
-      <div className="mt-3 text-sm font-semibold">{props.roomName}</div>
-      <div className="mt-1 text-xs text-muted-foreground">
+      <div className="mt-3 text-lg font-semibold">{props.adminName ?? props.roomName}</div>
+      <div className="mt-2 text-sm text-muted-foreground">
         {props.adminName
           ? translate('auto.components.rooms.hero.adminLeads', '{{name}} is the admin here. ', {
               name: props.adminName
@@ -27,54 +27,46 @@ export function RoomWelcomeHero(props: {
           : ''}
         {translate(
           'auto.components.rooms.hero.subtitle',
-          'Talk in plain words — the admin calls the right bot for you.'
+          'Describe the team or task you need. The chief can create bots and start group chats.'
         )}
       </div>
-      <div className="mt-4 grid w-full gap-2 text-left">
-        <div className="rounded-lg border border-border/60 bg-card p-3 text-xs leading-relaxed text-muted-foreground">
-          <div className="mb-1 font-medium text-foreground">
-            {translate('auto.components.rooms.hero.howTitle', 'How rooms work')}
-          </div>
-          <div>
-            {translate(
-              'auto.components.rooms.hero.howAdmin',
-              '· Your message goes to the admin first.'
-            )}
-          </div>
-          <div>
-            {translate(
-              'auto.components.rooms.hero.howMention',
-              '· Type @Name to call one member directly.'
-            )}
-          </div>
-          <div>
-            {translate(
-              'auto.components.rooms.hero.howCreate',
-              '· Say “create a bot / start a group” and the admin does it.'
-            )}
-          </div>
-        </div>
+      <div className="mt-5 grid w-full gap-2">
         <div className="flex flex-wrap justify-center gap-2">
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => props.onQuickSend('你好，介绍一下你能做什么，可以建 bot 和群聊吗？')}
+            onClick={() => props.onQuickSend('你好，请介绍一下你能帮我做什么？')}
           >
             <Sparkles className="h-3.5 w-3.5" />{' '}
             {translate('auto.components.rooms.hero.sayHi', 'Say hi')}
           </Button>
-          <Button size="sm" variant="outline" onClick={props.onSpawnBot}>
-            <Bot className="h-3.5 w-3.5" />{' '}
-            {translate('auto.components.rooms.hero.spawnBot', 'Spawn a bot')}
-          </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => props.onQuickSend('列一下现在有哪些群和 bot，我想开一个新群该怎么说？')}
+            onClick={() => props.onQuickSend('帮我创建一个代码审查 Bot，并拉一个小群。')}
           >
-            {translate('auto.components.rooms.hero.howTo', 'How to use?')}
+            <Bot className="h-3.5 w-3.5" />{' '}
+            {translate('auto.components.rooms.hero.spawnBot', 'Create a bot')}
           </Button>
         </div>
+        <Button
+          variant="outline"
+          className="justify-start text-left"
+          onClick={() =>
+            props.onQuickSend('帮我建一个小组：一个规划 Bot，一个实现 Bot，一个审查 Bot。')
+          }
+        >
+          {translate('auto.components.rooms.hero.howTo', 'Build a review team')}
+        </Button>
+        <Button
+          variant="ghost"
+          className="justify-start text-left text-muted-foreground"
+          onClick={() =>
+            props.onQuickSend('帮我创建一个文档整理 Bot，让它先列出可以自动整理的事项。')
+          }
+        >
+          {translate('auto.components.rooms.hero.docBot', 'Create a document bot')}
+        </Button>
       </div>
     </div>
   )

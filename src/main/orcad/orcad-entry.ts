@@ -379,6 +379,17 @@ async function startOrcadRuntime(
   // Stops first: no RPC may write while the rest of the runtime is torn down.
   registerCleanup(() => rpc.stop())
   await rpc.start()
+
+  // Why here and not lazily at mint time: a phone may connect over Relay before the
+  // local UI ever asks for a QR, so the host session must exist ahead of demand.
+  // dev-auth (ORCA_CLOUD_DEV_AUTH=1) makes this a self-hosted stack — the desktop
+  // auto-connects a local profile, then registers its keypair against the relay at
+  // ORCA_CLOUD_API_URL / ORCA_RELAY_URL instead of login.onorca.dev.
+  const { startOrcadRelayService } = await import('./orcad-relay-startup')
+  const relayService = await startOrcadRelayService(rpc, runtime, runtimeUserDataPath)
+  if (relayService) {
+    registerCleanup(() => relayService.stop())
+  }
   startOrcadAutomations(runtime, profileStore, registerCleanup, {
     claudeUsage: usageStores.claude,
     codexUsage: usageStores.codex

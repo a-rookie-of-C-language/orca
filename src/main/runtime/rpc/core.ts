@@ -27,6 +27,11 @@ import type {
   RegisterDeviceKeyParams,
   RegisterDeviceKeyResult
 } from '../../../shared/device-key-registration-contract'
+import type { DeviceEntry } from '../device-entry'
+import type {
+  MobilePairingOffer,
+  PairingOfferUnavailable
+} from '../runtime-rpc/runtime-rpc-pairing-types'
 
 // Why: bound to the authenticated socket by the transport, so a caller can only re-key itself.
 export type DeviceSelfRpcContext = {
@@ -36,6 +41,37 @@ export type DeviceSelfRpcContext = {
 export type PairingRpcContext = {
   getEndpoints(params: PairingGetEndpointsParams): Promise<PairingGetEndpointsResult>
   provisionRelay(params: PairingProvisionRelayParams): Promise<DeviceCredentialInstalled>
+}
+
+export type MobileHostRpcContext = {
+  createMobilePairingOffer(args: {
+    address?: string | null
+    connectionMode?: 'automatic' | 'local-only'
+    name?: string
+    rotate?: boolean
+  }): Promise<MobilePairingOffer>
+  listPairedDevices(): readonly DeviceEntry[]
+  listRuntimeAccessGrants(): readonly DeviceEntry[]
+  revokeMobileDevice(deviceId: string): Promise<boolean>
+  revokeRuntimeAccess(deviceId: string): boolean
+  getWebSocketEndpoint(): string | null
+  getNetworkExposureBindHost(): string
+  ensureNetworkExposure(): Promise<void>
+  createPairingOffer(args: {
+    address?: string | null
+    name?: string
+    rotate?: boolean
+    scope?: 'mobile' | 'runtime'
+    reach?: 'this-computer' | 'network'
+  }):
+    | PairingOfferUnavailable
+    | {
+        available: true
+        pairingUrl: string
+        endpoint: string
+        deviceId: string
+        webClientUrl: string | null
+      }
 }
 
 export type RpcEnvelopeMeta = {
@@ -139,6 +175,7 @@ export type RpcContext = {
   authenticatedCallerFingerprint?: string
   pairing?: PairingRpcContext
   deviceSelf?: DeviceSelfRpcContext
+  mobile?: MobileHostRpcContext
   // Why: set only on a desktop that relays; it lists the configured servers it shows.
   mobileRelayHosts?: {
     list(): MobileRelayHostsListResult

@@ -50,6 +50,8 @@ import { HOST_CAPABILITY_METHODS } from './host-capabilities'
 import { HOST_FLOATING_METHODS } from './host-floating'
 import { WSL_HOST_METHODS } from './wsl-hosts'
 import { MOBILE_WEB_BUNDLE_METHODS } from './mobile-web-bundle'
+import { MOBILE_METHODS } from './mobile'
+import { ORCA_PROFILE_METHODS } from './orca-profiles'
 import { RUNTIME_CLIENT_CAPABILITY_METHODS } from './runtime-client-capabilities'
 import { EMULATOR_METHODS } from './emulator'
 import { PAIRING_METHODS } from './pairing'
@@ -144,6 +146,8 @@ export const ALL_RPC_METHODS = [
   ...HOST_FLOATING_METHODS,
   ...WSL_HOST_METHODS,
   ...MOBILE_WEB_BUNDLE_METHODS,
+  ...MOBILE_METHODS,
+  ...ORCA_PROFILE_METHODS,
   ...RUNTIME_CLIENT_CAPABILITY_METHODS,
   ...CLIENT_EVENT_METHODS,
   ...CLIENT_UI_METHODS,

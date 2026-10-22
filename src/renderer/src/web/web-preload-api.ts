@@ -31,7 +31,6 @@ import {
   createSkillsApi
 } from './preload-api/web-host-capability-api'
 import { createWebKeybindingsApi } from './preload-api/web-keybindings-api'
-import { createTauriNativeKeybindingsApi } from './tauri-native-keybindings-api'
 import { createMacosTccPromptsApi } from './preload-api/web-macos-tcc-api'
 import { createEmptyMemorySnapshot } from './preload-api/web-memory-api'
 import { createWebMobileApi } from './preload-api/web-mobile-api'
@@ -149,7 +148,7 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ...(webSettingsApi.settings
       ? { settings: { ...webSettingsApi.settings, ...nativeSettingsApi } }
       : {}),
-    keybindings: createTauriNativeKeybindingsApi() ?? createWebKeybindingsApi(),
+    keybindings: createWebKeybindingsApi(),
     ui: {
       ...createWebUiApi(),
       ...createTauriNativeUiApi()

@@ -247,7 +247,8 @@ export function AppWorkspaceShell(props: {
                     </RecoverableRenderErrorBoundary>
                   </Suspense>
                 </div>
-                {floatingWorkspace.showToggleButton ? (
+                {/* Why: the Bots page is a standalone chat surface, so the IDE workspace toggle stays off it. */}
+                {floatingWorkspace.showToggleButton && layout.activeView !== 'rooms' ? (
                   <FloatingTerminalToggleButton
                     open={floatingWorkspace.open}
                     onToggle={() => floatingWorkspace.setOpenWithFocus((open) => !open)}

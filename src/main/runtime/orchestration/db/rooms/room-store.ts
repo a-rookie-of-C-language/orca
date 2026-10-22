@@ -31,8 +31,12 @@ export type RoomMemberRow = {
   is_admin: number
   seen_seq: number
   session_id: string | null
+  status: RoomMemberStatus
+  status_updated_at: string
   created_at: string
 }
+
+export type RoomMemberStatus = 'idle' | 'working' | 'waiting' | 'failed'
 
 export type RoomLogKind =
   | 'lookup'
@@ -154,6 +158,12 @@ export function roomsForMember(this: OrchestrationDb, memberId: string): RoomWit
   return rows.map((r) => this.getRoom(r.room_id)!).filter(Boolean)
 }
 
+export function latestRoomLine(this: OrchestrationDb, roomId: string): RoomLogRow | undefined {
+  return this.db
+    .prepare(`SELECT * FROM room_log WHERE room_id = ? ORDER BY seq DESC LIMIT 1`)
+    .get(roomId) as RoomLogRow | undefined
+}
+
 export function deleteRoom(this: OrchestrationDb, roomId: string): void {
   this.db.exec('BEGIN IMMEDIATE')
   try {
@@ -174,18 +184,44 @@ export function addRoomMember(
 ): void {
   const name = String(member.name ?? '').trim()
   if (!name) throw invalid('A member needs a name')
-  this.db
-    .prepare(
-      `INSERT INTO room_members (room_id, member_id, name, is_admin, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-    .run(roomId, member.memberId, name, member.isAdmin ? 1 : 0, new Date().toISOString())
+  const now = new Date().toISOString()
+  this.db.exec('BEGIN IMMEDIATE')
+  try {
+    this.db
+      .prepare(
+        `INSERT INTO room_members (room_id, member_id, name, is_admin, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(roomId, member.memberId, name, member.isAdmin ? 1 : 0, now)
+    if (member.isAdmin) {
+      this.db
+        .prepare(`UPDATE rooms SET admin_member_id = ?, updated_at = ? WHERE id = ?`)
+        .run(member.memberId, now, roomId)
+    }
+    this.db.exec('COMMIT')
+  } catch (error) {
+    this.db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 export function removeRoomMember(this: OrchestrationDb, roomId: string, memberId: string): void {
-  this.db
-    .prepare(`DELETE FROM room_members WHERE room_id = ? AND member_id = ?`)
-    .run(roomId, memberId)
+  this.db.exec('BEGIN IMMEDIATE')
+  try {
+    this.db
+      .prepare(`DELETE FROM room_members WHERE room_id = ? AND member_id = ?`)
+      .run(roomId, memberId)
+    this.db
+      .prepare(
+        `UPDATE rooms SET admin_member_id = NULL, updated_at = ?
+         WHERE id = ? AND admin_member_id = ?`
+      )
+      .run(new Date().toISOString(), roomId, memberId)
+    this.db.exec('COMMIT')
+  } catch (error) {
+    this.db.exec('ROLLBACK')
+    throw error
+  }
 }
 
 export function setRoomWorktree(this: OrchestrationDb, roomId: string, worktree: string): void {
@@ -216,6 +252,21 @@ export function setRoomMemberSession(
   this.db
     .prepare(`UPDATE room_members SET session_id = ? WHERE room_id = ? AND member_id = ?`)
     .run(sessionId, roomId, memberId)
+}
+
+export function setRoomMemberStatus(
+  this: OrchestrationDb,
+  roomId: string,
+  memberId: string,
+  status: RoomMemberStatus
+): void {
+  this.db
+    .prepare(
+      `UPDATE room_members
+       SET status = ?, status_updated_at = ?
+       WHERE room_id = ? AND member_id = ?`
+    )
+    .run(status, new Date().toISOString(), roomId, memberId)
 }
 
 /** Append a line and advance the room's sequence. Returns the new seq. */
@@ -303,12 +354,14 @@ export type RoomStoreMethods = {
   getRoomByName: typeof getRoomByName
   listRooms: typeof listRooms
   roomsForMember: typeof roomsForMember
+  latestRoomLine: typeof latestRoomLine
   deleteRoom: typeof deleteRoom
   addRoomMember: typeof addRoomMember
   removeRoomMember: typeof removeRoomMember
   setRoomWorktree: typeof setRoomWorktree
   markRoomMemberSeen: typeof markRoomMemberSeen
   setRoomMemberSession: typeof setRoomMemberSession
+  setRoomMemberStatus: typeof setRoomMemberStatus
   appendRoomLine: typeof appendRoomLine
   unseenRoomLines: typeof unseenRoomLines
 }
@@ -320,12 +373,14 @@ export function attachRoomStore(ctor: { prototype: object }): void {
     getRoomByName,
     listRooms,
     roomsForMember,
+    latestRoomLine,
     deleteRoom,
     addRoomMember,
     removeRoomMember,
     setRoomWorktree,
     markRoomMemberSeen,
     setRoomMemberSession,
+    setRoomMemberStatus,
     appendRoomLine,
     unseenRoomLines
   })

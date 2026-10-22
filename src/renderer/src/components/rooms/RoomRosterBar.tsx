@@ -1,21 +1,27 @@
-import { Bot, Crown, X } from 'lucide-react'
+import { CircleAlert, Loader2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet'
 import type { AgentSessionOption, Room } from './room-types'
 import { shortSessionLabel } from './room-session-pool'
 import { SpawnBotForm } from './SpawnBotForm'
+import { RoomMemberAvatar, agentFromMemberId } from './RoomMemberAvatar'
 
-/** Member chips plus the collapsible spawn-bot and add-member panels. */
+/** Member management lives off the chat surface so ordinary conversations stay clean. */
 export function RoomRosterBar(props: {
   selected: Room
-  spawnOpen: boolean
-  addOpen: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
   poolAvailable: AgentSessionOption[]
   worktreeNames: Map<string, string>
   onSpawned: () => void
-  onCancelSpawn: () => void
   onAddMember: (sessionId: string, isAdmin: boolean) => void
   onRemoveMember: (memberId: string) => void
 }) {
@@ -23,104 +29,135 @@ export function RoomRosterBar(props: {
   // translate() preserves Orca's pseudo-localization behavior.
   useTranslation()
   const { selected } = props
+
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 px-4 py-2">
-        {selected.members.length === 0 ? (
-          <span className="text-xs text-muted-foreground">
-            {translate('auto.components.rooms.page.noMembers', 'No members — spawn a bot above.')}
-          </span>
-        ) : (
-          selected.members.map((m) => (
-            <span
-              key={m.memberId}
-              className={cn(
-                'group inline-flex max-w-44 items-center gap-1 rounded-full border px-2 py-0.5 text-xs',
-                m.isAdmin ? 'border-amber-500/50 bg-amber-500/10' : 'border-border/60'
-              )}
-            >
-              {m.isAdmin ? (
-                <Crown className="h-3 w-3 shrink-0 text-amber-500" />
-              ) : (
-                <Bot className="h-3 w-3 shrink-0 text-muted-foreground" />
-              )}
-              <span className="truncate">{m.name}</span>
-              <button
-                type="button"
-                onClick={() => props.onRemoveMember(m.memberId)}
-                className="ml-0.5 hidden shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive group-hover:inline-flex"
-                aria-label={translate(
-                  'auto.components.rooms.page.removeMember',
-                  'Remove {{name}}',
-                  {
-                    name: m.name
-                  }
-                )}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))
-        )}
-      </div>
-      {props.spawnOpen ? (
-        <div className="border-b border-border/60 px-4 py-2">
-          <SpawnBotForm
-            roomId={selected.id}
-            onSpawned={props.onSpawned}
-            onCancel={props.onCancelSpawn}
-          />
-        </div>
-      ) : null}
-      {props.addOpen ? (
-        <div className="space-y-1.5 border-b border-border/60 px-4 py-2">
-          <div className="text-xs font-medium text-muted-foreground">
-            {translate('auto.components.rooms.page.addMember', 'Add member')}
-          </div>
-          <div className="max-h-28 space-y-0.5 overflow-y-auto scrollbar-sleek">
-            {props.poolAvailable.length === 0 ? (
-              <div className="text-xs text-muted-foreground/70">
+    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
+      <SheetContent className="w-[min(420px,92vw)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-sleek">
+          <div className="border-b border-border/60">
+            <SheetHeader>
+              <SheetTitle>
+                {translate('auto.components.rooms.roster.title', 'Team members')}
+              </SheetTitle>
+              <SheetDescription>
                 {translate(
-                  'auto.components.rooms.page.allSessionsAdded',
-                  'All open agent sessions are already in this room.'
+                  'auto.components.rooms.roster.description',
+                  'Create a bot, turn an open session into a fresh bot, or clean up this team.'
                 )}
-              </div>
-            ) : (
-              props.poolAvailable.map((opt) => (
-                <div
-                  key={opt.sessionId}
-                  className="flex items-center justify-between gap-2 rounded px-2 py-1 hover:bg-accent/40"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs">{shortSessionLabel(opt.label)}</span>
-                    <span className="block truncate text-[11px] text-muted-foreground/70">
-                      {props.worktreeNames.get(opt.worktreeId) ?? ''}
-                    </span>
-                  </span>
-                  <div className="flex shrink-0 gap-1">
+              </SheetDescription>
+            </SheetHeader>
+          </div>
+
+          <div className="space-y-3 p-4">
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {translate('auto.components.rooms.roster.current', 'Current members')}
+            </h3>
+            <div className="space-y-1">
+              {selected.members.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
+                  {translate('auto.components.rooms.page.noMembers', 'No members yet.')}
+                </p>
+              ) : (
+                selected.members.map((m) => (
+                  <div
+                    key={m.memberId}
+                    className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-2"
+                  >
+                    <RoomMemberAvatar
+                      member={{ ...m, agent: agentFromMemberId(m.memberId) ?? undefined }}
+                      className="size-5 [&_svg]:size-3"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm">{m.name}</span>
+                    {m.status === 'working' ? (
+                      <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">
+                        <Loader2 className="size-3 animate-spin" />
+                        {translate('auto.components.rooms.sidebar.working', 'Working…')}
+                      </span>
+                    ) : m.status === 'waiting' ? (
+                      <span className="inline-flex items-center gap-1 text-2xs text-status-warning">
+                        <CircleAlert className="size-3" />
+                        {translate('auto.components.rooms.sidebar.waiting', 'Waiting approval…')}
+                      </span>
+                    ) : m.status === 'failed' ? (
+                      <span className="inline-flex items-center gap-1 text-2xs text-destructive">
+                        {translate('auto.components.rooms.page.memberFailed', 'Failed')}
+                      </span>
+                    ) : null}
+                    {!m.isAdmin ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => props.onRemoveMember(m.memberId)}
+                        aria-label={translate(
+                          'auto.components.rooms.page.removeMember',
+                          'Remove {{name}}',
+                          {
+                            name: m.name
+                          }
+                        )}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="p-4 pt-0">
+            <SpawnBotForm
+              roomId={selected.id}
+              onSpawned={props.onSpawned}
+              onCancel={() => props.onOpenChange(false)}
+            />
+          </div>
+
+          <div className="space-y-2 p-4 pt-0">
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {translate('auto.components.rooms.page.addMember', 'Turn an open session into a bot')}
+            </h3>
+            <div className="max-h-56 space-y-1 overflow-y-auto scrollbar-sleek">
+              {props.poolAvailable.length === 0 ? (
+                <p className="text-xs text-muted-foreground/70">
+                  {translate(
+                    'auto.components.rooms.page.allSessionsAdded',
+                    'Every open agent session is already represented here.'
+                  )}
+                </p>
+              ) : (
+                props.poolAvailable.map((opt) => (
+                  <div
+                    key={opt.sessionId}
+                    className="flex items-center gap-2 rounded-md border border-border/60 px-2.5 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{shortSessionLabel(opt.label)}</p>
+                      <p className="truncate text-xs text-muted-foreground/70">
+                        {props.worktreeNames.get(opt.worktreeId) ?? ''}
+                      </p>
+                    </div>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-6 px-2 text-[11px]"
                       onClick={() => props.onAddMember(opt.sessionId, false)}
                     >
-                      {translate('auto.components.rooms.page.add', 'Add')}
+                      {translate('auto.components.rooms.page.add', 'Create')}
                     </Button>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-6 px-2 text-[11px]"
                       onClick={() => props.onAddMember(opt.sessionId, true)}
                     >
                       {translate('auto.components.rooms.page.addAsAdmin', 'Admin')}
                     </Button>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
-      ) : null}
-    </>
+      </SheetContent>
+    </Sheet>
   )
 }

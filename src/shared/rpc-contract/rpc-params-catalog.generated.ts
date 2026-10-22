@@ -418,6 +418,13 @@ import {
   ManagedServerSelector,
   ManagedServerUpdate
 } from './managed-server-params'
+import {
+  MobileDeviceIdParams,
+  MobilePairingQrParams,
+  MobileRuntimePairingUrlParams,
+  OrcaProfileCreateCloudLinkedParams,
+  OrcaProfileSelectOrgParams
+} from './mobile-params'
 import { NativeChatSession, NativeChatUnsubscribe } from './native-chat-params'
 import {
   NotificationGetMissedSinceParams,
@@ -1265,6 +1272,15 @@ export const RPC_PARAMS_BY_METHOD = {
   'managedServer.update': ManagedServerUpdate,
   'markdown.readTab': ActivateTab,
   'markdown.saveTab': SaveMarkdownTab,
+  'mobile.getPairingQR': MobilePairingQrParams,
+  'mobile.getRelayStatus': null,
+  'mobile.getRuntimePairingUrl': MobileRuntimePairingUrlParams,
+  'mobile.isWebSocketReady': null,
+  'mobile.listDevices': null,
+  'mobile.listNetworkInterfaces': null,
+  'mobile.listRuntimeAccessGrants': null,
+  'mobile.revokeDevice': MobileDeviceIdParams,
+  'mobile.revokeRuntimeAccess': MobileDeviceIdParams,
   'mobileRelay.hosts.list': null,
   'mobileRelay.hosts.worktrees': MobileRelayHostWorktreesParamsSchema,
   'mobileRelay.projectSections': null,
@@ -1281,6 +1297,15 @@ export const RPC_PARAMS_BY_METHOD = {
   'notifications.testPush': null,
   'notifications.unregisterPush': null,
   'notifications.unsubscribe': NotificationUnsubscribeParams,
+  'orcaProfiles.authStatus': null,
+  'orcaProfiles.cancelSignIn': null,
+  'orcaProfiles.connectCurrent': null,
+  'orcaProfiles.createCloudLinked': OrcaProfileCreateCloudLinkedParams,
+  'orcaProfiles.list': null,
+  'orcaProfiles.refreshAuth': null,
+  'orcaProfiles.selectOrg': OrcaProfileSelectOrgParams,
+  'orcaProfiles.signInProgress': null,
+  'orcaProfiles.signOutCurrent': null,
   'orcad.migration.abortCatalog': OrcadMigrationCatalogParams,
   'orcad.migration.abortCatalogByReference': OrcadMigrationCatalogReferenceParams,
   'orcad.migration.catalogState': OrcadMigrationCatalogParams,

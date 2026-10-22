@@ -44,7 +44,10 @@ function createNodeAppEnvironment(): AppEnvironment {
     // hydration. Answering false to satisfy a path resolver would relax a security
     // posture. Layout questions must ask whether the app root is an asar archive
     // instead (see parcel-watcher-entry-path.ts).
-    isPackaged: () => true,
+    // ORCA_UNPACKAGED=1 is the dev-mode escape hatch: a self-hosted relay stack
+    // (dev-auth + local relay) needs loopback-HTTP cloud endpoints, which the
+    // packaged gate rejects. Never set this in a shipped build.
+    isPackaged: () => process.env.ORCA_UNPACKAGED !== '1',
     getCliLauncherPath: getOrcadCliLauncherPath,
     onWillQuit: (handler) => quitHandlers.push(handler),
     exit: (code = 0) => process.exit(code),

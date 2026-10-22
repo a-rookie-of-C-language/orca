@@ -18,7 +18,7 @@ export const MAIN_BOT_TOOL_DOC = [
   'Available tools (JSON args in the fence):',
   '- room_list {}: list every group with its members.',
   '- room_create {"name", "mode"?: "admin"|"everyone", "notice"?}: start a group. New bots spawn under this room unless told otherwise.',
-  '- room_bot_create {"room", "name", "agent"?: "claude"|"codex"|"gemini"|"opencode"|"aider", "instructions"?, "isAdmin"?}: spawn a fresh bot straight into a room. Prefer this over asking the user to open sessions.',
+  '- room_bot_create {"room", "name", "agent"?: "claude"|"codex"|"gemini"|"opencode"|"aider", "model"?, "effort"?, "instructions"?, "isAdmin"?}: spawn a fresh bot straight into a room. Prefer this over asking the user to open sessions.',
   '- room_send {"room", "text"}: speak into a group as Orca; its members answer.',
   '- room_member_add {"room", "memberId", "name", "isAdmin"?}: seat an existing agent session (orca_session_id:<id>) in a room.',
   '- room_member_remove {"room", "memberId"}: remove a member by name or id.',
@@ -78,6 +78,8 @@ export type AdminToolRuntime = {
     worktree: string
     instructions?: string
     isAdmin?: boolean
+    model?: string
+    effort?: string
   }) => Promise<{ memberId: string }>
   readLog: (roomId: string, limit: number) => { who: string; text: string }[]
   sendToRoom: (roomId: string, text: string) => Promise<void>
@@ -154,7 +156,9 @@ async function executeAdminToolCall(rt: AdminToolRuntime, call: AdminToolCall): 
         agent,
         worktree,
         instructions: strArg(args, 'instructions'),
-        isAdmin: args.isAdmin === true
+        isAdmin: args.isAdmin === true,
+        ...(strArg(args, 'model') ? { model: strArg(args, 'model') } : {}),
+        ...(strArg(args, 'effort') ? { effort: strArg(args, 'effort') } : {})
       })
       return `Bot "${name}" joined "${room.name}" as ${spawned.memberId}.`
     }

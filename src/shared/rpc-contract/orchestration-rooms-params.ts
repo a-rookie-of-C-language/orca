@@ -60,6 +60,8 @@ export const RoomSendParams = z.object({
   id: OptionalString,
   name: OptionalString,
   text: requiredString('Missing --text'),
+  /** Explicit direct-room target; unlike an @mention it cannot be parsed ambiguously. */
+  targetMemberId: OptionalString,
   from: OptionalString
 })
 

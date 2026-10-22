@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, Loader2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -16,102 +23,75 @@ import {
 } from '@/components/ui/dialog'
 import { useActiveWorktreeId, useAllWorktrees } from '@/store/selectors'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { LOCAL, ORCA_SESSION_PREFIX, type AgentSessionOption, type Room } from './room-types'
-import { shortSessionLabel } from './room-session-pool'
+import { LOCAL, type Room } from './room-types'
 import { readAgentModels, type CatalogModel } from './room-model-catalog'
-import { cn } from '@/lib/utils'
 
-/** Room creation lives in a dialog so the sidebar stays a quiet list. */
-export function CreateRoomDialog(props: { pool: AgentSessionOption[]; onCreated: () => void }) {
-  // Why: this memo boundary needs its own language subscription, while
-  // translate() preserves Orca's pseudo-localization behavior.
+/** New groups get a leader automatically; model tuning stays out of the first screen. */
+export function CreateRoomDialog(props: { onCreated: () => void; variant?: 'button' | 'icon' }) {
   useTranslation()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [mode, setMode] = useState<'admin' | 'everyone'>('admin')
+  const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
-  const [picked, setPicked] = useState<string[]>([])
-  const [seedAdminBot, setSeedAdminBot] = useState(true)
-  const [adminModel, setAdminModel] = useState('')
-  const [adminEffort, setAdminEffort] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [adminModels, setAdminModels] = useState<CatalogModel[]>([])
+  const [model, setModel] = useState('')
+  const [effort, setEffort] = useState('')
+  const [models, setModels] = useState<CatalogModel[]>([])
   const worktrees = useAllWorktrees()
   const activeWorktreeId = useActiveWorktreeId()
+  const worktreeId = activeWorktreeId ?? worktrees[0]?.id
+
   useEffect(() => {
-    const worktreeId = activeWorktreeId ?? worktrees[0]?.id
     if (!open || !worktreeId) {
       return
     }
     let live = true
     void readAgentModels('codex', worktreeId).then((listed) => {
       if (live) {
-        setAdminModels(listed)
+        setModels(listed)
       }
     })
     return () => {
       live = false
     }
-  }, [open, activeWorktreeId, worktrees])
-  const worktreeNames = useMemo(
-    () => new Map(worktrees.map((w) => [w.id, w.displayName])),
-    [worktrees]
-  )
-
-  const toggle = (sessionId: string) => {
-    setPicked((cur) =>
-      cur.includes(sessionId) ? cur.filter((id) => id !== sessionId) : [...cur, sessionId]
-    )
-  }
+  }, [open, worktreeId])
 
   const submit = async () => {
     if (!name.trim()) {
       toast.error(translate('auto.components.rooms.createRoom.nameRequired', 'Name is required'))
       return
     }
+    if (!worktreeId) {
+      toast.error(
+        translate('auto.components.rooms.spawnBot.pickWorkspace', 'Pick a workspace for the bot')
+      )
+      return
+    }
     setBusy(true)
     try {
-      const members = picked.map((sessionId, index) => ({
-        memberId: `${ORCA_SESSION_PREFIX}${sessionId}`,
-        name: shortSessionLabel(
-          props.pool.find((p) => p.sessionId === sessionId)?.label || sessionId
-        ),
-        isAdmin: index === 0
-      }))
       const created = await callRuntimeRpc<{ room: Room }>(LOCAL, 'orchestration.roomCreate', {
         name: name.trim(),
-        mode,
-        members: members.length ? members : undefined
+        mode: 'admin',
+        worktree: `id:${worktreeId}`
       })
-      if (seedAdminBot && created.room && worktrees.length > 0) {
-        const worktreeId = activeWorktreeId ?? worktrees[0].id
-        try {
-          await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
-            id: created.room.id,
-            worktree: `id:${worktreeId}`,
-            agent: 'codex',
-            model: adminModel.trim() || undefined,
-            effort: adminEffort || undefined,
-            name: 'admin',
-            isAdmin: true,
-            instructions: instructions.trim() || undefined
-          })
-        } catch (error) {
-          toast.error(
-            `${translate('auto.components.rooms.createRoom.adminFailed', 'Room created, but its admin bot failed')}: ${(error as Error).message}`
-          )
-        }
-      }
+      await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
+        id: created.room.id,
+        worktree: `id:${worktreeId}`,
+        agent: 'codex',
+        model: model.trim() || undefined,
+        effort: effort || undefined,
+        name: 'admin',
+        isAdmin: true,
+        instructions: goal.trim() || undefined
+      })
       toast.success(
         translate('auto.components.rooms.createRoom.created', 'Room "{{name}}" created', {
           name: name.trim()
         })
       )
       setName('')
-      setPicked([])
-      setInstructions('')
-      setAdminModel('')
-      setAdminEffort('')
+      setGoal('')
+      setModel('')
+      setEffort('')
       setOpen(false)
       props.onCreated()
     } catch (error) {
@@ -122,179 +102,114 @@ export function CreateRoomDialog(props: { pool: AgentSessionOption[]; onCreated:
       setBusy(false)
     }
   }
+
+  const selectedModel = models.find((item) => item.id === model)
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="w-full">
-          <Plus className="h-4 w-4" />{' '}
-          {translate('auto.components.rooms.createRoom.newRoom', 'New room')}
+        <Button
+          size={props.variant === 'icon' ? 'icon-sm' : 'sm'}
+          variant={props.variant === 'icon' ? 'ghost' : 'default'}
+          className={props.variant === 'icon' ? undefined : 'w-full'}
+          aria-label={translate('auto.components.rooms.createRoom.newRoom', 'New group')}
+        >
+          <Plus className="h-4 w-4" />
+          {props.variant === 'icon' ? null : (
+            <span>{translate('auto.components.rooms.createRoom.newRoom', 'New group')}</span>
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {translate('auto.components.rooms.createRoom.title', 'New room')}
+            {translate('auto.components.rooms.createRoom.title', 'New group')}
           </DialogTitle>
           <DialogDescription>
             {translate(
               'auto.components.rooms.createRoom.description',
-              'Rooms start with an admin bot so you never talk to an empty room. Your message goes to the admin first; @Name calls one member.'
+              'A leader bot is added automatically. You can also ask Orca Admin to do this in chat.'
             )}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <Input
-            placeholder={translate('auto.components.rooms.createRoom.namePlaceholder', 'Name')}
+            placeholder={translate(
+              'auto.components.rooms.createRoom.namePlaceholder',
+              'Group name'
+            )}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => setName(event.target.value)}
             disabled={busy}
           />
           <Input
             placeholder={translate(
               'auto.components.rooms.createRoom.briefPlaceholder',
-              'Admin brief (optional)'
+              'What should this group do? (optional)'
             )}
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
             disabled={busy}
           />
-          {adminModels.length > 0 ? (
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-              value={adminModel}
-              onChange={(e) => {
-                setAdminModel(e.target.value)
-                setAdminEffort('')
-              }}
-              disabled={busy}
-            >
-              <option value="">
-                {translate('auto.components.rooms.createRoom.modelDefault', '(agent default)')}
-              </option>
-              {adminModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              placeholder={translate(
-                'auto.components.rooms.createRoom.modelPlaceholder',
-                'Admin model (optional, e.g. gpt-5.2-codex / opus)'
-              )}
-              value={adminModel}
-              onChange={(e) => setAdminModel(e.target.value)}
-              disabled={busy}
-            />
-          )}
-          {(() => {
-            const picked = adminModels.find((m) => m.id === adminModel)
-            if (!picked || picked.efforts.length === 0) {
-              return null
-            }
-            return (
-              <select
-                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                value={adminEffort}
-                onChange={(e) => setAdminEffort(e.target.value)}
-                disabled={busy}
-              >
-                <option value="">
-                  {translate('auto.components.rooms.createRoom.effortDefault', '(default thinking)')}
-                </option>
-                {picked.efforts.map((e) => (
-                  <option key={e.value} value={e.value}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
-            )
-          })()}
-          <div className="space-y-1">
-            <div className="text-xs text-muted-foreground">
-              {translate(
-                'auto.components.rooms.createRoom.membersLabel',
-                'Members (first pick becomes admin):'
-              )}
-            </div>
-            <div className="max-h-40 space-y-0.5 overflow-y-auto scrollbar-sleek">
-              {props.pool.length === 0 ? (
-                <div className="px-1 py-1 text-xs text-muted-foreground">
-                  {translate(
-                    'auto.components.rooms.createRoom.noSessions',
-                    'No agent sessions open — a fresh admin bot will lead the room.'
-                  )}
-                </div>
-              ) : (
-                props.pool.map((opt) => (
-                  <button
-                    key={opt.sessionId}
-                    type="button"
-                    onClick={() => toggle(opt.sessionId)}
-                    disabled={busy}
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors',
-                      picked.includes(opt.sessionId)
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:bg-accent/50'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'h-3 w-3 shrink-0 rounded-sm border',
-                        picked.includes(opt.sessionId)
-                          ? 'border-primary bg-primary'
-                          : 'border-muted-foreground/40'
+          <details className="rounded-md border border-border/60 px-3 py-2">
+            <summary className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+              <ChevronDown className="size-3.5" />
+              {translate('auto.components.rooms.createRoom.advanced', 'Advanced')}
+            </summary>
+            <div className="mt-3 space-y-2">
+              {models.length > 0 ? (
+                <Select
+                  value={model || '_default'}
+                  onValueChange={(v) => {
+                    setModel(v === '_default' ? '' : v)
+                    setEffort('')
+                  }}
+                  disabled={busy}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_default">
+                      {translate(
+                        'auto.components.rooms.createRoom.modelDefault',
+                        '(agent default)'
                       )}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{shortSessionLabel(opt.label)}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground/70">
-                        {worktreeNames.get(opt.worktreeId) ?? opt.worktreeId}
-                      </span>
-                    </span>
-                  </button>
-                ))
-              )}
+                    </SelectItem>
+                    {models.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+              {selectedModel?.efforts.length ? (
+                <Select
+                  value={effort || '_default'}
+                  onValueChange={(v) => setEffort(v === '_default' ? '' : v)}
+                  disabled={busy}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_default">
+                      {translate(
+                        'auto.components.rooms.createRoom.effortDefault',
+                        '(default thinking)'
+                      )}
+                    </SelectItem>
+                    {selectedModel.efforts.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as 'admin' | 'everyone')}
-              disabled={busy}
-            >
-              <option value="admin">
-                {translate(
-                  'auto.components.rooms.createRoom.modeAdmin',
-                  'admin (admin answers first)'
-                )}
-              </option>
-              <option value="everyone">
-                {translate(
-                  'auto.components.rooms.createRoom.modeEveryone',
-                  'everyone (all members speak)'
-                )}
-              </option>
-            </select>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={seedAdminBot}
-              onChange={(e) => setSeedAdminBot(e.target.checked)}
-              disabled={busy || worktrees.length === 0}
-              className="h-3.5 w-3.5"
-            />
-            <span>
-              {translate(
-                'auto.components.rooms.createRoom.seedAdmin',
-                'Spawn an admin bot (Codex) to lead the room'
-              )}
-            </span>
-          </label>
+          </details>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>

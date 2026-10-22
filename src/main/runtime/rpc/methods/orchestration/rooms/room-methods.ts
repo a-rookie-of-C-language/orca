@@ -10,6 +10,7 @@ import { ROOM_SOURCE, spawnRoomBot } from '../../../../orchestration/room-bot-sp
 import { MAIN_BOT_NAME, MAIN_BOT_ROOM_NAME } from '../../../../orchestration/room-admin-tools'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
+import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import {
   RoomBotCreateParams,
   RoomCreateParams,
@@ -42,6 +43,8 @@ const exposeRoom = (room: {
     is_admin: number
     seen_seq: number
     session_id: string | null
+    status: string
+    status_updated_at: string
   }[]
 }) => ({
   id: room.id,
@@ -58,7 +61,9 @@ const exposeRoom = (room: {
     name: m.name,
     isAdmin: m.is_admin === 1,
     seenSeq: m.seen_seq,
-    sessionId: m.session_id
+    sessionId: m.session_id,
+    status: m.status,
+    statusUpdatedAt: m.status_updated_at
   }))
 })
 
@@ -68,15 +73,53 @@ const exposeRoomLine = (line: {
   member_id: string | null
   text: string
   kind: string | null
+  payload?: string | null
   created_at: string
-}) => ({
-  seq: line.seq,
-  who: line.who,
-  memberId: line.member_id,
-  text: line.text,
-  kind: line.kind,
-  createdAt: line.created_at
-})
+}) => {
+  let targetMemberId: string | null = null
+  try {
+    const payload = line.payload ? (JSON.parse(line.payload) as unknown) : null
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      'targetMemberId' in payload &&
+      typeof payload.targetMemberId === 'string'
+    ) {
+      targetMemberId = payload.targetMemberId
+    }
+  } catch {
+    // Legacy payloads are opaque transport data.
+  }
+  return {
+    seq: line.seq,
+    who: line.who,
+    memberId: line.member_id,
+    text: line.text,
+    kind: line.kind,
+    targetMemberId,
+    createdAt: line.created_at
+  }
+}
+
+const exposeRoomLineOrNone = (line: Parameters<typeof exposeRoomLine>[0] | undefined) =>
+  line ? exposeRoomLine(line) : null
+
+/** A failed admin that never produced a normal room reply can be replaced safely. */
+const adminNeedsRespawn = (
+  db: ReturnType<OrcaRuntimeService['getOrchestrationDb']>,
+  roomId: string,
+  admin: { member_id: string; session_id: string | null; status: string }
+): boolean => {
+  const answered = (
+    db.db
+      .prepare(
+        `SELECT COUNT(*) as n FROM room_log
+         WHERE room_id = ? AND member_id = ? AND (kind IS NULL OR kind != 'failed')`
+      )
+      .get(roomId, admin.member_id) as { n: number }
+  ).n
+  return answered === 0 && admin.status !== 'working'
+}
 
 export const ORCHESTRATION_ROOM_METHODS = [
   defineMethod({
@@ -102,7 +145,12 @@ export const ORCHESTRATION_ROOM_METHODS = [
     params: RoomListParams,
     handler: (_params, { runtime }) => {
       const db = runtime.getOrchestrationDb()
-      return { rooms: db.listRooms().map(exposeRoom) }
+      return {
+        rooms: db.listRooms().map((room) => ({
+          ...exposeRoom(room),
+          latestLine: exposeRoomLineOrNone(db.latestRoomLine(room.id))
+        }))
+      }
     }
   }),
 
@@ -177,9 +225,9 @@ export const ORCHESTRATION_ROOM_METHODS = [
         effort: params.effort,
         worktree: params.worktree,
         instructions: params.instructions,
-        isAdmin: params.isAdmin
+        isAdmin: params.isAdmin,
+        onSessionReady: () => ensureRoomReplyWatcherForCurrentHost(db, ctx.runtime)
       })
-      ensureRoomReplyWatcherForCurrentHost(db, ctx.runtime)
       const fresh = db.getRoom(room.id)
       return {
         memberId: spawned.memberId,
@@ -213,22 +261,15 @@ export const ORCHESTRATION_ROOM_METHODS = [
           room = refilled
         }
       }
-      // Repair a stale HQ left by a failed first seat (e.g. claude CLI missing):
-      // an admin row with no per-room session and an empty log never started.
+      // Repair an HQ whose first seat never produced a normal reply (missing CLI or
+      // a rejected kickoff): keeping it turns HQ into a permanently silent room.
       let admin = room.members.find((m) => m.is_admin === 1)
-      if (admin && !admin.session_id) {
+      if (admin && adminNeedsRespawn(db, room.id, admin)) {
         try {
-          const logCount = (
-            db.db.prepare(`SELECT COUNT(*) as n FROM room_log WHERE room_id = ?`).get(room.id) as {
-              n: number
-            }
-          ).n
-          if (logCount === 0) {
-            db.removeRoomMember(room.id, admin.member_id)
-            const refilled = db.getRoom(room.id)
-            if (refilled) room = refilled
-            admin = undefined
-          }
+          db.removeRoomMember(room.id, admin.member_id)
+          const refilled = db.getRoom(room.id)
+          if (refilled) room = refilled
+          admin = undefined
         } catch {
           // Repair is best-effort; a stale row just stays until next ensure.
         }
@@ -249,11 +290,17 @@ export const ORCHESTRATION_ROOM_METHODS = [
               worktree,
               isAdmin: true,
               instructions:
-                'You were just set up as the user\u2019s Main Bot. Greet the user in one or two short messages: say you run their Bot team and group chats and they can ask you in plain words to create a bot or start a group. Then ask in one short question what the team should help with first. Write in Chinese.'
+                'You were just set up as the user\u2019s Main Bot. Greet the user in one or two short messages: say you run their Bot team and group chats and they can ask you in plain words to create a bot or start a group. Then ask in one short question what the team should help with first. Write in Chinese.',
+              onSessionReady: () => ensureRoomReplyWatcherForCurrentHost(db, runtime)
             })
             adminSeated = true
-          } catch {
+          } catch (error) {
             adminSeated = false
+            db.appendRoomLine(room.id, {
+              who: 'Orca',
+              text: `Main Bot seat failed: ${error instanceof Error ? error.message : String(error)}`,
+              kind: 'failed'
+            })
           }
         }
       }
@@ -289,6 +336,12 @@ export const ORCHESTRATION_ROOM_METHODS = [
           ? db.getRoomByName(params.name)
           : undefined
       if (!room) throw roomError('room_not_found', 'The room is not here.')
+      const targetMember = params.targetMemberId
+        ? room.members.find((m) => m.member_id === params.targetMemberId)
+        : undefined
+      if (params.targetMemberId && !targetMember) {
+        throw roomError('room_member_not_found', 'The called member is not in this room.')
+      }
       const host = getStructuredAgentSessionHost()
       if (!host) {
         throw roomError(
@@ -296,9 +349,14 @@ export const ORCHESTRATION_ROOM_METHODS = [
           'The agent-session host is not installed in this runtime.'
         )
       }
+      ensureRoomReplyWatcherForCurrentHost(db, runtime)
       const result = await runRoomRound(
         room,
-        { text: params.text, who: params.from ?? 'User' },
+        {
+          text: params.text,
+          who: params.from ?? 'User',
+          ...(params.targetMemberId ? { targetMemberId: params.targetMemberId } : {})
+        },
         {
           db,
           host,
@@ -335,6 +393,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
           'The agent-session host is not installed in this runtime.'
         )
       }
+      ensureRoomReplyWatcherForCurrentHost(db, runtime)
       const result = await postRoomReply(room, params.memberId, params.text, {
         db,
         host,
@@ -373,6 +432,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
             member_id: string | null
             text: string
             kind: string | null
+            payload: string | null
             created_at: string
           }[])
       return { room: exposeRoom(room), lines: lines.map(exposeRoomLine) }

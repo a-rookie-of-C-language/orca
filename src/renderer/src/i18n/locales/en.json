@@ -79,7 +79,9 @@
     },
     "sidebarLayout": {
       "moveLeft": "Move tools sidebar to the left (VS Code layout)",
-      "moveRight": "Move tools sidebar to the right"
+      "moveRight": "Move tools sidebar to the right",
+      "switchToWork": "Switch to Work mode (sessions left, chat center)",
+      "switchToCode": "Switch to Code mode (Explorer left, chat right)"
     }
   },
   "browser": {
@@ -6259,7 +6261,8 @@
           "failedNestWorkspace": "Failed to nest workspace",
           "sidebarRowMissing": "Target no longer exists",
           "failedUnnestWorkspace": "Failed to unnest workspace",
-          "hostRepairRequired": "Re-pair required"
+          "hostRepairRequired": "Re-pair required",
+          "8c2f1a9e44": "Showing the first 20 matches — refine your search to narrow results"
         },
         "WorktreeMetaDialog": {
           "3db0a2a593": "Cancel",
@@ -6971,6 +6974,23 @@
           "outsideDistro": "Pick a folder inside {{value0}}.",
           "underDistro": "This host can only add folders under \\\\wsl.localhost\\{{value0}}.",
           "windowsDrive": "Folders on a Windows drive stay on this computer. Choose this computer as the host to add one."
+        },
+        "SidebarHeaderActions": {
+          "collapseSidebar": "Collapse sidebar",
+          "searchWorkspaces": "Search workspaces"
+        },
+        "SidebarCollapseRail": {
+          "expandSidebar": "Expand sidebar"
+        },
+        "Sidebar": {
+          "filterWorkspaces": "Filter workspaces...",
+          "searchWorkspaces": "Search workspaces",
+          "closeWorkspaceSearch": "Close search"
+        },
+        "CompactAgentRow": {
+          "pendingWaiting": "Waiting for input",
+          "pendingBlocked": "Blocked",
+          "pendingPermission": "Needs attention"
         }
       },
       "shared": {
@@ -16800,7 +16820,11 @@
           "b06e13fcf7": "Dismiss agent",
           "0272969e28": "Send to this agent",
           "92a7017987": "sending",
-          "019b74d93a": "eligible"
+          "019b74d93a": "eligible",
+          "copySessionId": "Copy session ID",
+          "sessionIdCopyFailed": "Failed to copy Session ID. Try again.",
+          "sessionIdCopied": "{{value0}} copied",
+          "sessionId": "Session ID"
         },
         "DashboardAgentRowMessage": {
           "0a01046763": "interrupted",
@@ -18142,6 +18166,13 @@
       "nativeChat": {
         "contextMenu": {
           "copy": "Copy"
+        },
+        "state": {
+          "empty": {
+            "recentSessions": "Recent sessions",
+            "loadingSessions": "Looking for saved conversations…",
+            "untitledSession": "Untitled session"
+          }
         }
       },
       "orca": {
@@ -18593,7 +18624,8 @@
           "noWorkspace": "(no workspace)",
           "instructionsPlaceholder": "Role / instructions (optional)",
           "cancel": "Cancel",
-          "spawn": "Spawn",
+          "spawn": "Create",
+          "advanced": "Advanced",
           "modelPlaceholder": "Model (optional, e.g. gpt-5.2-codex / opus)",
           "modelDefault": "(agent default)",
           "effortDefault": "(default thinking)"
@@ -18603,11 +18635,12 @@
           "adminFailed": "Room created, but its admin bot failed",
           "created": "Room \"{{name}}\" created",
           "failed": "Failed to create room",
-          "newRoom": "New room",
-          "title": "New room",
-          "description": "Rooms start with an admin bot so you never talk to an empty room. Your message goes to the admin first; @Name calls one member.",
-          "namePlaceholder": "Name",
-          "briefPlaceholder": "Admin brief (optional)",
+          "newRoom": "New group",
+          "title": "New group",
+          "description": "A leader bot is added automatically. You can also ask Orca Admin to do this in chat.",
+          "namePlaceholder": "Group name",
+          "briefPlaceholder": "What should this group do? (optional)",
+          "advanced": "Advanced",
           "membersLabel": "Members (first pick becomes admin):",
           "noSessions": "No agent sessions open — a fresh admin bot will lead the room.",
           "modeAdmin": "admin (admin answers first)",
@@ -18627,11 +18660,13 @@
           "howMention": "· Type @Name to call one member directly.",
           "howCreate": "· Say “create a bot / start a group” and the admin does it.",
           "sayHi": "Say hi",
-          "spawnBot": "Spawn a bot",
-          "howTo": "How to use?"
+          "spawnBot": "Create a bot",
+          "howTo": "Build a review team",
+          "docBot": "Create a document bot"
         },
         "page": {
           "title": "Bots",
+          "backToApp": "Back to app",
           "refresh": "Refresh rooms",
           "close": "Close",
           "loading": "Loading…",
@@ -18640,15 +18675,19 @@
           "tip": "Tip: talk to Orca Admin in Orca HQ — just say what group or bot you want.",
           "adminLabel": "admin: {{name}}",
           "spawnBot": "Spawn a bot into this room",
-          "addMember": "Add member",
+          "addMember": "Turn an open session into a bot",
           "deleteRoom": "Delete room",
           "noMembers": "No members — spawn a bot above.",
           "removeMember": "Remove {{name}}",
-          "allSessionsAdded": "All open agent sessions are already in this room.",
-          "add": "Add",
+          "allSessionsAdded": "Every open agent session is already represented here.",
+          "add": "Create",
           "addAsAdmin": "Admin",
-          "workingOnIt": "working on it",
           "composerPlaceholder": "Message… @Name to call one, @all (admin only) for everyone",
+          "directPlaceholder": "Message {{name}}…",
+          "backToRoom": "Back to room",
+          "directRoomHint": "Focused chat in {{room}}",
+          "directEmptyTitle": "Message {{name}} in this room",
+          "directEmptyHint": "This is a focused room conversation. Other members do not join it unless mentioned.",
           "send": "Send",
           "pickRoom": "Pick a room, or create one on the left.",
           "deleted": "Room deleted",
@@ -18656,7 +18695,38 @@
           "memberAdded": "Member added",
           "addMemberFailed": "Failed to add member",
           "removeMemberFailed": "Failed to remove member",
-          "sendFailed": "Failed to send"
+          "sendFailed": "Failed to send",
+          "botFailed": "Bot reply failed",
+          "adminRole": "Admin",
+          "adminLeads": "{{name}} leads this team",
+          "memberCountOnly": "{{count}} members",
+          "homeHint": "Ask in plain language to create bots or group chats",
+          "actions": "Room actions",
+          "manageMembers": "Manage members",
+          "memberWorking": " working…",
+          "memberWaiting": "Waiting for approval…",
+          "memberFailed": "Failed",
+          "retry": "Retry",
+          "unsupportedSessionAgent": "Unknown agent type"
+        },
+        "roster": {
+          "title": "Team members",
+          "description": "Create a bot, turn an open session into a fresh bot, or clean up this team.",
+          "current": "Current members"
+        },
+        "sidebar": {
+          "chiefReady": "Ready — ask it to build a team",
+          "chiefStarting": "Starting the chief…",
+          "you": "You",
+          "working": "Working…",
+          "waiting": "Waiting approval…",
+          "emptyTeam": "No members yet",
+          "noMembers": "No members yet",
+          "more": "More actions",
+          "chief": "Chief",
+          "teams": "Teams",
+          "noTeams": "Ask the chief to create one.",
+          "tip": "Tell the chief what team you need — it will create the bots."
         }
       }
     },
@@ -19880,7 +19950,9 @@
       "deliveryFailed": "The new {{agent}} session started, but its context could not be sent.",
       "deliveryUnconfirmed": "Orca could not confirm {{agent}} received the session context. Check the new session, and paste it yourself if its input is empty.",
       "copyPrompt": "Copy prompt",
-      "launchFailed": "Could not start a new {{agent}} session."
+      "launchFailed": "Could not start a new {{agent}} session.",
+      "fullDecodeFailed": "Could not decode the original transcript for {{agent}}. Try Focused handoff or hand off to the same agent instead.",
+      "captureFallback": "Could not decode the original transcript, so only recent terminal context was sent. {{agent}} cannot read the original session file."
     },
     "status": {
       "bar": {

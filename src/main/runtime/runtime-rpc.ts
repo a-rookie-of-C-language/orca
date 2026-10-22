@@ -5,5 +5,6 @@ import type { OrcaRuntimeRpcServerOptions } from './runtime-rpc/runtime-rpc-pair
 export class OrcaRuntimeRpcServer extends RuntimeRpcShutdown {
   constructor(options: OrcaRuntimeRpcServerOptions) {
     super(options)
+    this.mobileRpcSurface = this
   }
 }

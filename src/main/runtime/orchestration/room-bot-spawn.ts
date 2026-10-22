@@ -31,6 +31,8 @@ export async function spawnRoomBot(args: {
   instructions?: string
   isAdmin?: boolean
   callerKey?: string
+  /** Install room reply plumbing while the new host exists but before its first turn. */
+  onSessionReady?: () => void
 }): Promise<{ memberId: string; sessionId: string }> {
   const callerKey = args.callerKey ?? `room-bot:${args.room.id}`
   // Every admin seats with the tool doc so plain words ("make a group with
@@ -77,6 +79,7 @@ export async function spawnRoomBot(args: {
   if (!isOrcaSessionId(sessionId)) {
     throw roomError('room_bot_refused', 'The bot session id came out malformed.')
   }
+  args.onSessionReady?.()
   const memberAddress = formatOrcaSessionAddress(sessionId)
   args.db.addRoomMember(args.room.id, {
     memberId: memberAddress,
@@ -97,7 +100,9 @@ export async function spawnRoomBot(args: {
         prompt: brief,
         fromSource: ROOM_SOURCE
       })
-      if (sent.kind === 'refused' || sent.kind === 'failed') {
+      if (sent.kind === 'sent' || sent.kind === 'queued') {
+        args.db.setRoomMemberStatus(args.room.id, memberAddress, 'working')
+      } else {
         console.warn(
           `[rooms] kickoff turn not delivered to ${args.name}: ${sent.kind === 'refused' ? sent.message : sent.message}`
         )
@@ -109,8 +114,15 @@ export async function spawnRoomBot(args: {
         })
       }
     } catch (error) {
-      // Instructions are best-effort; the bot is in the room either way.
-      console.warn(`[rooms] kickoff turn threw for ${args.name}: ${(error as Error).message}`)
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`[rooms] kickoff turn threw for ${args.name}: ${message}`)
+      args.db.appendRoomLine(args.room.id, {
+        who: args.name,
+        memberId: memberAddress,
+        text: `Kickoff failed: ${message}`,
+        kind: 'failed'
+      })
+      args.db.setRoomMemberStatus(args.room.id, memberAddress, 'failed')
     }
   }
   return { memberId: memberAddress, sessionId }

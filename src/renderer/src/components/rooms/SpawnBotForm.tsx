@@ -5,6 +5,13 @@ import { useTranslation } from 'react-i18next'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { useActiveWorktreeId, useAllWorktrees } from '@/store/selectors'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { BOT_AGENTS, LOCAL } from './room-types'
@@ -25,7 +32,7 @@ export function SpawnBotForm(props: {
   const [agent, setAgent] = useState<string>('codex')
   const [model, setModel] = useState('')
   const [effort, setEffort] = useState('')
-  const [worktreeId, setWorktreeId] = useState<string>(activeWorktreeId ?? '')
+  const [worktreeId, setWorktreeId] = useState<string>(activeWorktreeId ?? worktrees[0]?.id ?? '')
   const [instructions, setInstructions] = useState('')
   const [busy, setBusy] = useState(false)
   const [models, setModels] = useState<CatalogModel[]>([])
@@ -102,99 +109,109 @@ export function SpawnBotForm(props: {
         onChange={(e) => setName(e.target.value)}
         disabled={busy}
       />
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          value={agent}
-          onChange={(e) => setAgent(e.target.value)}
-          disabled={busy}
-        >
-          {BOT_AGENTS.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-          value={worktreeId}
-          onChange={(e) => setWorktreeId(e.target.value)}
-          disabled={busy}
-        >
-          {worktrees.length === 0 ? (
-            <option value="">
-              {translate('auto.components.rooms.spawnBot.noWorkspace', '(no workspace)')}
-            </option>
-          ) : null}
-          {worktrees.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.displayName}
-            </option>
-          ))}
-        </select>
-      </div>
-      {models.length > 0 ? (
-        <select
-          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-          value={model}
-          onChange={(e) => {
-            setModel(e.target.value)
-            setEffort('')
-          }}
-          disabled={busy}
-        >
-          <option value="">
-            {translate('auto.components.rooms.spawnBot.modelDefault', '(agent default)')}
-          </option>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <Input
-          placeholder={translate(
-            'auto.components.rooms.spawnBot.modelPlaceholder',
-            'Model (optional, e.g. gpt-5.2-codex / opus)'
-          )}
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          disabled={busy}
-        />
-      )}
-      {(() => {
-        const picked = models.find((m) => m.id === model)
-            if (!picked || picked.efforts.length === 0) {
-              return null
-            }
-        return (
-          <select
-            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-            value={effort}
-            onChange={(e) => setEffort(e.target.value)}
-            disabled={busy}
-          >
-            <option value="">
-              {translate('auto.components.rooms.spawnBot.effortDefault', '(default thinking)')}
-            </option>
-            {picked.efforts.map((e) => (
-              <option key={e.value} value={e.value}>
-                {e.label}
-              </option>
-            ))}
-          </select>
-        )
-      })()}
       <Input
         placeholder={translate(
           'auto.components.rooms.spawnBot.instructionsPlaceholder',
-          'Role / instructions (optional)'
+          'What is this bot responsible for? (optional)'
         )}
         value={instructions}
         onChange={(e) => setInstructions(e.target.value)}
         disabled={busy}
       />
+      <Select value={agent} onValueChange={setAgent} disabled={busy}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {BOT_AGENTS.map((a) => (
+            <SelectItem key={a.id} value={a.id}>
+              {a.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <details className="rounded-md border border-border/60 px-3 py-2">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
+          {translate('auto.components.rooms.spawnBot.advanced', 'Advanced')}
+        </summary>
+        <div className="mt-2 space-y-2">
+          <Select
+            value={worktreeId || '_none'}
+            onValueChange={(v) => setWorktreeId(v === '_none' ? '' : v)}
+            disabled={busy}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {worktrees.length === 0 ? (
+                <SelectItem value="_none">
+                  {translate('auto.components.rooms.spawnBot.noWorkspace', '(no workspace)')}
+                </SelectItem>
+              ) : null}
+              {worktrees.map((w) => (
+                <SelectItem key={w.id} value={w.id}>
+                  {w.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {models.length > 0 ? (
+            <Select
+              value={model || '_default'}
+              onValueChange={(v) => {
+                setModel(v === '_default' ? '' : v)
+                setEffort('')
+              }}
+              disabled={busy}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_default">
+                  {translate('auto.components.rooms.spawnBot.modelDefault', '(agent default)')}
+                </SelectItem>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {(() => {
+            const picked = models.find((m) => m.id === model)
+            if (!picked || picked.efforts.length === 0) {
+              return null
+            }
+            return (
+              <Select
+                value={effort || '_default'}
+                onValueChange={(v) => setEffort(v === '_default' ? '' : v)}
+                disabled={busy}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_default">
+                    {translate(
+                      'auto.components.rooms.spawnBot.effortDefault',
+                      '(default thinking)'
+                    )}
+                  </SelectItem>
+                  {picked.efforts.map((e) => (
+                    <SelectItem key={e.value} value={e.value}>
+                      {e.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
+          })()}
+        </div>
+      </details>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={props.onCancel} disabled={busy}>
           {translate('auto.components.rooms.spawnBot.cancel', 'Cancel')}

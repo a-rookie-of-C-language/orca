@@ -8,8 +8,6 @@
  * needs it and never detaches, so a room answers even while no client is looking.
  */
 
-import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
-import { isTextBlock } from '../../../shared/native-chat-types'
 import { formatOrcaSessionAddress, isOrcaSessionId } from '../../../shared/orca-session-address'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
@@ -17,6 +15,7 @@ import type { AgentSessionTurnCompletionEvent } from '../../../shared/agent-sess
 import type { OrchestrationDb } from './db'
 import type { RoomMemberRow, RoomWithMembers } from './db/rooms/room-store'
 import { postRoomReply, runRoomRound, sendRoomTurn, type RoomRoundDeps } from './room-round'
+import { assistantTextForTurn } from './room-reply-turn-text'
 import {
   parseAdminToolCalls,
   runAdminToolCalls,
@@ -27,7 +26,6 @@ import { spawnRoomBot } from './room-bot-spawn'
 import type { OrcaRuntimeService } from '../orca-runtime'
 
 const WATCHER_ID = 'orchestration-room-replies'
-const REPLY_TEXT_MAX = 4000
 
 const watched = new WeakSet<StructuredAgentSessionHost>()
 /** Rooms currently running a round; keyed so a reply mid-flight does not double-run. */
@@ -41,34 +39,29 @@ type WatcherDeps = {
 }
 
 function memberForSession(db: OrchestrationDb, sessionId: string): RoomMemberRow[] {
-  if (!isOrcaSessionId(sessionId)) return []
+  if (!isOrcaSessionId(sessionId)) {
+    return []
+  }
   const address = formatOrcaSessionAddress(sessionId)
   return db.db
     .prepare(
-      `SELECT room_id, member_id, name, is_admin, seen_seq, session_id, created_at
+      `SELECT room_id, member_id, name, is_admin, seen_seq, session_id, status,
+            status_updated_at, created_at
        FROM room_members WHERE member_id = ? OR session_id = ?`
     )
     .all(address, address) as RoomMemberRow[]
 }
 
-function extractAssistantText(items: AgentJournalRenderItem[], turnItemId: string): string {
-  const turnItems = items.filter(
-    (item) =>
-      item.turnScope &&
-      item.turnScope.kind === 'turn' &&
-      item.turnScope.turnItemId === turnItemId &&
-      item.body.kind === 'message' &&
-      item.body.role === 'assistant'
-  )
-  if (!turnItems.length) return ''
-  const last = turnItems[turnItems.length - 1]
-  if (last.body.kind !== 'message') return ''
-  return last.body.blocks
-    .filter(isTextBlock)
-    .map((block) => block.text)
-    .join('\n')
-    .trim()
-    .slice(0, REPLY_TEXT_MAX)
+function setAttentionStatus(db: OrchestrationDb, sessionId: string, waiting: boolean): void {
+  for (const memberRow of memberForSession(db, sessionId)) {
+    if (waiting) {
+      db.setRoomMemberStatus(memberRow.room_id, memberRow.member_id, 'waiting')
+      continue
+    }
+    if (memberRow.status === 'waiting') {
+      db.setRoomMemberStatus(memberRow.room_id, memberRow.member_id, 'idle')
+    }
+  }
 }
 
 function roundDeps(deps: WatcherDeps, room: RoomWithMembers): RoomRoundDeps {
@@ -90,10 +83,16 @@ async function reportToAdmin(
   replyText: string,
   deps: WatcherDeps
 ): Promise<void> {
-  if (room.mode !== 'admin' || !room.admin_member_id) return
-  if (speaker.member_id === room.admin_member_id) return
+  if (room.mode !== 'admin' || !room.admin_member_id) {
+    return
+  }
+  if (speaker.member_id === room.admin_member_id) {
+    return
+  }
   const admin = room.members.find((m) => m.member_id === room.admin_member_id)
-  if (!admin) return
+  if (!admin) {
+    return
+  }
   const prompt = [
     `${speaker.name} just replied in the room "${room.name}":`,
     '',
@@ -101,7 +100,7 @@ async function reportToAdmin(
     '',
     "As this room's admin, decide whether the group needs a response. If you have a summary or a follow-up for the user, post it now with no name prefix. Reply [PASS] to stay silent."
   ].join('\n')
-  await sendRoomTurn({
+  const sent = await sendRoomTurn({
     member: admin,
     host: deps.host,
     callerKey: `room:${room.id}`,
@@ -111,6 +110,9 @@ async function reportToAdmin(
   }).catch(() => {
     // A failed report-back must not break the watcher for the rest of the roster.
   })
+  if (sent && (sent.kind === 'sent' || sent.kind === 'queued')) {
+    deps.db.setRoomMemberStatus(room.id, admin.member_id, 'working')
+  }
 }
 
 async function handleCompletion(
@@ -118,14 +120,34 @@ async function handleCompletion(
   deps: WatcherDeps
 ) {
   const memberRows = memberForSession(deps.db, completion.sessionId)
-  if (!memberRows.length) return
+  if (!memberRows.length) {
+    return
+  }
+  setAttentionStatus(deps.db, completion.sessionId, false)
+  const failed = completion.outcome === 'failure'
   const snapshot = await deps.host.journalSnapshot(completion.sessionId)
-  const text = extractAssistantText(snapshot.items as AgentJournalRenderItem[], completion.turnId)
-  if (!text) return
+  const text = assistantTextForTurn(
+    snapshot.items as Parameters<typeof assistantTextForTurn>[0],
+    completion.turnId
+  )
   for (const memberRow of memberRows) {
     const room = deps.db.getRoom(memberRow.room_id)
-    if (!room) continue
+    if (!room) {
+      continue
+    }
     try {
+      deps.db.setRoomMemberStatus(room.id, memberRow.member_id, failed ? 'failed' : 'idle')
+      if (!text) {
+        if (failed) {
+          deps.db.appendRoomLine(room.id, {
+            who: memberRow.name,
+            memberId: memberRow.member_id,
+            text: 'The bot turn failed before it produced a reply.',
+            kind: 'failed'
+          })
+        }
+        continue
+      }
       const toolCalls = memberRow.is_admin === 1 ? parseAdminToolCalls(text) : []
       const postText = toolCalls.length ? stripToolBlocks(text) : text
       const result = postText
@@ -152,9 +174,17 @@ async function handleCompletion(
         }
       }
     } catch {
-      // A failed reply must not poison the watcher for other rooms.
+      // A failed reply must not poison the watcher for other rooms; the member's
+      // failed status remains visible in the room roster/state.
     }
   }
+}
+
+async function handlePrompt(
+  completion: Extract<AgentSessionTurnCompletionEvent, { type: 'prompt' }>['prompt'],
+  deps: WatcherDeps
+): Promise<void> {
+  setAttentionStatus(deps.db, completion.sessionId, true)
 }
 
 /** Execute an admin member's group tool calls, show the outcome in the room,
@@ -189,7 +219,9 @@ async function runAdminTools(
         agent: args.agent,
         worktree: args.worktree,
         instructions: args.instructions,
-        isAdmin: args.isAdmin
+        isAdmin: args.isAdmin,
+        model: args.model,
+        effort: args.effort
       })
     },
     readLog: (roomId, limit) =>
@@ -219,7 +251,7 @@ async function runAdminTools(
   if (!admin) {
     return
   }
-  await sendRoomTurn({
+  const sent = await sendRoomTurn({
     member: admin,
     host: deps.host,
     callerKey: `room:${room.id}`,
@@ -229,16 +261,28 @@ async function runAdminTools(
   }).catch(() => {
     // Tool results are already in the room; a missed follow-up is harmless.
   })
+  if (sent && (sent.kind === 'sent' || sent.kind === 'queued')) {
+    deps.db.setRoomMemberStatus(room.id, admin.member_id, 'working')
+  }
 }
 /** Idempotent. First call per host wires the subscription; later calls no-op. */
 export function ensureRoomReplyWatcher(deps: WatcherDeps): void {
-  if (watched.has(deps.host)) return
+  if (watched.has(deps.host)) {
+    return
+  }
   watched.add(deps.host)
   deps.host.subscribeTurnCompletions({
     id: WATCHER_ID,
+    includePrompts: true,
+    onState: (state) => {
+      setAttentionStatus(deps.db, state.sessionId, state.pendingPromptIds.length > 0)
+    },
     emit: (event) => {
       if (event.type === 'completion') {
         void handleCompletion(event.completion, deps)
+      }
+      if (event.type === 'prompt') {
+        void handlePrompt(event.prompt, deps)
       }
     }
   })

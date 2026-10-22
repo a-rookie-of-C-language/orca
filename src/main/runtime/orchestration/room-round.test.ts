@@ -86,6 +86,9 @@ describe('runRoomRound', () => {
     // beta sees the user line but not its own (nothing yet)
     const betaUnseen = db.unseenRoomLines(room.id, beta.memberId)
     expect(betaUnseen.map((l) => l.text)).toEqual(['hello room'])
+    expect(db.getRoom(room.id)?.members.find((m) => m.member_id === alice.memberId)?.status).toBe(
+      'working'
+    )
   })
 
   it('everyone mode prompts the whole roster', async () => {
@@ -106,6 +109,22 @@ describe('runRoomRound', () => {
     const { host, sent } = hostThatSends()
     await runRoomRound(room, { text: '@beta hi' }, deps(db, host))
     expect(sent.map((s) => s.sessionId)).toEqual(['session_beta_0002'])
+  })
+
+  it('explicit target routes without relying on @mention parsing', async () => {
+    const db = new OrchestrationDb(':memory:')
+    const room = db.createRoom({ name: 'r', members: [alice, beta] })
+    const { host, sent } = hostThatSends()
+    await runRoomRound(
+      room,
+      { text: 'please review this', targetMemberId: beta.memberId },
+      deps(db, host)
+    )
+    expect(sent.map((s) => s.sessionId)).toEqual(['session_beta_0002'])
+    const stored = db.db.prepare('SELECT payload FROM room_log WHERE seq = 1').get() as {
+      payload: string
+    }
+    expect(JSON.parse(stored.payload)).toEqual({ targetMemberId: beta.memberId })
   })
 
   it('marks member as seen so their own unread list is empty', async () => {
@@ -132,6 +151,9 @@ describe('postRoomReply', () => {
     )
     expect(result.seq).toBe(1)
     expect(result.followUps.map((m) => m.member_id)).toEqual([beta.memberId])
+    expect(db.getRoom(room.id)?.members.find((m) => m.member_id === alice.memberId)?.status).toBe(
+      'idle'
+    )
     const log = db.unseenRoomLines(room.id, beta.memberId)
     expect(log.map((l) => l.text)).toEqual(['@beta please draft the outline'])
   })

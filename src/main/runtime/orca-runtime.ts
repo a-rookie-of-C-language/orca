@@ -48,6 +48,8 @@ import {
   markdownDocumentFromFilePath
 } from '../../shared/markdown-document-paths'
 import type { WslHostStatus } from '../../shared/wsl-host-types'
+import type { MobileRelayStatus } from '../../shared/mobile-relay-status'
+import type { OrcaCloudSignInProgress } from '../../shared/orca-profiles'
 import type {
   TerminalLeafMoveRequest,
   TerminalLeafMoveResult
@@ -264,6 +266,19 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
 
   notifyWslHostStatusChanged(status: WslHostStatus): void {
     this.emitClientEvent({ type: 'wslHostStatusChanged', status })
+  }
+
+  /** Publishes the desktop's Relay link state to every subscribed client. */
+  publishMobileRelayStatus(status: MobileRelayStatus, cellUrl?: string): void {
+    this.emitClientEvent({ type: 'mobileRelayStatusChanged', status, cellUrl })
+  }
+
+  publishOrcaProfileAuthStatusChanged(): void {
+    this.emitClientEvent({ type: 'orcaProfileAuthStatusChanged' })
+  }
+
+  publishOrcaProfileSignInProgress(progress: OrcaCloudSignInProgress | null): void {
+    this.emitClientEvent({ type: 'orcaProfileSignInProgressChanged', progress })
   }
 
   /** Commits a pane move on the runtime before the renderer creates its target tab. */
