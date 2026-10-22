@@ -313,6 +313,7 @@ export default function TabGroupPanel({
                   activeTabId={activeTab.id}
                   onActivate={commands.activateAgentSession}
                   onClose={commands.closeItem}
+                  insetWindowControls={touchesRightEdge}
                 />
               ) : (
                 tabBar

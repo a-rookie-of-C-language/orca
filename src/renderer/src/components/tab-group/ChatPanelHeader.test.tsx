@@ -128,6 +128,24 @@ describe('fixed chat panel header', () => {
     expect(close).toHaveBeenCalledWith(chat.id)
   })
 
+  it('keeps actions clear of fixed window controls when requested', () => {
+    const { container } = render(
+      <TooltipProvider>
+        <ChatPanelHeader
+          chats={[chat]}
+          activeTabId={chat.id}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+          insetWindowControls
+        />
+      </TooltipProvider>
+    )
+    const header = container.querySelector('[data-chat-panel-header]')
+    expect(header?.getAttribute('style')).toContain(
+      'padding-right: var(--window-controls-width, 0px)'
+    )
+  })
+
   it('lets the reader switch conversations without a chat tab strip', async () => {
     const activate = vi.fn()
     render(

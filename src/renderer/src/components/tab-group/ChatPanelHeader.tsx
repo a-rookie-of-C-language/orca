@@ -17,7 +17,8 @@ export function ChatPanelHeader({
   activeTabId,
   onActivate,
   onClose,
-  allowClose = true
+  allowClose = true,
+  insetWindowControls = false
 }: {
   chats: Tab[]
   activeTabId: string
@@ -25,6 +26,8 @@ export function ChatPanelHeader({
   onClose: (tabId: string) => void
   /** False hides the close button so a pinned column keeps its last chat. */
   allowClose?: boolean
+  /** Keeps header actions clear of the fixed Windows/Linux window controls. */
+  insetWindowControls?: boolean
 }): React.JSX.Element {
   const generatedTitles = useAppStore((state) => state.settings?.tabAutoGenerateTitle === true)
   const setTabCustomTitle = useAppStore((state) => state.setTabCustomTitle)
@@ -35,6 +38,9 @@ export function ChatPanelHeader({
   return (
     <div
       className="flex h-full min-w-0 items-center gap-2 px-2 [-webkit-app-region:no-drag]"
+      style={
+        insetWindowControls ? { paddingRight: 'var(--window-controls-width, 0px)' } : undefined
+      }
       data-chat-panel-header=""
       data-chat-panel-active-tab-id={activeTabId}
     >
