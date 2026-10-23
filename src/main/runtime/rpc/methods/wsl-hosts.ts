@@ -53,7 +53,9 @@ export const WSL_HOST_METHODS = [
     permission: 'host-admin',
     params: WslHostConnectParams,
     handler: async (params): Promise<void> => {
-      await requireWslHostService().connect(params.environmentId, { force: params.force === true })
+      await requireWslHostService().connect(params.environmentId, {
+        intent: params.intent ?? (params.force === true ? 'force' : undefined)
+      })
     }
   }),
   defineMethod({

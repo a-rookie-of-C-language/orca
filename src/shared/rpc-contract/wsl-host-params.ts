@@ -10,6 +10,7 @@ export const WslHostEnvironmentParams = z.object({
 })
 
 export const WslHostConnectParams = WslHostEnvironmentParams.extend({
+  intent: z.enum(['update', 'force']).optional(),
   force: z.boolean().optional()
 })
 

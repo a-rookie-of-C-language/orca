@@ -1,6 +1,7 @@
 import type { BrowserClientPageRendererIdentity as RendererPageIdentity } from '../../../../shared/browser-client-page-renderer-protocol'
 import {
   createBrowserClientPageRetainedHost,
+  hideRetainedHostWhileGuestIsBlank,
   createBrowserClientPageWebview,
   type BrowserClientPageWebviewFactory
 } from './browser-client-page-retained-elements'
@@ -62,6 +63,7 @@ export function createBrowserClientPageRetainedPage(options: {
     onReady,
     onDestroyed,
     onRendererGone,
+    onLoadCommit: hideRetainedHostWhileGuestIsBlank(host),
     releaseDragPassthroughSurface: () => {}
   }
   page.releaseDragPassthroughSurface = enrolRetainedHostDragPassthrough(page)
@@ -69,6 +71,7 @@ export function createBrowserClientPageRetainedPage(options: {
   webview.addEventListener('dom-ready', onReady)
   webview.addEventListener('destroyed', onDestroyed)
   webview.addEventListener('render-process-gone', onRendererGone)
+  webview.addEventListener('load-commit', page.onLoadCommit)
   options.registerPage(page)
   options.incrementPartitionCount(identity.partition)
   options.appendHost(host, webview)

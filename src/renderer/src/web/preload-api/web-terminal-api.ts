@@ -34,6 +34,7 @@ export function createPtyApi(): NonNullable<Partial<PreloadApi>['pty']> {
   return {
     ...nativePty,
     ...createRuntimePtyQueryApi(),
+    killFenced: () => Promise.resolve({ outcome: 'refused', reason: 'unsupported' }),
     ackColdRestore: () => {},
     // Web panes never transit main's hidden-delivery gate, so there is no drop latch.
     ackHiddenOutputRestoreApplied: () => {},

@@ -254,6 +254,7 @@ export class BrowserClientPageRetainedRegistry {
     page.webview.removeEventListener('dom-ready', page.onReady)
     page.webview.removeEventListener('destroyed', page.onDestroyed)
     page.webview.removeEventListener('render-process-gone', page.onRendererGone)
+    page.webview.removeEventListener('load-commit', page.onLoadCommit)
     page.visibleAttachment = null
     page.webview.remove()
     page.host.remove()

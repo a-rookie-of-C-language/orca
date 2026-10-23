@@ -109,7 +109,7 @@ export function createTerminalLinkTestDoubles(): TerminalLinkTestDoubles {
     unifiedTabsByWorktree: {},
     groupsByWorktree: {},
     worktreesByRepo: {},
-    folderWorkspaces: [] as []
+    folderWorkspaces: []
   }
 
   return {

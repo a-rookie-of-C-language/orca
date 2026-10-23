@@ -197,7 +197,10 @@ function createWebPreloadApi(): Partial<PreloadApi> {
       getSnapshot: () =>
         isTauriNativeHost()
           ? callRuntimeResult<MemorySnapshot>('diagnostics.memory')
-          : Promise.resolve(createEmptyMemorySnapshot())
+          : Promise.resolve(createEmptyMemorySnapshot()),
+      // Browser pages have no native-window veto; document visibility owns admission.
+      resourceWindowVisible: () => Promise.resolve(true),
+      onResourceWindowVisibility: () => () => {}
     },
     aiVault: createWebAiVaultApi(),
     preflight: createPreflightApi(),
