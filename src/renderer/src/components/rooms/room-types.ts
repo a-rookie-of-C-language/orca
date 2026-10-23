@@ -10,6 +10,7 @@ export type RoomMember = {
   isAdmin: boolean
   status?: 'idle' | 'working' | 'waiting' | 'failed'
   statusUpdatedAt?: string
+  sessionId?: string | null
 }
 
 export type Room = {

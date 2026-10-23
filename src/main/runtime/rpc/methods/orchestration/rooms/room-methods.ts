@@ -3,12 +3,18 @@
  * message into a room and runs the opening round of member prompts.
  */
 
+import { randomUUID } from 'node:crypto'
 import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { defineMethod } from '../../../core'
 import { runRoomRound, postRoomReply } from '../../../../orchestration/room-round'
 import { ROOM_SOURCE, spawnRoomBot } from '../../../../orchestration/room-bot-spawn'
 import { MAIN_BOT_NAME, MAIN_BOT_ROOM_NAME } from '../../../../orchestration/room-admin-tools'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
+import { parseOrcaSessionAddress } from '../../../../../../shared/orca-session-address'
+import {
+  createStructuredAgentSessionOperationId,
+  structuredAgentSessionPayloadFingerprint
+} from '../../../../../../shared/structured-agent-session-mutation'
 import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
 import {
@@ -19,6 +25,7 @@ import {
   RoomListParams,
   RoomLogParams,
   RoomMemberAddParams,
+  RoomMemberModelParams,
   RoomMemberRemoveParams,
   RoomPostParams,
   RoomSendParams,
@@ -320,6 +327,53 @@ export const ORCHESTRATION_ROOM_METHODS = [
     handler: (params, { runtime }) => {
       const db = runtime.getOrchestrationDb()
       db.removeRoomMember(params.id, params.memberId)
+      return { ok: true }
+    }
+  }),
+
+  defineMethod({
+    name: 'orchestration.roomMemberSetModel',
+    permission: 'workspace',
+    params: RoomMemberModelParams,
+    handler: async (params, { runtime }) => {
+      const db = runtime.getOrchestrationDb()
+      const room = db.getRoom(params.id)
+      const member = room?.members.find((m) => m.member_id === params.memberId)
+      if (!room || !member) {
+        throw roomError('room_member_not_found', 'The member is not in this room.')
+      }
+      const host = getStructuredAgentSessionHost()
+      if (!host) {
+        throw roomError('room_no_chat_host', 'The agent-session host is not running.')
+      }
+      const sessionId = parseOrcaSessionAddress(member.session_id ?? member.member_id)
+      if (!sessionId) {
+        throw roomError('room_member_no_session', 'This member has no model-enabled session.')
+      }
+      const fence = host.deps.store.getRecord(sessionId)?.lease.runtimeFence
+      if (typeof fence !== 'number' || fence <= 0) {
+        throw roomError('room_member_no_session', 'This member has no active session fence.')
+      }
+      const fields = { key: 'model', value: params.model }
+      const result = await host.setOption(
+        { callerKey: `room-model:${room.id}` },
+        {
+          envelope: {
+            sessionId,
+            clientOperationId: createStructuredAgentSessionOperationId(randomUUID),
+            expectedRuntimeFence: fence,
+            payloadFingerprint: structuredAgentSessionPayloadFingerprint({
+              method: 'agentSession.setOption',
+              sessionId,
+              fields
+            })
+          },
+          ...fields
+        }
+      )
+      if (!result.ok) {
+        throw roomError('room_member_model_refused', result.refusal.message ?? 'Model not applied.')
+      }
       return { ok: true }
     }
   }),

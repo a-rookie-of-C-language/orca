@@ -13,6 +13,7 @@ import type { AgentSessionOption, Room } from './room-types'
 import { shortSessionLabel } from './room-session-pool'
 import { SpawnBotForm } from './SpawnBotForm'
 import { RoomMemberAvatar, agentFromMemberId } from './RoomMemberAvatar'
+import { RoomMemberModelPicker } from './RoomMemberModelPicker'
 
 /** Member management lives off the chat surface so ordinary conversations stay clean. */
 export function RoomRosterBar(props: {
@@ -67,7 +68,10 @@ export function RoomRosterBar(props: {
                       member={{ ...m, agent: agentFromMemberId(m.memberId) ?? undefined }}
                       className="size-5 [&_svg]:size-3"
                     />
-                    <span className="min-w-0 flex-1 truncate text-sm">{m.name}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{m.name}</span>
+                      <RoomMemberModelPicker roomId={selected.id} member={m} />
+                    </div>
                     {m.status === 'working' ? (
                       <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">
                         <Loader2 className="size-3 animate-spin" />

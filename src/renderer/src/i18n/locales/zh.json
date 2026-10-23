@@ -18391,7 +18391,10 @@
         "roster": {
           "title": "团队成员",
           "description": "创建 Bot、把打开的会话变成新的 Bot，或整理这个团队。",
-          "current": "当前成员"
+          "current": "当前成员",
+          "modelUpdated": "模型已更新",
+          "modelUpdateFailed": "模型更新失败",
+          "modelUnknown": "（未知）"
         }
       }
     },

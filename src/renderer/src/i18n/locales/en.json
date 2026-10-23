@@ -18712,7 +18712,10 @@
         "roster": {
           "title": "Team members",
           "description": "Create a bot, turn an open session into a fresh bot, or clean up this team.",
-          "current": "Current members"
+          "current": "Current members",
+          "modelUpdated": "Model updated",
+          "modelUpdateFailed": "Model update failed",
+          "modelUnknown": "(unknown)"
         },
         "sidebar": {
           "chiefReady": "Ready — ask it to build a team",

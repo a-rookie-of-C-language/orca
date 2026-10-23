@@ -38,6 +38,12 @@ export const RoomMemberRemoveParams = z.object({
   memberId: requiredString('Missing --member-id')
 })
 
+export const RoomMemberModelParams = z.object({
+  id: requiredString('Missing --id'),
+  memberId: requiredString('Missing --member-id'),
+  model: requiredString('Missing --model')
+})
+
 export const RoomBotCreateParams = z.object({
   /** Room the bot joins. */
   id: requiredString('Missing --id'),
