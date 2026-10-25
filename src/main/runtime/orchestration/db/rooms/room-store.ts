@@ -69,6 +69,18 @@ const ROOM_NOTICE_MAX = 2000
 
 const invalid = (message: string) => Object.assign(new Error(message), { code: 'room/invalid' })
 
+/** Mention syntax and roster addressing live on member names; keep them plain. */
+export function roomMemberNameProblem(name: string): string | null {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return 'A member needs a name'
+  }
+  if (/[@`\r\n]/.test(trimmed) || /\b(all|everyone|user|you)\b/i.test(trimmed)) {
+    return `Member name "${trimmed}" reads like a mention or role; pick another`
+  }
+  return null
+}
+
 export function createRoom(
   this: OrchestrationDb,
   input: {
@@ -115,8 +127,9 @@ export function createRoom(
     insertRoom.run(id, name, mode, notice, worktree, now, now)
     for (const member of members) {
       const memberName = String(member.name ?? '').trim()
-      if (!memberName) {
-        throw invalid('A member needs a name')
+      const problem = roomMemberNameProblem(memberName)
+      if (problem) {
+        throw invalid(problem)
       }
       const key = memberName.toLowerCase()
       if (namesSeen.has(key)) {
@@ -207,8 +220,19 @@ export function addRoomMember(
   member: { memberId: string; name: string; isAdmin?: boolean }
 ): void {
   const name = String(member.name ?? '').trim()
-  if (!name) {
-    throw invalid('A member needs a name')
+  const problem = roomMemberNameProblem(name)
+  if (problem) {
+    throw invalid(problem)
+  }
+  const room = this.getRoom(roomId)
+  if (!room) {
+    throw invalid(`Room ${roomId} not found`)
+  }
+  if (room.members.length >= ROOM_MAX_MEMBERS) {
+    throw invalid(`A room has at most ${ROOM_MAX_MEMBERS} members`)
+  }
+  if (room.members.some((m) => m.name.toLowerCase() === name.toLowerCase())) {
+    throw invalid(`Duplicate member name "${name}"`)
   }
   const now = new Date().toISOString()
   this.db.exec('BEGIN IMMEDIATE')

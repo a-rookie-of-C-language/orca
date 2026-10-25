@@ -32,3 +32,25 @@ export function assistantTextForTurn(items: AgentJournalRenderItem[], turnId: st
     .trim()
     .slice(0, REPLY_TEXT_MAX)
 }
+
+/** Whether the turn's user input was Orca's own send (a room prompt): user-composed
+ *  turns carry no agent `from` and must never be lifted into a room. */
+export function turnStartedByRoom(items: AgentJournalRenderItem[], turnId: string): boolean {
+  const turnItemIds = new Set(
+    items
+      .filter((item) => item.body.kind === 'turn' && item.body.turnId === turnId)
+      .map((item) => item.itemId)
+  )
+  return items.some((item) => {
+    if (item.body.kind !== 'message' || item.body.role !== 'user') {
+      return false
+    }
+    if (item.turnScope?.kind !== 'turn') {
+      return false
+    }
+    if (turnItemIds.size ? !turnItemIds.has(item.turnScope.turnItemId) : item.turnScope.turnItemId !== turnId) {
+      return false
+    }
+    return item.body.from?.kind === 'agent'
+  })
+}

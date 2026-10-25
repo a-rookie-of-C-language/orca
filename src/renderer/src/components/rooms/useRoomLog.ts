@@ -41,7 +41,7 @@ export function useRoomLog(roomId: string | null) {
   const discardPendingMessage = useCallback((key: string) => {
     setPending((current) => current.filter((message) => message.key !== key))
   }, [])
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!roomId) {
       setLines([])
       return
@@ -63,9 +63,11 @@ export function useRoomLog(roomId: string | null) {
         )
       )
     } catch (error) {
-      toast.error(
+      if (!options?.silent) {
+        toast.error(
         `${translate('auto.components.rooms.useRoomLog.readFailed', 'Failed to read room log')}: ${error instanceof Error ? error.message : String(error)}`
       )
+      }
     }
   }, [roomId])
   useEffect(() => {
@@ -74,7 +76,7 @@ export function useRoomLog(roomId: string | null) {
     if (!roomId) {
       return
     }
-    const timer = setInterval(() => void refresh(), 3000)
+    const timer = setInterval(() => void refresh({ silent: true }), 3000)
     return () => clearInterval(timer)
   }, [refresh, roomId])
   const pendingLines = useMemo(

@@ -3,6 +3,7 @@ import type { JSX } from 'react'
 import { MarkdownPreviewBody } from '@/components/editor/MarkdownPreviewBody'
 import { cn } from '@/lib/utils'
 import { stripRoomToolBlocks } from './room-chat-transcript-model'
+import { roomMessageUrlTransform } from './room-message-url-transform'
 
 const EMPTY_COMPONENTS = {}
 
@@ -16,6 +17,7 @@ export const RoomMessageMarkdown = memo(function RoomMessageMarkdown(props: {
       <MarkdownPreviewBody
         content={stripRoomToolBlocks(props.content)}
         components={EMPTY_COMPONENTS}
+        urlTransform={roomMessageUrlTransform}
       />
     </div>
   )

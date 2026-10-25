@@ -73,16 +73,24 @@ export function CreateRoomDialog(props: { onCreated: () => void; variant?: 'butt
         mode: 'admin',
         worktree: `id:${worktreeId}`
       })
-      await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
-        id: created.room.id,
-        worktree: `id:${worktreeId}`,
-        agent: 'codex',
-        model: model.trim() || undefined,
-        effort: effort || undefined,
-        name: 'admin',
-        isAdmin: true,
-        instructions: goal.trim() || undefined
-      })
+      try {
+        await callRuntimeRpc(LOCAL, 'orchestration.roomBotCreate', {
+          id: created.room.id,
+          worktree: `id:${worktreeId}`,
+          agent: 'codex',
+          model: model.trim() || undefined,
+          effort: effort || undefined,
+          name: 'admin',
+          isAdmin: true,
+          instructions: goal.trim() || undefined
+        })
+      } catch (botError) {
+        toast.error(
+          `${translate('auto.components.rooms.createRoom.adminFailed', 'Room created, but its admin bot failed')}: ${
+            botError instanceof Error ? botError.message : String(botError)
+          }`
+        )
+      }
       toast.success(
         translate('auto.components.rooms.createRoom.created', 'Room "{{name}}" created', {
           name: name.trim()

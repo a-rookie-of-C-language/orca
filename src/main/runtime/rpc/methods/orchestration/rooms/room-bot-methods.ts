@@ -79,6 +79,10 @@ export const ORCHESTRATION_ROOM_BOT_METHODS = [
       let admin = room.members.find((m) => m.is_admin === 1)
       if (admin && adminNeedsRespawn(db, room.id, admin)) {
         try {
+          const staleSessionId = parseOrcaSessionAddress(admin.session_id ?? admin.member_id)
+          if (staleSessionId) {
+            getStructuredAgentSessionHost()?.close(staleSessionId, 'evict').catch(() => undefined)
+          }
           db.removeRoomMember(room.id, admin.member_id)
           const refilled = db.getRoom(room.id)
           if (refilled) {

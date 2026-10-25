@@ -1,8 +1,6 @@
 import type { OrchestrationDb } from '../orchestration-db'
 import type { RoomLogKind, RoomLogRow } from './room-store'
 
-const ROOM_LOG_MAX = 60
-
 /** Append a line and advance the room's sequence. Returns the new seq. */
 export function appendRoomLine(
   this: OrchestrationDb,
@@ -20,7 +18,6 @@ export function appendRoomLine(
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
   const bump = this.db.prepare(`UPDATE rooms SET seq = ?, updated_at = ? WHERE id = ?`)
-  const trim = this.db.prepare(`DELETE FROM room_log WHERE room_id = ? AND seq <= ?`)
   let seq = 0
   this.db.exec('BEGIN IMMEDIATE')
   try {
@@ -43,7 +40,6 @@ export function appendRoomLine(
       line.payload ?? null
     )
     bump.run(seq, now, roomId)
-    trim.run(roomId, seq - ROOM_LOG_MAX)
     this.db.exec('COMMIT')
   } catch (error) {
     this.db.exec('ROLLBACK')

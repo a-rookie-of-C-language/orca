@@ -94,6 +94,26 @@ const assistantItem = (turnItemId: string, text: string) => ({
   }
 })
 
+const roomUserItem = (turnItemId: string) => ({
+  itemId: `item-user-${turnItemId}`,
+  revision: 0,
+  sequence: 0,
+  observedAt: 0,
+  turnScope: { kind: 'turn' as const, turnItemId },
+  body: {
+    kind: 'message' as const,
+    role: 'user' as const,
+    blocks: [{ type: 'text' as const, text: 'room prompt' }],
+    from: { kind: 'agent' as const, senders: [], orchestration: null }
+  }
+})
+
+const privateUserItem = (turnItemId: string) => ({
+  ...roomUserItem(turnItemId),
+  itemId: `item-private-${turnItemId}`,
+  body: { ...roomUserItem(turnItemId).body, from: undefined }
+})
+
 const seedRoom = (db: OrchestrationDb) =>
   db.createRoom({
     name: 'demo',
@@ -118,7 +138,7 @@ describe('room-reply-watcher', () => {
   it('posts the member reply into the room when its turn completes', async () => {
     const db = new OrchestrationDb(':memory:')
     const room = seedRoom(db)
-    const { host, subscribers } = hostWith([assistantItem('turn-1', 'hello room')])
+    const { host, subscribers } = hostWith([roomUserItem('turn-1'), assistantItem('turn-1', 'hello room')])
     ensureRoomReplyWatcher({ db, host })
 
     subscribers[0].emit(completionFor('session_alice_0001', 'turn-1'))
@@ -131,10 +151,26 @@ describe('room-reply-watcher', () => {
     })
   })
 
+  it('ignores a turn the user started in the member session directly', async () => {
+    const db = new OrchestrationDb(':memory:')
+    const room = seedRoom(db)
+    const { host, subscribers, sends } = hostWith([
+      privateUserItem('turn-1'),
+      assistantItem('turn-1', 'private answer')
+    ])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_alice_0001', 'turn-1'))
+    await new Promise((r) => setTimeout(r, 30))
+    const count = db.db.prepare(`SELECT COUNT(*) AS n FROM room_log WHERE room_id = ?`).get(room.id)
+    expect(count?.n).toBe(0)
+    expect(sends).toHaveLength(0)
+  })
+
   it('ignores completions on sessions that belong to no member', async () => {
     const db = new OrchestrationDb(':memory:')
     const room = seedRoom(db)
-    const { host, subscribers } = hostWith([assistantItem('turn-1', 'noise')])
+    const { host, subscribers } = hostWith([roomUserItem('turn-1'), assistantItem('turn-1', 'noise')])
     ensureRoomReplyWatcher({ db, host })
 
     subscribers[0].emit(completionFor('session_stranger', 'turn-1'))
@@ -154,7 +190,10 @@ describe('room-reply-watcher', () => {
   it('marks a member waiting while a prompt is pending and idle when it completes', async () => {
     const db = new OrchestrationDb(':memory:')
     const room = seedRoom(db)
-    const { host, subscribers } = hostWith([assistantItem('turn-1', 'after approval')])
+    const { host, subscribers } = hostWith([
+      roomUserItem('turn-1'),
+      assistantItem('turn-1', 'after approval')
+    ])
     ensureRoomReplyWatcher({ db, host })
 
     expect(subscribers[0].includePrompts).toBe(true)
@@ -185,7 +224,10 @@ describe('room-reply-watcher', () => {
   it('in admin mode, a non-admin reply nudges the admin to summarize', async () => {
     const db = new OrchestrationDb(':memory:')
     const room = seedAdminRoom(db)
-    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'I looked it up')])
+    const { host, subscribers, sends } = hostWith([
+      roomUserItem('turn-1'),
+      assistantItem('turn-1', 'I looked it up')
+    ])
     ensureRoomReplyWatcher({ db, host })
 
     subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
@@ -200,7 +242,7 @@ describe('room-reply-watcher', () => {
   it('in everyone mode, a reply does not trigger a report-back', async () => {
     const db = new OrchestrationDb(':memory:')
     seedRoom(db)
-    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'hello')])
+    const { host, subscribers, sends } = hostWith([roomUserItem('turn-1'), assistantItem('turn-1', 'hello')])
     ensureRoomReplyWatcher({ db, host })
 
     subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
@@ -212,6 +254,7 @@ describe('room-reply-watcher', () => {
     const db = new OrchestrationDb(':memory:')
     seedAdminRoom(db)
     const { host, subscribers, sends } = hostWith([
+      roomUserItem('turn-1'),
       assistantItem('turn-1', '@beta please review this')
     ])
     ensureRoomReplyWatcher({ db, host })
@@ -226,12 +269,42 @@ describe('room-reply-watcher', () => {
   it("the admin's own reply does not loop back to itself", async () => {
     const db = new OrchestrationDb(':memory:')
     seedAdminRoom(db)
-    const { host, subscribers, sends } = hostWith([assistantItem('turn-1', 'admin said')])
+    const { host, subscribers, sends } = hostWith([roomUserItem('turn-1'), assistantItem('turn-1', 'admin said')])
     ensureRoomReplyWatcher({ db, host })
 
     subscribers[0].emit(completionFor('session_alice_0001', 'turn-1'))
     await new Promise((r) => setTimeout(r, 30))
     expect(sends).toHaveLength(0)
+  })
+
+  it('a [PASS] reply does not nudge the admin', async () => {
+    const db = new OrchestrationDb(':memory:')
+    seedAdminRoom(db)
+    const { host, subscribers, sends } = hostWith([
+      roomUserItem('turn-1'),
+      assistantItem('turn-1', '[PASS]')
+    ])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
+    await new Promise((r) => setTimeout(r, 30))
+    expect(sends).toHaveLength(0)
+  })
+
+  it('a reply that already calls the admin does not nudge the admin again', async () => {
+    const db = new OrchestrationDb(':memory:')
+    seedAdminRoom(db)
+    const { host, subscribers, sends } = hostWith([
+      roomUserItem('turn-1'),
+      assistantItem('turn-1', '@alice here is what you asked for')
+    ])
+    ensureRoomReplyWatcher({ db, host })
+
+    subscribers[0].emit(completionFor('session_beta_0002', 'turn-1'))
+    await vi.waitFor(() => {
+      expect(sends.map((send) => send.sessionId)).toEqual(['session_alice_0001'])
+      expect(sends[0].text).toContain('@alice here is what you asked for')
+    })
   })
 })
 

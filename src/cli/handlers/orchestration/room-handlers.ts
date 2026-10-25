@@ -1,6 +1,7 @@
 import type { CommandHandler } from '../../dispatch'
 import { printResult } from '../../format'
 import { getOptionalStringFlag, getRequiredStringFlag } from '../../flags'
+import { RuntimeClientError } from '../../runtime-client'
 
 type RoomDto = {
   id: string
@@ -29,12 +30,19 @@ const roomSummary = (room: RoomDto) =>
 
 export const ORCHESTRATION_ROOM_HANDLERS: Record<string, CommandHandler> = {
   'orchestration room-create': async ({ flags, client, json }) => {
-    const members = String(flags.get('member') ?? '')
+    const memberFlag = getOptionalStringFlag(flags, 'member') ?? ''
+    const members = memberFlag
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean)
       .map((entry) => {
         const parts = entry.split(':')
+        if (parts[0] === 'orca_session_id' && !parts[1]) {
+          throw new RuntimeClientError(
+            'invalid_argument',
+            '--member orca_session_id needs a session id after the colon'
+          )
+        }
         const memberId =
           parts[0] === 'orca_session_id'
             ? `${parts.shift()}:${parts.shift()}`

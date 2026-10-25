@@ -15,7 +15,7 @@ import type { AgentSessionTurnCompletionEvent } from '../../../shared/agent-sess
 import type { OrchestrationDb } from './db'
 import type { RoomMemberRow, RoomWithMembers } from './db/rooms/room-store'
 import { postRoomReply, runRoomRound, sendRoomTurn, type RoomRoundDeps } from './room-round'
-import { assistantTextForTurn } from './room-reply-turn-text'
+import { assistantTextForTurn, turnStartedByRoom } from './room-reply-turn-text'
 import {
   parseAdminToolCalls,
   runAdminToolCalls,
@@ -26,10 +26,13 @@ import { spawnRoomBot } from './room-bot-spawn'
 import type { OrcaRuntimeService } from '../orca-runtime'
 
 const WATCHER_ID = 'orchestration-room-replies'
+/** Cross-turn hop cap per user message: @-call chains and report-backs share it. */
+const ROOM_WATCH_HOP_MAX = 12
 
 const watched = new WeakSet<StructuredAgentSessionHost>()
 /** Rooms currently running a round; keyed so a reply mid-flight does not double-run. */
 const roomsInFlight = new Set<string>()
+const roomWatchBudgets = new Map<string, { rootSeq: number; hops: number }>()
 
 type WatcherDeps = {
   db: OrchestrationDb
@@ -63,6 +66,23 @@ function setAttentionStatus(db: OrchestrationDb, sessionId: string, waiting: boo
       db.setRoomMemberStatus(memberRow.room_id, memberRow.member_id, 'idle')
     }
   }
+}
+
+/** Start a fresh hop budget for the room's next user-triggered exchange. */
+export function resetRoomWatchBudget(db: OrchestrationDb, roomId: string): void {
+  const room = db.getRoom(roomId)
+  if (room) {
+    roomWatchBudgets.set(roomId, { rootSeq: room.seq, hops: 0 })
+  }
+}
+
+function spendWatchHop(roomId: string): boolean {
+  const budget = roomWatchBudgets.get(roomId)
+  if (!budget) {
+    return true
+  }
+  budget.hops += 1
+  return budget.hops <= ROOM_WATCH_HOP_MAX
 }
 
 function roundDeps(deps: WatcherDeps, room: RoomWithMembers): RoomRoundDeps {
@@ -127,6 +147,9 @@ async function handleCompletion(
   setAttentionStatus(deps.db, completion.sessionId, false)
   const failed = completion.outcome === 'failure'
   const snapshot = await deps.host.journalSnapshot(completion.sessionId)
+  if (!turnStartedByRoom(snapshot.items, completion.turnId)) {
+    return
+  }
   const text = assistantTextForTurn(snapshot.items, completion.turnId)
   for (const memberRow of memberRows) {
     const room = deps.db.getRoom(memberRow.room_id)
@@ -135,6 +158,13 @@ async function handleCompletion(
     }
     try {
       deps.db.setRoomMemberStatus(room.id, memberRow.member_id, failed ? 'failed' : 'idle')
+      if (!spendWatchHop(room.id)) {
+        deps.db.appendRoomLine(room.id, {
+          who: 'Orca',
+          text: '[Orca: turn budget spent; send a new message to continue.]'
+        })
+        continue
+      }
       if (!text) {
         if (failed) {
           deps.db.appendRoomLine(room.id, {
@@ -150,8 +180,13 @@ async function handleCompletion(
       const postText = toolCalls.length ? stripToolBlocks(text) : text
       const result = postText
         ? await postRoomReply(room, memberRow.member_id, postText, roundDeps(deps, room))
-        : { seq: room.seq, followUps: [] }
-      await reportToAdmin(room, memberRow, postText || text, deps)
+        : { seq: room.seq, followUps: [], passed: false }
+      const adminCalled = result.followUps.some(
+        (m) => m.member_id === room.admin_member_id && m.member_id !== memberRow.member_id
+      )
+      if (!result.passed && !adminCalled) {
+        await reportToAdmin(room, memberRow, postText || text, deps)
+      }
       await runAdminTools(room, memberRow, text, deps)
       if (result.followUps.length && !roomsInFlight.has(room.id)) {
         roomsInFlight.add(room.id)

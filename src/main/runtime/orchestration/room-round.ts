@@ -57,6 +57,7 @@ const isPass = (text: string) =>
   text === '' ||
   // ASCII-only: brackets cover []() plus CJK variants via escapes.
   /^\s*[[\u3010(\uFF08]\s*pass\s*[\]\u3011)\uFF09]|^\s*pass\s*[.\u3002!\uFF01]?\s*$/i.test(text)
+export { isPass as roomReplyIsPass }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -299,7 +300,7 @@ export async function runRoomRound(
     switch (sent.kind) {
       case 'sent':
         deps.db.setRoomMemberStatus(room.id, member.member_id, 'working')
-        slot.status = 'speaking' // still speaking; reply comes back through the room mailbox
+        slot.status = 'working' // reply comes back through the room mailbox
         break
       case 'queued':
         // Busy chat holds our prompt as a draft: surface it as working so the
@@ -333,7 +334,7 @@ export async function postRoomReply(
   memberId: string,
   text: string,
   deps: RoomRoundDeps
-): Promise<{ seq: number; followUps: RoomMemberRow[] }> {
+): Promise<{ seq: number; followUps: RoomMemberRow[]; passed: boolean }> {
   const member = room.members.find((m) => m.member_id === memberId)
   if (!member) {
     throw new Error(`Member ${memberId} is not in room ${room.id}`)
@@ -341,7 +342,7 @@ export async function postRoomReply(
   const stripped = stripRoomSpeakerName(member.name, text.trim())
   deps.db.setRoomMemberStatus(room.id, memberId, 'idle')
   if (isPass(stripped)) {
-    return { seq: room.seq, followUps: [] }
+    return { seq: room.seq, followUps: [], passed: true }
   }
   const seq = deps.db.appendRoomLine(room.id, {
     who: member.name,
@@ -359,5 +360,5 @@ export async function postRoomReply(
     leads && all
       ? room.members.filter((m) => m.member_id !== memberId)
       : room.members.filter((m) => namedIds.has(m.member_id))
-  return { seq, followUps: callees }
+  return { seq, followUps: callees, passed: false }
 }

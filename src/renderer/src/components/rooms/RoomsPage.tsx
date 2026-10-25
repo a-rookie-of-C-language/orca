@@ -104,6 +104,7 @@ export default function RoomsPage(): JSX.Element {
           text: message,
           ...(directMember ? { targetMemberId: directMember.memberId } : {})
         })
+        await refreshLog()
         discardPendingMessage(pendingKey)
         for (const slot of delivered.slots.filter((slot) => slot.status === 'failed')) {
           toast.error(
@@ -112,7 +113,6 @@ export default function RoomsPage(): JSX.Element {
             }`
           )
         }
-        await refreshLog()
       } catch (error) {
         discardPendingMessage(pendingKey)
         setComposer(message)

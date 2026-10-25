@@ -2,7 +2,10 @@ import { getStructuredAgentSessionHost } from '../../../../../native-chat/agent-
 import { defineMethod } from '../../../core'
 import { runRoomRound, postRoomReply } from '../../../../orchestration/room-round'
 import { ROOM_SOURCE } from '../../../../orchestration/room-bot-spawn'
-import { ensureRoomReplyWatcherForCurrentHost } from '../../../../orchestration/room-reply-watcher'
+import {
+  ensureRoomReplyWatcherForCurrentHost,
+  resetRoomWatchBudget
+} from '../../../../orchestration/room-reply-watcher'
 import {
   RoomCreateParams,
   RoomDeleteParams,
@@ -148,6 +151,7 @@ export const ORCHESTRATION_ROOM_METHODS = [
         )
       }
       ensureRoomReplyWatcherForCurrentHost(db, runtime)
+      resetRoomWatchBudget(db, room.id)
       const result = await runRoomRound(
         room,
         {
