@@ -14,6 +14,13 @@ export const EXACT_NODE_ENTRYPOINT_IDENTITIES: readonly {
     agent: 'cursor',
     processName: 'cursor-agent'
   },
+  // Why: Claude Code's npm package ran a generic cli.js before it shipped a native binary, and a
+  // pnpm or yarn shim or npx still launches it by that path.
+  {
+    pattern: /(?:^|\/)node_modules\/@anthropic-ai\/claude-code\/cli\.js$/,
+    agent: 'claude',
+    processName: 'claude'
+  },
   // Why: Pi's npm shim launches a generic cli.js; only the exact package path is authoritative.
   {
     pattern:
@@ -34,5 +41,13 @@ export const EXACT_NODE_ENTRYPOINT_IDENTITIES: readonly {
     pattern: /(?:^|\/)node_modules\/@deepseek-ai\/dsh\/lib\/bin\.js$/,
     agent: 'dsh',
     processName: 'dsh'
+  },
+  // Why: Qwen's npm bin is a generic `cli-entry` script that re-runs `cli` in a child node on
+  // Windows; the standalone installer ships the same pair under `qwen-code/lib/`.
+  {
+    pattern:
+      /(?:^|\/)(?:node_modules\/@qwen-code\/qwen-code\/(?:cli-entry|cli|scripts\/cli-entry|dist\/cli)|qwen-code\/lib\/cli(?:-entry)?)\.js$/,
+    agent: 'qwen-code',
+    processName: 'qwen'
   }
 ]

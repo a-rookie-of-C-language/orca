@@ -84,6 +84,13 @@
     "count": 1
   },
   {
+    "filePath": "src/renderer/src/component-fixtures/component-fixture-explorer.tsx",
+    "kind": "jsx-text",
+    "text": "Component fixtures",
+    "dynamic": false,
+    "count": 1
+  },
+  {
     "filePath": "src/renderer/src/components/rooms/room-types.ts",
     "kind": "object-property:label",
     "text": "Codex",
@@ -136,6 +143,9 @@
     "filePath": "src/renderer/src/components/rooms/room-types.ts",
     "kind": "object-property:label",
     "text": "Antigravity",
+    "filePath": "src/renderer/src/component-fixtures/component-fixture-explorer.tsx",
+    "kind": "jsx-text",
+    "text": "fixtures · files named *.fixture.tsx under src/renderer/src",
     "dynamic": false,
     "count": 1
   }
