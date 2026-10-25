@@ -20,4 +20,7 @@ export const CURRENT_CONTRACT_VERSION = ORCHESTRATION_CONTRACT_VERSION
 // v41: derive outstanding deliveries from unread messages.
 // v42: structured-session Orca session id columns.
 // v43: stored `session:<id>` addresses respelled `orca_session_id:<id>`.
-export const SCHEMA_VERSION = 43
+// v44: group-chat rooms (rooms, room_members, room_log).
+// v45: rooms remember the worktree selector admin tools spawn new bots under.
+// v46: room members keep a durable busy/failed state for the chat UI.
+export const SCHEMA_VERSION = 46
