@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react'
 import { DashboardAgentChildDisclosure } from '@/components/dashboard/DashboardAgentChildDisclosure'
 import { AgentStateDot, agentStateLabel } from '@/components/AgentStateDot'
 import { AgentChildRowContent } from '@/components/AgentChildRowContent'
+import { AgentRowTooltip } from '@/components/AgentRowTooltip'
 import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/dashboard/useDashboardData'
 import { AgentTypeIcon } from '@/lib/agent-type-icon'
 import { formatAgentTypeLabel } from '@/lib/agent-status'
@@ -206,19 +207,20 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
     [agent.paneKey, onSendTargetClick, sendTargetStatus]
   )
   const timestamp = trailingStatusText ? (
-    <span
-      className={cn(
-        'shrink-0 text-[10px] tabular-nums',
-        pendingText
-          ? 'text-agent-question'
-          : isFocusedPane
-            ? 'text-foreground/70'
-            : 'text-muted-foreground/60'
-      )}
-      title={trailingStatusTitle}
-    >
-      {trailingStatusText}
-    </span>
+    <AgentRowTooltip label={sendTargetDisabledReason ? null : trailingStatusTitle}>
+      <span
+        className={cn(
+          'shrink-0 text-[10px] tabular-nums',
+          pendingText
+            ? 'text-agent-question'
+            : isFocusedPane
+              ? 'text-foreground/70'
+              : 'text-muted-foreground/60'
+        )}
+      >
+        {trailingStatusText}
+      </span>
+    </AgentRowTooltip>
   ) : null
 
   // Why: the copy button rides the same hover reveal as the timestamp so the
@@ -240,26 +242,33 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
     event.stopPropagation()
   }, [])
   const copyButton = showCopySessionId ? (
-    <button
-      type="button"
-      onClick={handleCopySessionId}
-      onMouseDown={stopCopyActivate}
-      onKeyDown={stopCopyActivate}
-      className={cn(
-        'inline-flex items-center justify-center text-muted-foreground/70 hover:text-foreground',
-        'can-hover:opacity-0 transition-opacity duration-150 group-hover/compact-agent-row:opacity-100 focus-visible:opacity-100'
-      )}
-      aria-label={translate(
-        'auto.components.dashboard.DashboardAgentRow.copySessionId',
-        'Copy session ID'
-      )}
-      title={translate(
-        'auto.components.dashboard.DashboardAgentRow.copySessionId',
-        'Copy session ID'
-      )}
+    <AgentRowTooltip
+      label={
+        sendTargetDisabledReason
+          ? null
+          : translate(
+              'auto.components.dashboard.DashboardAgentRow.copySessionId',
+              'Copy session ID'
+            )
+      }
     >
-      <Copy className="size-3" />
-    </button>
+      <button
+        type="button"
+        onClick={handleCopySessionId}
+        onMouseDown={stopCopyActivate}
+        onKeyDown={stopCopyActivate}
+        className={cn(
+          'inline-flex items-center justify-center text-muted-foreground/70 hover:text-foreground',
+          'can-hover:opacity-0 transition-opacity duration-150 group-hover/compact-agent-row:opacity-100 focus-visible:opacity-100'
+        )}
+        aria-label={translate(
+          'auto.components.dashboard.DashboardAgentRow.copySessionId',
+          'Copy session ID'
+        )}
+      >
+        <Copy className="size-3" />
+      </button>
+    </AgentRowTooltip>
   ) : null
 
   // Why: the selected-row fill is strong enough to wash out the dimmed prompt/secondary text, so
@@ -294,34 +303,41 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
             progress={presentation.progress}
           />
           {!hideIcon && (
-            <span className="inline-flex shrink-0" title={formatAgentTypeLabel(agent.agentType)}>
-              <AgentTypeIcon agentType={agent.agentType} size={13} />
-            </span>
-          )}
-          <span
-            className="min-w-0 flex-1 truncate"
-            title={sendTargetDisabledReason ? undefined : rowTitle}
-          >
-            <span className={leadClassName}>{leadingText}</span>
-            {trailingText && (
-              <span className={isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/65'}>
-                {' '}
-                - {trailingText}
+            <AgentRowTooltip
+              label={sendTargetDisabledReason ? null : formatAgentTypeLabel(agent.agentType)}
+            >
+              <span
+                className="inline-flex shrink-0"
+                aria-label={formatAgentTypeLabel(agent.agentType)}
+              >
+                <AgentTypeIcon agentType={agent.agentType} size={13} />
               </span>
-            )}
-          </span>
+            </AgentRowTooltip>
+          )}
+          <AgentRowTooltip label={sendTargetDisabledReason ? null : rowTitle} side="right">
+            <span className="min-w-0 flex-1 truncate">
+              <span className={leadClassName}>{leadingText}</span>
+              {trailingText && (
+                <span className={isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/65'}>
+                  {' '}
+                  - {trailingText}
+                </span>
+              )}
+            </span>
+          </AgentRowTooltip>
         </>
       )}
       {model && (
-        <span
-          className={cn(
-            'min-w-0 max-w-24 truncate font-mono text-[10px]',
-            isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/70'
-          )}
-          title={model}
-        >
-          {model}
-        </span>
+        <AgentRowTooltip label={sendTargetDisabledReason ? null : model}>
+          <span
+            className={cn(
+              'min-w-0 max-w-24 truncate font-mono text-[10px]',
+              isFocusedPane ? 'text-foreground/70' : 'text-muted-foreground/70'
+            )}
+          >
+            {model}
+          </span>
+        </AgentRowTooltip>
       )}
       {hasChildDisclosure && !childAgentsExpanded && (
         <span
@@ -354,7 +370,6 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
               'transition-opacity duration-150 group-hover/compact-agent-row:opacity-0 [@media(hover:none)]:opacity-0'
             )}
             aria-hidden
-            title={trailingStatusTitle}
           >
             {trailingStatusText}
           </span>
@@ -367,31 +382,32 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
   )
 
   return (
-    <div
-      draggable={false}
-      className={cn(
-        'compact-agent-row agent-disclosure-row group/compact-agent-row min-w-0 cursor-pointer rounded-sm px-1 text-[11px] leading-none',
-        'text-muted-foreground worktree-agent-row-hover',
-        hasChildDisclosure && 'worktree-agent-lineage-parent-row',
-        isLineageChild && 'worktree-agent-lineage-child-row',
-        'flex h-6 items-center gap-1',
-        isFocusedPane && 'bg-worktree-sidebar-accent',
-        sendTargetStatus === 'sending' && 'cursor-progress opacity-75',
-        sendTargetStatus === 'disabled' && 'cursor-default opacity-60'
-      )}
-      onClickCapture={handleSendTargetClickCapture}
-      onClick={handleActivate}
-      onMouseDown={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
-      onDragStart={(e) => e.stopPropagation()}
-      data-focused-agent-pane={isFocusedPane ? 'true' : undefined}
-      data-agent-send-target={sendTargetStatus}
-      role={agent.lineage ? 'treeitem' : undefined}
-      aria-level={agent.lineage ? agent.lineage.depth + 1 : undefined}
-      aria-expanded={hasChildDisclosure ? childAgentsExpanded : undefined}
-      title={sendTargetDisabledReason}
-    >
-      {rowBody}
-    </div>
+    <AgentRowTooltip label={sendTargetDisabledReason} side="right">
+      <div
+        draggable={false}
+        className={cn(
+          'compact-agent-row agent-disclosure-row group/compact-agent-row min-w-0 cursor-pointer rounded-sm px-1 text-[11px] leading-none',
+          'text-muted-foreground worktree-agent-row-hover',
+          hasChildDisclosure && 'worktree-agent-lineage-parent-row',
+          isLineageChild && 'worktree-agent-lineage-child-row',
+          'flex h-6 items-center gap-1',
+          isFocusedPane && 'bg-worktree-sidebar-accent',
+          sendTargetStatus === 'sending' && 'cursor-progress opacity-75',
+          sendTargetStatus === 'disabled' && 'cursor-default opacity-60'
+        )}
+        onClickCapture={handleSendTargetClickCapture}
+        onClick={handleActivate}
+        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        onDragStart={(e) => e.stopPropagation()}
+        data-focused-agent-pane={isFocusedPane ? 'true' : undefined}
+        data-agent-send-target={sendTargetStatus}
+        role={agent.lineage ? 'treeitem' : undefined}
+        aria-level={agent.lineage ? agent.lineage.depth + 1 : undefined}
+        aria-expanded={hasChildDisclosure ? childAgentsExpanded : undefined}
+      >
+        {rowBody}
+      </div>
+    </AgentRowTooltip>
   )
 })

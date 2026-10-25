@@ -116,6 +116,22 @@ describe('CompactAgentRow copy session ID', () => {
     expect(container.querySelector('.compact-agent-row')).not.toBeNull()
   })
 
+  it('shows the shared tooltip on keyboard focus without a native title', async () => {
+    const agent = makeAgent()
+    agent.entry.model = 'zhipu2/glm-5.3'
+    const container = renderRow({ agent, sessionIdForCopy: 'sess-123', onCopySessionId: vi.fn() })
+
+    expect(container.querySelector('[title]')).toBeNull()
+    await act(async () => {
+      copyButton(container)?.focus()
+    })
+
+    const tooltip = document.querySelector('[data-slot="tooltip-content"]')
+    expect(tooltip).not.toBeNull()
+    expect(tooltip?.textContent).toContain('Copy session ID')
+    expect(copyButton(container)?.hasAttribute('aria-describedby')).toBe(true)
+  })
+
   it('names a pending question in the trailing cell instead of the update time', () => {
     const agent = makeAgent()
     agent.state = 'waiting'

@@ -1,6 +1,7 @@
 import React from 'react'
 import type { AgentChildRowModel } from '../../../shared/agent-child-row-model'
 import { AgentStateDot } from '@/components/AgentStateDot'
+import { AgentRowTooltip } from '@/components/AgentRowTooltip'
 import type { StateIndicatorTooltipSide } from '@/components/StateIndicatorTooltip'
 import { agentChildRowText } from './agent-child-row-text'
 
@@ -41,18 +42,20 @@ export const AgentChildRowContent = React.memo(function AgentChildRowContent({
         title={dotTitle}
         tooltipSide={tooltipSide}
       />
-      <span
-        className="min-w-0 flex-1 truncate"
-        title={lineTitle ? `${lead}${trail ? `${separator}${trail}` : ''}` : undefined}
+      <AgentRowTooltip
+        label={lineTitle ? `${lead}${trail ? `${separator}${trail}` : ''}` : undefined}
+        side={tooltipSide}
       >
-        <span className={leadClassName}>{lead}</span>
-        {trail ? (
-          <span className={trailClassName}>
-            {separator}
-            {trail}
-          </span>
-        ) : null}
-      </span>
+        <span className="min-w-0 flex-1 truncate">
+          <span className={leadClassName}>{lead}</span>
+          {trail ? (
+            <span className={trailClassName}>
+              {separator}
+              {trail}
+            </span>
+          ) : null}
+        </span>
+      </AgentRowTooltip>
     </>
   )
 })

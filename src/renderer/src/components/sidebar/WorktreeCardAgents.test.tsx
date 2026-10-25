@@ -219,7 +219,8 @@ describe('WorktreeCardAgents', () => {
 
     expect(markup).toContain('role="group"')
     expect(markup).toContain('Run tests')
-    expect(markup).toContain('title="Codex"')
+    expect(markup).toContain('aria-label="Codex"')
+    expect(markup).not.toContain('title="Codex"')
     expect(markup).not.toContain('data-testid="agent-row"')
   })
 
