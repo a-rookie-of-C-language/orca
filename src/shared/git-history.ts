@@ -79,10 +79,7 @@ async function resolveSymbolicFullName(
       ['rev-parse', '--symbolic-full-name', '--end-of-options', ref],
       cwd
     )
-    // Why skip the marker: --verify swallows --end-of-options, but
-    // --symbolic-full-name deliberately echoes it, so the first line is the marker
-    // rather than the ref. Taking it made every branch and tag fall through
-    // gitHistoryRefFromFullName's prefix checks into the "commits" category.
+    // --symbolic-full-name echoes --end-of-options; skip it or branches/tags fall through ref-prefix checks as commits.
     return (
       stdout
         .trim()
@@ -142,8 +139,7 @@ async function resolveUpstreamRef(
     if (!upstreamRef || !upstreamShortName) {
       return undefined
     }
-    // Why: %(upstream:objectname) is not portable across Git versions; resolve
-    // the upstream name first, then ask rev-parse for the commit object.
+    // Resolve upstream names then commit OIDs; %(upstream:objectname) is not portable across Git versions.
     const oid = await resolveCommit(git, cwd, upstreamRef)
     return oid ? gitHistoryRefFromFullName(upstreamRef, upstreamShortName, oid) : undefined
   } catch {
@@ -217,34 +213,21 @@ export async function loadGitHistoryFromExecutor(
   let branchRevisions: string[] = []
   if (options.scope === 'all') {
     const { stdout } = await git(
-      [
-        'for-each-ref',
-        `--count=${GIT_HISTORY_MAX_REVISIONS + 1}`,
-        '--format=%(objectname)',
-        'refs/heads/',
-        'refs/remotes/'
-      ],
+      ['for-each-ref', '--format=%(objectname)', 'refs/heads/', 'refs/remotes/'],
       cwd
     )
-    branchRevisions = stdout.trim().split(/\r?\n/).filter(Boolean)
+    branchRevisions = [...new Set(stdout.trim().split(/\r?\n/).filter(Boolean))]
     if (branchRevisions.length > GIT_HISTORY_MAX_REVISIONS) {
       throw new Error('Too many branch refs to display safely. Select Current branch.')
     }
   }
   const historyRevisions = [
-    ...new Set([
-      headOid,
-      ...branchRevisions,
-      ...(options.scope !== 'current' && options.includeRelatedRefs
-        ? [remoteRef?.revision, baseRef?.revision].filter((revision): revision is string =>
-            Boolean(revision)
-          )
-        : [])
-    ])
+    ...new Set([headOid, ...(options.scope === 'all' ? branchRevisions : [])])
   ]
   if (historyRevisions.length > GIT_HISTORY_MAX_REVISIONS) {
     throw new Error('Too many branch refs to display safely. Select Current branch.')
   }
+  // Comparison refs stay metadata; explicit all-scope is the only multi-tip history view.
 
   let mergeBase: string | undefined
   if (remoteRef?.revision && currentRef.revision && remoteRef.revision !== currentRef.revision) {

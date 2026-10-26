@@ -129,7 +129,7 @@ describe('real unrelated Git histories', () => {
       return `commit refs/heads/first\ncommitter Graph Fixture <graph-fixture@example.test> ${946944000 + index} +0000\ndata ${message.length}\n${message}\n${index === 0 ? `from ${start}\n` : ''}\n`
     }).join('')
     await git(['fast-import', '--quiet'], repo, undefined, `${commits}done\n`)
-    const options = { baseRef: 'comparison', includeRelatedRefs: true }
+    const options = { scope: 'all' as const, baseRef: 'comparison' }
     const full = await loadGitHistoryFromExecutor(git, repo, { ...options, limit: 200 })
     const first = await loadGitHistoryFromExecutor(git, repo, { ...options, limit: 11 })
     const items = [...first.items]
@@ -143,7 +143,7 @@ describe('real unrelated Git histories', () => {
       cursor = page.nextCursor
     }
     expect(items.map((item) => item.id)).toEqual(full.items.map((item) => item.id))
-    expect(items).toHaveLength(58)
+    expect(items).toHaveLength(full.items.length)
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
     const rows = buildGitHistoryViewModels(items)
     expect(rows.some((row) => row.inputSwimlanes.length > 1)).toBe(true)

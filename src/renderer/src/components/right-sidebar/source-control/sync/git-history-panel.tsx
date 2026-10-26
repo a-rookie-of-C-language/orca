@@ -277,14 +277,17 @@ export function GitHistoryPanel({
       )}
       {!collapsed && result && viewModels.length > 0 && (
         <>
-          {scope === 'all' && result.scope !== 'all' && onScopeChange && !loading && (
-            <p role="status" className="px-3 py-1 text-xs text-muted-foreground">
-              {translate(
-                'source-control.history.unsupported-scope',
-                'Restart Orca or update the execution host to display all branches.'
-              )}
-            </p>
-          )}
+          {scope === 'all' &&
+            result.scope !== 'all' &&
+            onScopeChange &&
+            state.status === 'ready' && (
+              <p role="status" className="px-3 py-1 text-xs text-muted-foreground">
+                {translate(
+                  'source-control.history.unsupported-scope',
+                  'Restart Orca or update the execution host to display all branches.'
+                )}
+              </p>
+            )}
           {state.status === 'error' && (
             <p role="alert" className="px-3 py-1 text-xs text-destructive">
               {state.error}

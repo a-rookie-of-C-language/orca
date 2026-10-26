@@ -1,5 +1,4 @@
 import { UnsealedCredentialNotice } from './UnsealedCredentialNotice'
-import { KeychainCredentialNotice } from './keychain-credential-notice'
 import { useState } from 'react'
 import { AlertCircle, CheckCircle2, LoaderCircle, Unlink } from 'lucide-react'
 import { LinearIcon } from '@/components/icons/LinearIcon'
@@ -49,8 +48,7 @@ export function LinearIntegrationCard(): React.JSX.Element {
     }
   }
 
-  // Why: explicit user-triggered verification. This is the only settings path
-  // that decrypts a stored Linear key, avoiding surprise keychain prompts.
+  // Decrypt Linear keys only on explicit verification to avoid surprise keychain prompts.
   const handleTest = async (workspaceId: string): Promise<void> => {
     setTestingWorkspaceId(workspaceId)
     setTestResultByWorkspace((prev) => {
@@ -136,11 +134,6 @@ export function LinearIntegrationCard(): React.JSX.Element {
             'auto.components.settings.task.tracker.integration.cards.linearTokenName',
             'Your Linear API token'
           )}
-        />
-        <KeychainCredentialNotice
-          service="Linear"
-          status={contextMatches ? linearStatus : {}}
-          statusContextKey={linearStatusContextKey}
         />
         {connected ? (
           <div className="space-y-2">

@@ -218,18 +218,18 @@ describe('git history loader', () => {
     expect(calls.some((args) => args.includes('--format=%(objectname)'))).toBe(false)
   })
 
-  it('includes comparison branch tips only when requested', async () => {
+  it('keeps the default view restricted to HEAD even when comparison refs are supplied', async () => {
     const { executor, calls } = createHistoryExecutor(3)
     const result = await loadGitHistoryFromExecutor(executor, '/repo', {
       limit: 2,
       includeRelatedRefs: true
     })
-    expect(calls.find((args) => args[0] === 'log')).toContain(REMOTE_OID)
-    expect(result.nextCursor).toEqual({ revisions: [HEAD_OID, REMOTE_OID], offset: 2 })
+    expect(calls.find((args) => args[0] === 'log')).not.toContain(REMOTE_OID)
+    expect(result.nextCursor).toEqual({ revisions: [HEAD_OID], offset: 2 })
     calls.length = 0
     await loadGitHistoryFromExecutor(executor, '/repo', { limit: 2, cursor: result.nextCursor })
     expect(calls).toHaveLength(1)
-    expect(calls[0]).toEqual(expect.arrayContaining(['--skip=2', '-n3', HEAD_OID, REMOTE_OID]))
+    expect(calls[0]).toEqual(expect.arrayContaining(['--skip=2', '-n3', HEAD_OID]))
   })
 
   it.each([
@@ -374,11 +374,9 @@ describe('git history loader', () => {
 })
 
 describe('symbolic full-name resolution', () => {
-  // Why: `rev-parse --verify` swallows --end-of-options, but --symbolic-full-name
-  // deliberately echoes it. Taking the first line made every branch and tag fall
-  // through gitHistoryRefFromFullName's prefix checks into the "commits" category.
+  // --symbolic-full-name echoes --end-of-options (unlike --verify); treating it as the ref misclassified branches/tags as commits.
   function executorEmitting(symbolicStdout: string): GitHistoryExecutor {
-    return vi.fn(async (args: string[]) => {
+    return vi.fn<GitHistoryExecutor>(async (args: string[]) => {
       if (args[0] === 'rev-parse' && args.includes('--symbolic-full-name')) {
         return { stdout: symbolicStdout }
       }
@@ -395,7 +393,7 @@ describe('symbolic full-name resolution', () => {
         return { stdout: logRecord({ hash: HEAD_OID, message: 'only' }) }
       }
       return { stdout: '' }
-    }) as unknown as GitHistoryExecutor
+    })
   }
 
   it('categorizes a branch when git echoes the option marker', async () => {
