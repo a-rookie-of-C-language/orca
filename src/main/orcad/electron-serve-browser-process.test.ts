@@ -4,9 +4,11 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type * as RunProcessModule from '@orca/process-host'
 import type * as FsPromisesModule from 'node:fs/promises'
 import type { RuntimeBrowserCommandHost } from '../runtime/browser/browser-command-contracts'
+import { RuntimeBrowserPageRegistry } from '../runtime/runtime-browser-page-registry'
 
 const { spawnProcessMock, lockedRemovalPaths } = vi.hoisted(() => ({
   spawnProcessMock:
@@ -14,7 +16,7 @@ const { spawnProcessMock, lockedRemovalPaths } = vi.hoisted(() => ({
   lockedRemovalPaths: new Set<string>()
 }))
 
-// Stands in for Windows, where the killed sidecar's helpers still hold its profile for a moment.
+// Simulate Windows helpers briefly retaining a stopped sidecar’s profile.
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof FsPromisesModule>()
   const rm: typeof actual.rm = async (path, options) => {
@@ -28,9 +30,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return { ...actual, rm, default: { ...actual, rm } }
 })
 
-// Why wrap rather than fake: the provider must still go through the real spawn
-// path (argv/env handling, a real pid to signal); only the program is swapped
-// for a stub that speaks the sidecar's serve protocol.
+// Swap only the executable; retain real spawning, argv/env handling and a signalable PID.
 vi.mock('@orca/process-host', async (importOriginal) => ({
   ...(await importOriginal<typeof RunProcessModule>()),
   spawnProcess: spawnProcessMock
@@ -51,7 +51,6 @@ vi.mock('./orcad-browser-provider', () => ({ resolveOrcadBrowserProvider: vi.fn(
 const FAKE_SIDECAR = join(import.meta.dirname, '__fixtures__', 'fake-orcad-electron-sidecar.cjs')
 const INSTALLED_EXECUTABLE = join('/Applications', 'Orca.app', 'Contents', 'MacOS', 'Orca')
 
-/** Every key the provider must strip so the sidecar cannot inherit orcad's own browser config. */
 const AGENT_BROWSER_ENVIRONMENT_KEYS = [
   'AGENT_BROWSER_ARGS',
   'AGENT_BROWSER_AUTO_CONNECT',
@@ -70,12 +69,9 @@ type SidecarRequest = { method: string; params: Record<string, unknown>; authTok
 
 const host: RuntimeBrowserCommandHost = {
   getAgentBrowserBridge: () => null,
-  // Why an id distinct from the selector: it proves the registry fences on the
-  // resolved worktree id, not on whatever string the caller passed.
+  // Distinct IDs prove registry fencing uses resolved workspaces, not caller selectors.
   resolveWorktreeSelector: async (selector) => ({ id: `id-${selector}` }),
   resolveBrowserWorkspace: async (selector) => ({ id: `id-${selector}` }),
-  // Unused by the sidecar command paths under test; the daemon's real host is
-  // OrcaRuntimeService, which owns the client-hosted registries.
   resolveBrowserNetworkExecutionHost: () => {
     throw new Error('No browser network execution host')
   },
@@ -228,7 +224,6 @@ describe('ElectronServeBrowserProcess start-up', () => {
         '--serve-port',
         '--serve-json',
         '--serve-no-pairing',
-        // The sidecar is a headless serve too, so on Linux it must not inherit Wayland.
         ...headlessServeOzonePlatformSwitches(process.platform)
       ])
     )
@@ -363,7 +358,6 @@ describe('ElectronServeBrowserProcess command routing', () => {
       expect(request.authToken).toBe('fake-sidecar-auth-token')
       expect(request.params).not.toHaveProperty('worktree')
     }
-    // The active page is targeted implicitly once the worktree resolves.
     expect(requests[1].params.page).toBe(created.browserPageId)
   })
 
@@ -451,9 +445,27 @@ describe('ElectronServeBrowserProcess command routing', () => {
     })
   })
 
-  // Why this matters: the runtime advertises browser.tabCreate.known-id.v1
-  // unconditionally, so a web client will send a provisional id for a page that does
-  // not exist yet. Requiring it first made every such create throw.
+  it('scopes a folder workspace through the browser-workspace resolver', async () => {
+    const folderHost: RuntimeBrowserCommandHost = {
+      ...host,
+      resolveWorktreeSelector: async () => {
+        throw new Error('selector_not_found')
+      },
+      resolveBrowserWorkspace: async () => ({ id: 'folder:docs' })
+    }
+    const commands = (await startProvider()).createCommands(folderHost)
+
+    const created = z
+      .object({ browserPageId: z.string() })
+      .parse(await commands.browserTabCreate({ worktree: 'id:folder:docs' }))
+    await commands.browserGoto({ worktree: 'id:folder:docs', url: 'https://example.test/' })
+
+    const request = (await browserRequests()).at(-1)
+    expect(request?.method).toBe('browser.goto')
+    expect(request?.params.page).toBe(created.browserPageId)
+  })
+
+  // Known-ID creation accepts provisional IDs advertised by the runtime before a page exists.
   it('creates a tab under a caller-chosen page id', async () => {
     const commands = (await startProvider()).createCommands(host)
 
@@ -474,7 +486,10 @@ it('forwards tab commands through startup to the Electron sidecar', async () => 
   const startup = startOrcadBrowserProvider({ userDataPath: harnessRoot })
   await startup.ready
   try {
-    const commands = createRuntimeBrowserCommands(host)
+    const commands = createRuntimeBrowserCommands({
+      ...host,
+      getRuntimeBrowserPageRegistry: () => new RuntimeBrowserPageRegistry()
+    })
     await commands.browserTabCreate({ worktree: 'wt-a' })
     await commands.browserTabList({ worktree: 'wt-a' })
     expect((await browserRequests()).map((request) => request.method)).toEqual([

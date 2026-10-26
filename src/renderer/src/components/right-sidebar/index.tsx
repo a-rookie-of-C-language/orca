@@ -88,17 +88,7 @@ function RightSidebarInner({
 
   const panelContent = rightSidebarOpen ? (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden scrollbar-sleek-parent">
-      {/* Why: sidebar panels no longer use key={activeWorktreeId} because
-          the full unmount/remount cycle on every worktree switch triggered
-          an IPC storm (watchWorktree + readDir + git:branchCompare + …)
-          that froze the app for seconds on Windows.  Each panel now reacts
-          to activeWorktreeId changes via store subscriptions and reset
-          effects, keeping the component instance alive across switches. */}
-      {/* Why: live agent activity now renders inline inside each workspace
-          card (WorktreeCardAgents, toggled by the 'inline-agents' card
-          property) rather than in a bottom-docked dashboard panel that
-          competed with file Explorer/Search for vertical space. The right
-          sidebar is back to tab-only content. */}
+      {/* Keep panels mounted across worktree switches; remounts caused Windows IPC storms and multi-second freezes. */}
       <RightSidebarPanelContent effectiveTab={effectiveTab} rightSidebarOpen={rightSidebarOpen} />
     </div>
   ) : null
@@ -129,7 +119,7 @@ function RightSidebarInner({
           onClick={toggleRightSidebar}
           aria-label={translate(
             'auto.components.right.sidebar.index.e8e2e4ce74',
-            'Toggle tools sidebar'
+            'Toggle right sidebar'
           )}
         >
           <ToggleIcon size={16} />
@@ -138,7 +128,7 @@ function RightSidebarInner({
       <TooltipContent side="bottom" sideOffset={6}>
         {translate(
           'auto.components.right.sidebar.index.9fffaf17c1',
-          'Toggle tools sidebar ({{value0}})',
+          'Toggle right sidebar ({{value0}})',
           { value0: rightSidebarShortcut }
         )}
       </TooltipContent>
@@ -160,7 +150,6 @@ function RightSidebarInner({
         rightSidebarOpen ? 'overflow-visible' : 'overflow-hidden'
       )}
     >
-      {/* Panel content area */}
       <div
         className="flex flex-col flex-1 min-w-0 bg-sidebar overflow-hidden"
         style={{
@@ -189,7 +178,7 @@ function RightSidebarInner({
               !onLeft && 'right-sidebar-header-side-inset'
             )}
           >
-            <span className="text-2xs font-semibold uppercase tracking-wider text-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
               {visibleItems.find((item) => item.id === effectiveTab)?.title ?? ''}
             </span>
             <TooltipProvider delayDuration={400}>

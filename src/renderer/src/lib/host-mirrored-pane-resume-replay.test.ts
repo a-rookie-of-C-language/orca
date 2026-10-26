@@ -1,8 +1,9 @@
+import { getDefaultSettings } from '../../../shared/constants'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore, type AppState } from '@/store'
 import { resumeSleepingAgentSessionsForWorktree } from './resume-sleeping-agent-session'
-import { makeCreatedAgentWorktree } from '@/lib/worktree-activation-created-agent-test-state'
+import { makeCreatedAgentWorktree } from '@/lib/worktree-activation-created-agent.test-fixture'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import {
   hasHostSessionMirrorHydrated,
@@ -11,10 +12,7 @@ import {
 } from '@/runtime/host-session-mirror-hydration'
 import { clearRuntimeEnvironmentConnectionGenerationsForTests } from '@/store/slices/runtime-status'
 
-// Deferring a mirrored pane's resume is only half the fix: whatever settles the
-// mirror must replay the parked sweep, or the aug20 duplicate-launch defect is
-// traded for a resume that never happens. These pin both halves plus the
-// per-connection reset a host restart depends on.
+// Mirror settlement must replay deferred recovery and reset per connection, or duplicate-launch prevention would strand resumes.
 
 const initialAppStoreState = useAppStore.getState()
 
@@ -91,9 +89,9 @@ function seedState(worktree: ReturnType<typeof makeCreatedAgentWorktree>): void 
       } as never
     },
     settings: {
-      agentCmdOverrides: {},
-      setupScriptLaunchMode: 'new-tab'
-    } as unknown as AppState['settings'],
+      ...getDefaultSettings(''),
+      agentCmdOverrides: {}
+    },
     markWorktreeVisited: vi.fn(),
     recordWorktreeVisit: vi.fn(),
     refreshGitHubForWorktreeIfStale: vi.fn(),

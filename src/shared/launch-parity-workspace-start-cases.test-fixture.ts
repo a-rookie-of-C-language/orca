@@ -1,8 +1,5 @@
-// Test-only (never imported by production code): the window-lane launch parity table for row 8
-// (an agent started together with its workspace: a work item's "start agent", the folder-workspace
-// composer). Renderer suites assert the real producer + pane send `request`; main suites feed it to
-// pty:spawn and assert `provider`. C4 moves these launchers onto the pane trigger: the request then
-// carries the launch instead of a command, and every provider fact here must hold unchanged.
+// Workspace-start parity (row 8): work-item launch/folder composer renderer requests and main pty:spawn provider facts.
+// C4 carries launches instead of command strings; provider facts must remain stable.
 import type {
   LaunchClient,
   LaunchWorkspace,
@@ -69,16 +66,15 @@ export const WORKSPACE_START_LAUNCH_CASES: WindowLaunchCase[] = [
     { command: `${POSIX_CLAUDE} --prefill 'fix Bob'"'"'s bug'`, agentCommand: POSIX_CLAUDE },
     ZSH
   ),
-  // main today: the work item quotes for PowerShell on Windows even when cmd.exe is the shell
-  // (C4 keeps it; C4-fix flips this row to cmd.exe quoting).
+  // The work item quotes for the cmd.exe tab it spawns (#27971 passes the local shell).
   start(
     'work item, Windows C: repo, cmd.exe set',
     'win32',
     repo(WIN_PATH),
     draft,
     {
-      command: `${POSIX_CLAUDE} --prefill 'fix Bob''s bug'`,
-      agentCommand: POSIX_CLAUDE,
+      command: `${CMD_CLAUDE} --prefill "fix Bob's bug"`,
+      agentCommand: CMD_CLAUDE,
       ...IN_CMD
     },
     CMD_EXE,
@@ -97,8 +93,7 @@ export const WORKSPACE_START_LAUNCH_CASES: WindowLaunchCase[] = [
     WSL_EXE,
     CMD
   ),
-  // A C: project never set to a runtime, with WSL as the terminal shell: the work item follows the
-  // Windows runtime default.
+  // C: projects without a runtime pin follow Windows runtime defaults even when the terminal shell is WSL.
   start(
     'work item, Windows C: repo, terminal shell WSL',
     'win32',
@@ -113,14 +108,18 @@ export const WORKSPACE_START_LAUNCH_CASES: WindowLaunchCase[] = [
     { shellOverride: 'powershell.exe', terminalWindowsWslDistro: null },
     { terminalWindowsShell: 'wsl.exe' }
   ),
-  // Fix checks submit after the agent is ready: the command carries no prompt, the window pastes it,
-  // and main's prompt-less Codex start is typed without waiting for the shell to be ready.
+  // Fix waits until ready, then pastes; prompt-less Codex launches type immediately, so skip Update now only for the typed command.
   start(
     'work item, submit after ready',
     'darwin',
     repo(POSIX_PATH),
     { kind: 'work-item', agent: 'codex', delivery: 'submit-after-ready', text: BOB },
-    { command: POSIX_CODEX, agentCommand: POSIX_CODEX, shellReady: false },
+    {
+      command:
+        "codex '-c' 'check_for_update_on_startup=false' '--dangerously-bypass-approvals-and-sandbox'",
+      agentCommand: POSIX_CODEX,
+      shellReady: false
+    },
     ZSH
   ),
   // The composer's note is an auto-submitted prompt on argv.

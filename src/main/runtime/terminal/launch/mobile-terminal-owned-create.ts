@@ -1,22 +1,18 @@
 import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
-import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type {
-  AgentProviderSessionMetadata,
-  SleepingAgentLaunchConfig
-} from '../../../../shared/agent-session-resume'
-import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
-import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
+import type { OwnedMobileTerminalCreateOptions } from './mobile-terminal-create'
 import { randomUUID } from 'node:crypto'
 import { copySleepingAgentLaunchConfig } from '../../runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../../remote-runtime-terminal-create-identity'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { placeCreatedSessionTab } from '../../../../shared/session-tab-placement'
+import { insertTabIdIntoOrder } from '../../../../shared/workspace-layout/tab-order'
 import {
   buildHeadlessMobileSessionTabGroups,
   buildMaterializedHeadlessParentLayout,
@@ -24,26 +20,6 @@ import {
 } from '../../mobile-session-layout-projection'
 
 const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
-
-export type OwnedMobileTerminalCreateOptions = {
-  command?: string
-  cwd?: string
-  env?: Record<string, string>
-  envToDelete?: string[]
-  startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
-  identity?: { tabId: string; leafId: string; sessionId?: string }
-  createMutation?: { clientIdentity: string; id: string }
-  launchAgent?: TuiAgent
-  viewMode?: 'terminal' | 'chat'
-  targetGroupId?: string
-  supportsSplitGroupPlacement?: boolean
-  launchConfig?: SleepingAgentLaunchConfig
-  resumeProviderSession?: AgentProviderSessionMetadata
-  spawnIntent?: SpawnIntent
-  launchRuntime?: AgentLaunchRuntime
-  signal?: AbortSignal
-  refuseSleptWorktree?: boolean
-}
 
 export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
   private readonly ownedMobileDispatchRecipes = new Map<
@@ -88,32 +64,32 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
     const create = (preAllocatedHandle?: string) =>
       this.createTerminal(`id:${worktreeId}`, {
         focus: false,
-        ...(mutationHandle
-          ? {
-              onPtySpawnDispatched: (launch) => {
-                if (!launch) {
-                  return
-                }
-                if (
-                  !this.ownedMobileDispatchRecipes.has(mutationHandle) &&
-                  this.ownedMobileDispatchRecipes.size >= 4096
-                ) {
-                  throw new Error('runtime_unavailable')
-                }
-                // Retain original dispatch evidence across an ambiguous response; retry payloads cannot replace it.
-                this.ownedMobileDispatchRecipes.set(mutationHandle, {
-                  connectionId: workspace.connectionId ?? null,
-                  recordedAt: Date.now(),
-                  ...(launch.launchConfig
-                    ? { launchConfig: copySleepingAgentLaunchConfig(launch.launchConfig) }
-                    : {}),
-                  ...(launch.launchAgent ? { launchAgent: launch.launchAgent } : {})
-                })
-              }
+        ...(opts.presentation ? { presentation: opts.presentation } : {}),
+        ...(opts.afterDesktopTabId ? { afterTabId: opts.afterDesktopTabId } : {}),
+        onPtySpawnDispatched: (launch) => {
+          if (mutationHandle && launch) {
+            if (
+              !this.ownedMobileDispatchRecipes.has(mutationHandle) &&
+              this.ownedMobileDispatchRecipes.size >= 4096
+            ) {
+              throw new Error('runtime_unavailable')
             }
-          : {}),
+            // Retain original dispatch evidence across an ambiguous response; retry payloads cannot replace it.
+            this.ownedMobileDispatchRecipes.set(mutationHandle, {
+              connectionId: workspace.connectionId ?? null,
+              recordedAt: Date.now(),
+              ...(launch.launchConfig
+                ? { launchConfig: copySleepingAgentLaunchConfig(launch.launchConfig) }
+                : {}),
+              ...(launch.launchAgent ? { launchAgent: launch.launchAgent } : {})
+            })
+          }
+          // Why after the recipe: its refusal above is still before dispatch.
+          opts.onPtySpawnDispatched?.()
+        },
         ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
         command: opts.command,
+        ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
         cwd,
         env: opts.env,
         envToDelete: opts.envToDelete,
@@ -122,6 +98,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           ? { resumeProviderSession: opts.resumeProviderSession }
           : {}),
         ...(opts.spawnIntent ? { spawnIntent: opts.spawnIntent } : {}),
+        ...(opts.resumeOrigin ? { resumeOrigin: opts.resumeOrigin } : {}),
         ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
         ...(opts.launchRuntime ? { launchRuntime: opts.launchRuntime } : {}),
         ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
@@ -138,10 +115,11 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
             : {}),
         ...(isNewSession ? { isNewSession: true } : {}),
         persistHostSessionBinding: true,
-        // Why: this method publishes the authoritative snapshot below; skip the intermediate publish to avoid a wrong-group flash.
+        // Publish only the authoritative snapshot below to avoid a temporary wrong-group placement.
         deferMobileSessionPublish: true,
         signal: opts.signal,
-        ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {})
+        ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {}),
+        ...(opts.resumesSleepingRecord ? { resumesSleepingRecord: true } : {})
       })
     const terminal = opts.createMutation
       ? await this.dedupeTerminalCreate(
@@ -152,6 +130,9 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           (_selector, handle) => create(handle)
         )
       : await create()
+    if (terminal.ptyId) {
+      opts.onPtyCreated?.(terminal.ptyId, terminal)
+    }
     const livePty = this.getLivePtyForHandle(terminal.handle)
     if (!livePty) {
       throw new Error('terminal_handle_stale')
@@ -194,8 +175,9 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         terminalHandle: terminal.handle
       })
     }
-    const parentTabId = livePty.pty.tabId ?? `pty:${livePty.pty.ptyId}`
-    const leafId = parsePaneKey(livePty.pty.paneKey ?? '')?.leafId ?? randomUUID()
+    const recorded = this.paneOfPty(livePty.pty)
+    const parentTabId = recorded.tabId ?? `pty:${livePty.pty.ptyId}`
+    const leafId = parsePaneKey(recorded.paneKey ?? '')?.leafId ?? randomUUID()
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
     const existingSurface =
       existing?.tabs.find(
@@ -217,9 +199,12 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
       ptyId: livePty.pty.ptyId,
       incarnationId: livePty.pty.incarnationId,
       title: terminal.title ?? livePty.pty.title ?? 'Terminal',
-      ...(cwd ? { startupCwd: cwd } : {}),
-      ...(opts.launchAgent ? { launchAgent: opts.launchAgent } : {}),
-      ...(opts.viewMode ? { viewMode: opts.viewMode } : {}),
+      // Omit only a proven root correction; an unverifiable fallback keeps its saved request.
+      ...((terminal.savedStartupCwd ?? cwd) && (terminal.savedStartupCwd ?? cwd) !== workspace.path
+        ? { startupCwd: terminal.savedStartupCwd ?? cwd }
+        : {}),
+      ...(livePty.pty.launchAgent ? { launchAgent: livePty.pty.launchAgent } : {}),
+      ...(!terminal.agentResumeRefused && opts.viewMode ? { viewMode: opts.viewMode } : {}),
       parentLayout,
       isActive: activate
     }
@@ -235,31 +220,47 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
       afterTabId,
       { afterParentGroup: opts.supportsSplitGroupPlacement !== false }
     )
+    const tabGroups = buildHeadlessMobileSessionTabGroups(
+      worktreeId,
+      tabs,
+      activate ? tab : null,
+      existing?.tabGroups,
+      opts.targetGroupId ? { tabId: parentTabId, groupId: opts.targetGroupId } : undefined
+    )
+    if (opts.afterDesktopTabId) {
+      const group = tabGroups.find((candidate) => candidate.tabOrder.includes(parentTabId))
+      if (group?.tabOrder.includes(opts.afterDesktopTabId)) {
+        const topLevelTabs = tabs.map((candidate) => ({
+          id: candidate.type === 'terminal' ? candidate.parentTabId : candidate.id,
+          isPinned: candidate.isPinned === true
+        }))
+        group.tabOrder = insertTabIdIntoOrder(
+          group.tabOrder,
+          topLevelTabs,
+          parentTabId,
+          tab.isPinned === true,
+          opts.afterDesktopTabId
+        )
+      }
+    }
     const next: RuntimeMobileSessionTabsSnapshot = {
       worktree: worktreeId,
-      // Why: a fresh epoch retires the current publisher, so clients drop its later tab updates.
+      // New epochs retire the prior publisher and reject its later updates.
       publicationEpoch: existing?.publicationEpoch ?? `headless:${Date.now().toString(36)}`,
       snapshotVersion: (existing?.snapshotVersion ?? 0) + 1,
-      // Why: activating the new tab also focuses its group, so a "+" targeting a specific split group makes that group active too.
+      // Activating the new tab must also focus its requested split group.
       activeGroupId:
         activate && opts.targetGroupId
           ? opts.targetGroupId
           : (existing?.activeGroupId ?? getHeadlessMobileSessionGroupId(worktreeId)),
       activeTabId: activate ? tab.id : (existing?.activeTabId ?? null),
       activeTabType: activate ? 'terminal' : (existing?.activeTabType ?? null),
-      tabGroups: buildHeadlessMobileSessionTabGroups(
-        worktreeId,
-        tabs,
-        activate ? tab : null,
-        existing?.tabGroups,
-        opts.targetGroupId ? { tabId: parentTabId, groupId: opts.targetGroupId } : undefined
-      ),
-      // Why: keep group split geometry on new-tab creation, else opening a terminal while split loses the arrangement.
+      tabGroups,
+      // Retain split geometry when adding a tab.
       ...(existing?.tabGroupLayout ? { tabGroupLayout: existing.tabGroupLayout } : {}),
       tabs
     }
-    // Why: emit the stored snapshot, not the pre-store one — storing grafts on retirement
-    // proofs, and subscribers dedupe on version so they would never see them otherwise.
+    // Store adds retirement proofs; emit that snapshot because version-deduping subscribers would miss proofs from a pre-store frame.
     const stored = this.storeMobileSessionSnapshot(worktreeId, next)
     const result = this.toMobileSessionTabsResult(stored)
     const changeSequence = ++this.mobileSessionTabsChangeSequence
@@ -276,7 +277,8 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
     return {
       tab: created,
       publicationEpoch: result.publicationEpoch,
-      snapshotVersion: result.snapshotVersion
+      snapshotVersion: result.snapshotVersion,
+      ...(terminal.startupCwdFallback ? { startupCwdFallback: 'workspace-root' as const } : {})
     }
   }
 }

@@ -12,7 +12,6 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 
-export const AGENT_HOOK_SPOOL_MAX_BYTES = 5 * 1024 * 1024
 export const AGENT_HOOK_SPOOL_MAX_FILES = 1024
 export const AGENT_HOOK_SPOOL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -52,8 +51,7 @@ export function launchTokenHash(token: string | undefined): string | null {
   return token?.trim() ? createHash('sha256').update(token.trim()).digest('hex') : null
 }
 
-/** Records plus the byte offset through the last COMPLETE line. A torn trailing line is
- *  left unconsumed so a writer still finishing it is not truncated away. */
+/** Consume through complete newlines only; a writer may still be finishing the trailing record. */
 export function readSpoolFile(
   path: string,
   now = Date.now()
@@ -67,12 +65,10 @@ export function readSpoolFile(
   const records: SpoolRecord[] = []
   let consumed = 0
   let start = 0
-  // indexOf, not a per-byte loop: this runs over every spooled file before the hook listener binds,
-  // and Buffer.indexOf finds the newline with memchr instead of an interpreted scan.
+  // Native indexOf avoids an interpreted byte scan during startup replay.
   for (;;) {
     const end = bytes.indexOf(0x0a, start)
-    // A final line without its newline may still be in flight from a hook writer.
-    // Leave it untouched until the writer terminates the record explicitly.
+    // Leave a partial trailing record for its append writer.
     if (end === -1) {
       break
     }
@@ -103,7 +99,7 @@ export function readSpoolFile(
 export type SpoolDrainOptions = {
   endpointDir: string
   getPersistedLaunchTokenHash: (paneKey: string) => string | undefined
-  ingest: (record: SpoolRecord) => void
+  ingest: (record: SpoolRecord) => Promise<void> | void
   now?: number
 }
 
@@ -121,8 +117,7 @@ function spoolCandidates(endpointDir: string): { path: string; mtimeMs: number }
       const path = join(spoolDir, name)
       try {
         const stat = statSync(path)
-        // Empty files are retained to keep append handles race-safe, but they must not
-        // consume the bounded replay candidate set ahead of files with durable events.
+        // Retain empty files for append handles but exclude them from the bounded replay candidate set.
         return stat.isFile() && stat.size > 0 ? { path, mtimeMs: stat.mtimeMs } : null
       } catch {
         return null
@@ -140,8 +135,7 @@ function consumeSpoolPrefix(path: string, consumed: number): void {
       // Keep the inode so a concurrent append handle cannot silently orphan writes.
       const size = fstatSync(fd).size
       if (size > consumed) {
-        // Why: a hook may have appended between the read and here; shift the unread tail
-        // to the front instead of truncating to zero, which would erase it.
+        // Preserve appends made since the read by shifting the unread tail before truncation.
         const tail = Buffer.alloc(size - consumed)
         readSync(fd, tail, 0, tail.length, consumed)
         writeSync(fd, tail, 0, tail.length, 0)
@@ -165,28 +159,8 @@ function matchesLaunchToken(
   return !expected || launchTokenHash(record.launchToken) === expected
 }
 
-export function drainAgentHookSpool(options: SpoolDrainOptions): number {
-  const now = options.now ?? Date.now()
-  let drained = 0
-  for (const candidate of spoolCandidates(options.endpointDir)) {
-    const { records, consumed } = readSpoolFile(candidate.path, now)
-    for (const record of records) {
-      if (matchesLaunchToken(record, options)) {
-        options.ingest({ ...record, isReplay: true })
-        drained += 1
-      }
-    }
-    consumeSpoolPrefix(candidate.path, consumed)
-  }
-  return drained
-}
-
 /** Await each admission before consuming a file so owner probes preserve replay order and retry. */
-export async function drainAgentHookSpoolAsync(
-  options: Omit<SpoolDrainOptions, 'ingest'> & {
-    ingest: (record: SpoolRecord) => Promise<void> | void
-  }
-): Promise<number> {
+export async function drainAgentHookSpoolAsync(options: SpoolDrainOptions): Promise<number> {
   const now = options.now ?? Date.now()
   let drained = 0
   for (const candidate of spoolCandidates(options.endpointDir)) {
