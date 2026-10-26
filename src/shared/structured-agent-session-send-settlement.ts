@@ -8,17 +8,13 @@ export function structuredAgentSessionReadCoversSend(
 ): boolean {
   return Boolean(
     cursor &&
-      acknowledged &&
-      cursor.epoch === acknowledged.epoch &&
-      cursor.sequence >= acknowledged.sequence
+    acknowledged &&
+    cursor.epoch === acknowledged.epoch &&
+    cursor.sequence >= acknowledged.sequence
   )
 }
 
-/**
- * Where the host's published state holds a client's sends, by the id each was sent under: as a
- * card (on the queue, or handed off from it), or recorded as a submission. Either settles the send,
- * whichever of that and the send's own answer comes first; a card wins.
- */
+/** Settle by host-published ID as queued card/handoff or submission, whichever arrives before the send response; cards win. */
 export function structuredAgentSessionSettledSends(
   submissions: readonly AgentJournalSubmission[],
   queuedMessageIds: readonly string[]

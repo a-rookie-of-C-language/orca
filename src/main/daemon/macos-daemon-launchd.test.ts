@@ -1,8 +1,10 @@
 import { access, mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type * as TimerPromises from 'node:timers/promises'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
+import { DAEMON_V8_FLAGS } from './daemon-launched-child-spawn'
 import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
 
 const { state, runProcessMock, materializeMock, ensureWithinMock, disconnectMock, recoverMock } =
@@ -21,6 +23,26 @@ const { state, runProcessMock, materializeMock, ensureWithinMock, disconnectMock
       recoverMock: vi.fn<() => Promise<boolean>>()
     }
   })
+const retirementClock = vi.hoisted<{ now: number; enabled: boolean; waits: number[] }>(() => ({
+  now: 0,
+  enabled: false,
+  waits: []
+}))
+vi.mock('node:timers/promises', async (importOriginal) => {
+  const timers = await importOriginal<typeof TimerPromises>()
+  return {
+    ...timers,
+    setTimeout: (...args: Parameters<typeof timers.setTimeout>) => {
+      if (!retirementClock.enabled) {
+        return timers.setTimeout(...args)
+      }
+      const [ms = 1, value] = args
+      retirementClock.now += ms
+      retirementClock.waits.push(ms)
+      return Promise.resolve(value)
+    }
+  }
+})
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('../../shared/app-environment', () => ({
   hasAppEnvironment: () => true,
@@ -59,7 +81,6 @@ const missing = {
   code: 113,
   stderr: 'Could not find service "x" in domain for user gui: 501'
 }
-// `lsof +D` over an unused copy prints nothing and exits 1.
 const lsofUnused = { ...ok, code: 1 }
 
 type Launchctl = { bootstrap: ProcessResult; bootout: ProcessResult; print: ProcessResult[] }
@@ -89,16 +110,21 @@ function stubSystemVersion(version: string): void {
   Object.defineProperty(process, 'getSystemVersion', { configurable: true, value: () => version })
 }
 
-/** Lets a readiness timeout elapse without waiting for it in real time. */
+function beginRetirementClock(): number {
+  const startedAt = Date.now()
+  retirementClock.now = startedAt
+  retirementClock.enabled = true
+  vi.spyOn(Date, 'now').mockImplementation(() => retirementClock.now)
+  return startedAt
+}
+
 function elapseOnEachConnectAttempt(stepMs: number): () => number {
-  const realNow = Date.now()
-  let elapsedMs = 0
-  vi.spyOn(Date, 'now').mockImplementation(() => realNow + elapsedMs)
+  const startedAt = beginRetirementClock()
   ensureWithinMock.mockImplementation(async () => {
-    elapsedMs += stepMs
+    retirementClock.now += stepMs
     throw new Error('ECONNREFUSED')
   })
-  return () => elapsedMs
+  return () => retirementClock.now - startedAt
 }
 
 async function launchFailure(deadlineMs = roomyDeadline()): Promise<unknown> {
@@ -150,13 +176,11 @@ beforeEach(async () => {
     if (spec.program === '/bin/launchctl') {
       const verb = spec.args?.[0]
       if (verb === 'print') {
-        // The last configured state repeats once the earlier ones are used up.
         return (
           (launchctl.print.length > 1 ? launchctl.print.shift() : launchctl.print[0]) ?? missing
         )
       }
       if (verb === 'bootout' && launchctl.bootout.code === 0) {
-        // A successful bootout leaves nothing for later prints to find.
         launchctl.print = [missing]
       }
       return verb === 'bootstrap' ? launchctl.bootstrap : launchctl.bootout
@@ -166,6 +190,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  retirementClock.enabled = false
+  retirementClock.waits = []
   vi.restoreAllMocks()
   for (const [key, descriptor] of [
     ['getuid', originalGetuid],
@@ -192,8 +218,8 @@ it('launches the copied helper on plain Node and leaves no inherited credentials
   expect(job).toMatchObject({
     Label: macDaemonJobLabel(state.root),
     KeepAlive: false,
-    // Local Network access for a plist-launched job resolves through its associated app.
     AssociatedBundleIdentifiers: ['com.stablyai.orca'],
+    MaterializeDatalessFiles: true,
     EnvironmentVariables: { ORCA_TEST_SECRET: 'test-value' }
   })
   expect(JSON.stringify(job)).not.toContain('NODE_CHANNEL_FD')
@@ -205,11 +231,16 @@ it('launches the copied helper on plain Node and leaves no inherited credentials
     Array.isArray(job.ProgramArguments)
       ? job.ProgramArguments.map(String)
       : []
-  expect(args.slice(0, 4)).toEqual([helperExec(), helperEntry(), '--socket', options.socketPath])
-  // The replacement preflight compares the installed entry, never the private copy's.
+  expect(args.slice(0, 5)).toEqual([
+    helperExec(),
+    ...DAEMON_V8_FLAGS,
+    helperEntry(),
+    '--socket',
+    options.socketPath
+  ])
+  // Replacement preflight compares the installed entry, not the private helper copy.
   expect(args[args.indexOf('--entry-path') + 1]).toBe(options.entryPath)
   expect(args[args.indexOf('--spawner-exec-path') + 1]).toBe(helperExec())
-  // The job file is gone and the published copy holds nothing else.
   expect(await readdir(copyDir)).toEqual([])
   expect(handle?.releaseAdoptionLease).toBeTypeOf('function')
   await handle?.shutdown()
@@ -224,7 +255,9 @@ it('uses one launchd label per profile and protocol', () => {
   expect(macDaemonJobLabel('/Users/a/Library/Application Support/orca')).not.toBe(
     macDaemonJobLabel('/Users/a/Library/Application Support/orca-dev')
   )
-  expect(macDaemonJobLabel('/p')).toMatch(/^com\.stablyai\.orca\.terminal\.[0-9a-f]{16}\.v48$/)
+  expect(macDaemonJobLabel('/p')).toMatch(
+    new RegExp(`^com\\.stablyai\\.orca\\.terminal\\.[0-9a-f]{16}\\.v${PROTOCOL_VERSION}$`)
+  )
 })
 
 it.each(['13.4.1', '12.7.6'])(
@@ -268,6 +301,7 @@ it("boots out an earlier daemon's stopped job before starting the new one", asyn
 })
 
 it('lets a restarting daemon exit before removing its registration and bootstrapping', async () => {
+  beginRetirementClock()
   launchctl.print = [running, stopped]
   await expect(launchMacDaemonFromStableBundle(options, roomyDeadline())).resolves.not.toBeNull()
   expect(launchctlCalls('bootout')).toHaveLength(1)
@@ -279,7 +313,7 @@ it.each([
   ['unverifiable', { ...ok, code: 1, stderr: 'Operation not permitted' }]
 ])('never starts beside an earlier job that reads %s', async (_state, print) => {
   launchctl.print = [print]
-  // No retirement wait may consume the time reserved for bootstrap and readiness.
+  // Keep retirement inside its budget so bootstrap and readiness still fit.
   const error = await launchFailure(Date.now() + 20_000)
   expect(error).toBeInstanceOf(Error)
   expect(launchctlCalls('bootstrap')).toHaveLength(0)
@@ -292,16 +326,18 @@ it.each([
 })
 
 it('replaces a running job that verifiably retired its endpoint without exiting (#29361)', async () => {
+  const startedAt = beginRetirementClock()
   launchctl.print = [running]
   recoverMock.mockImplementation(async () => {
+    expect(retirementClock.now - startedAt).toBe(7_000)
     launchctl.print = [missing]
     return true
   })
   await expect(launchMacDaemonFromStableBundle(options, roomyDeadline())).resolves.not.toBeNull()
   expect(recoverMock).toHaveBeenCalledOnce()
   expect(launchctlCalls('bootstrap')).toHaveLength(1)
-  // Waited for natural retirement before inspecting it for recovery.
-  expect(launchctlCalls('print').length).toBeGreaterThan(1)
+  expect(retirementClock.waits).toEqual(Array(28).fill(250))
+  expect(launchctlCalls('print')).toHaveLength(29)
 })
 
 it.each([
@@ -392,6 +428,7 @@ it('waits out a silent job that is still running and never forks beside it', asy
 })
 
 it('retries a connection refusal within the same job', async () => {
+  beginRetirementClock()
   ensureWithinMock.mockRejectedValueOnce(new Error('ECONNREFUSED'))
   launchctl.print = [missing, running]
   await expect(launchMacDaemonFromStableBundle(options, roomyDeadline())).resolves.not.toBeNull()

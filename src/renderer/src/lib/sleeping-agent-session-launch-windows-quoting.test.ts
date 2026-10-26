@@ -1,6 +1,4 @@
-// Windows shell-quoting coverage for the sleeping-agent resume launch (#12320):
-// the queued resume line is typed into the new tab's shell, so cmd.exe tabs must
-// not receive PowerShell single quotes.
+// Resume lines enter the selected Windows shell; cmd.exe must never receive PowerShell single quoting (#12320).
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
@@ -8,6 +6,7 @@ import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-r
 const mockCreateTab = vi.fn()
 
 const store = {
+  agentStatusByPaneKey: {},
   settings: {
     agentCmdOverrides: {},
     agentDefaultArgs: {} as Record<string, string>,
@@ -117,25 +116,19 @@ describe('launchSleepingAgentSession Windows shell quoting', () => {
   it('quotes the resume argv for a cmd.exe tab', async () => {
     store.settings.terminalWindowsShell = 'cmd.exe'
 
-    await expect(launch()).resolves.toBe(
-      `codex "--dangerously-bypass-approvals-and-sandbox" "resume" "${SESSION_ID}"`
-    )
+    await expect(launch()).resolves.toBe(`codex "resume" "${SESSION_ID}"`)
   })
 
   it('keeps PowerShell quoting for a powershell tab', async () => {
     store.settings.terminalWindowsShell = 'powershell.exe'
 
-    await expect(launch()).resolves.toBe(
-      `codex '--dangerously-bypass-approvals-and-sandbox' 'resume' '${SESSION_ID}'`
-    )
+    await expect(launch()).resolves.toBe(`codex 'resume' '${SESSION_ID}'`)
   })
 
   it('quotes the resume argv for a Git Bash tab', async () => {
     store.settings.terminalWindowsShell = 'git-bash'
 
-    await expect(launch()).resolves.toBe(
-      `codex '--dangerously-bypass-approvals-and-sandbox' 'resume' '${SESSION_ID}'`
-    )
+    await expect(launch()).resolves.toBe(`codex 'resume' '${SESSION_ID}'`)
   })
 
   it('ignores the local Windows shell setting for an SSH workspace', async () => {
@@ -152,9 +145,7 @@ describe('launchSleepingAgentSession Windows shell quoting', () => {
       ]
     }
 
-    await expect(launch()).resolves.toBe(
-      `codex '--dangerously-bypass-approvals-and-sandbox' 'resume' '${SESSION_ID}'`
-    )
+    await expect(launch()).resolves.toBe(`codex 'resume' '${SESSION_ID}'`)
   })
   it.each([
     ['cmd.exe', 'omp "--resume" "C:\\custom sessions\\session.jsonl"'],

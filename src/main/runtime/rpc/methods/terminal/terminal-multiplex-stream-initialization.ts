@@ -2,6 +2,8 @@ import {
   TerminalStreamOpcode,
   encodeTerminalStreamJson
 } from '../../../../../shared/terminal-stream-protocol'
+import { recordYieldedTerminalQueries } from './terminal-multiplex-yielded-queries'
+import { EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE } from '../../../../../shared/terminal-reply-query-scan'
 import { iterateTerminalOutputFrameChunks } from '../../terminal-output-frame-chunks'
 import { TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES } from '../../../../../shared/terminal-multiplex-flow-control'
 import { createTerminalOutputBatcher } from './terminal-output-batcher'
@@ -14,6 +16,7 @@ import {
   type TerminalMultiplexConnection
 } from './terminal-multiplex-connection'
 import type { TerminalMultiplexStream } from './terminal-stream-types'
+import { subscribeToPtyEndpointLoss } from '../../../terminal/pty-endpoint-loss-signal'
 
 export async function initializeMultiplexStream(
   state: TerminalMultiplexConnection,
@@ -38,12 +41,14 @@ export async function initializeMultiplexStream(
       request.capabilities?.outputPause === 1 && request.capabilities.outputPauseDropNotice === 1,
     pausedOutputDropNoticeSent: false,
     supportsWriteUnavailable: request.capabilities?.writeUnavailable === 1,
+    supportsEndpointLossNotice:
+      request.capabilities?.writeUnavailable === 1 && request.capabilities.endpointLossNotice === 1,
     inputSessionId: request.capabilities?.inputAck === 1 ? (request.inputSessionId ?? null) : null,
     outputPaused: false,
     supportsDesktopViewportClaims: request.capabilities?.desktopViewportClaims === 1,
     desktopClaimTail: Promise.resolve(true),
     registeredRemoteDesktopDriver: false,
-    // Why: streamId is client-local, so key the width floor by connectionId or two connections sharing stream 1 for one PTY clobber each other's floor.
+    // Namespace client-local streamId by connection so sibling stream 1 floors cannot collide.
     remoteDesktopSubscriptionKey,
     pendingRemoteDesktopViewport: null,
     buffering: true,
@@ -51,6 +56,8 @@ export async function initializeMultiplexStream(
     ackPendingOutputBytes: 0,
     ackPendingOutputOverflowed: false,
     ackRecoverySnapshotInFlight: false,
+    yieldedQueries: [],
+    yieldedQueryScan: EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE,
     ackRecoveryHistoryOwed: false,
     pendingOutput: [],
     pendingOutputBytes: 0,
@@ -66,7 +73,7 @@ export async function initializeMultiplexStream(
           meta.seq
         )
       }
-      for (const chunk of iterateTerminalOutputFrameChunks(data, meta)) {
+      for (const chunk of iterateTerminalOutputFrameChunks(data, meta, 'span')) {
         state.queueOrSendOutput(stream, chunk)
       }
     }),
@@ -91,23 +98,36 @@ export async function initializeMultiplexStream(
       notePausedOutputDropped(state, stream)
       return
     }
+    recordYieldedTerminalQueries(runtime, stream, data, meta)
     if (stream.buffering) {
       appendPendingMultiplexOutput(stream, data, meta)
       return
     }
     stream.outputBatcher.push(data, meta)
   })
-  // Why: a multiplexed stream feeds a remote xterm view with query authority, so the main model responder yields while attached (terminal-query-authority.md).
-  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(ptyId)
+  // Remote xterm answers delivered queries; paused streams drop output, returning reply authority to main.
+  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(
+    ptyId,
+    () => stream.outputPaused
+  )
+  // Report daemon death now, before the next refused keystroke.
+  const unsubscribeEndpointLoss = stream.supportsEndpointLossNotice
+    ? subscribeToPtyEndpointLoss(ptyId, () => {
+        if (isMultiplexStreamAttached(state, stream)) {
+          state.sendFrame(stream.streamId, TerminalStreamOpcode.WriteUnavailable)
+        }
+      })
+    : () => {}
   stream.unsubscribeData = () => {
     releaseViewSubscriber()
     unsubscribeStreamData()
+    unsubscribeEndpointLoss()
   }
 
   if (isMobile && request.client?.id) {
     await runtime.handleMobileSubscribe(ptyId, request.client.id, request.viewport)
   } else if (request.client?.id && request.viewport) {
-    // Why: subscribe records this stream's geometry and cleanup key but doesn't claim ownership; activity frames claim later.
+    // Subscribe records cleanup/geometry without ownership; later activity claims it.
     stream.registeredRemoteDesktopDriver = true
     stream.pendingRemoteDesktopViewport = request.viewport
   }

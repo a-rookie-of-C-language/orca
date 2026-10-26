@@ -1,10 +1,6 @@
 name: Windows packaged orcad serve switch E2E
 
-# Why: proves D7 on a real Windows install. The installed desktop app forks its terminal daemon
-# from the relocated %LOCALAPPDATA%\Orca\daemon-host; `orca serve` then serves the same profile
-# on orcad and must adopt that daemon, and the desktop must reattach the terminal afterwards and
-# still write its settings under orcad's data-root ACL. Unpackaged e2e cannot exercise the
-# relocation, which only packaged builds do. A CI runner is the only safe place to install.
+# D7 packaged Windows proof: relocated desktop daemon survives orcad serve adoption and desktop reattach, with settings writes after data-root ACL. Run install only on disposable CI; unpackaged E2E cannot exercise relocation.
 
 on:
   pull_request:
@@ -59,7 +55,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: dist/orca-windows-setup.exe
-          key: serve-switch-installer-${{ hashFiles('src/**', 'config/**', 'native/**', 'resources/**', 'mobile/**', 'patches/**', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+          key: serve-switch-installer-v2-${{ hashFiles('src/**', 'config/**', 'native/**', 'resources/**', 'mobile/**', 'patches/**', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
 
       - uses: ./.github/actions/install-mobile-dependencies
         if: steps.cache-installer.outputs.cache-hit != 'true'
@@ -76,6 +72,8 @@ jobs:
       - name: Build Windows installer (unsigned)
         if: steps.cache-installer.outputs.cache-hit != 'true'
         shell: bash
+        env:
+          ORCA_REUSE_PREPARED_NATIVE_RUNTIME: '1'
         run: |
           node config/scripts/ensure-native-runtime.mjs --runtime=electron
           pnpm run build:desktop:ci
@@ -96,12 +94,14 @@ jobs:
       - uses: ./.github/actions/prepare-windows-cli-launcher
         with:
           arches: x64
+      - uses: ./.github/actions/build-mobile-web-bundle
       - name: Build the win32-x64 orcad template
         shell: bash
+        env:
+          ORCA_REUSE_PREPARED_WINDOWS_SECURITY: 'true'
         run: |
           node config/scripts/ensure-native-runtime.mjs --runtime=node
-          pnpm build:orcad
-          node config/scripts/build-windows-process-tree-addon.mjs --arch=x64
+          node config/scripts/build-windows-process-tree-addon.mjs --arch=x64 --reuse-prepared-runtime
           node config/scripts/build-orcad-template.mjs --targets win32-x64
 
       - name: Switch serve hosts on the installed app's profile

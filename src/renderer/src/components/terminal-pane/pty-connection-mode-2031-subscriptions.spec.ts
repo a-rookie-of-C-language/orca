@@ -95,8 +95,10 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
         // Two separate PTY chunks. xterm would parse both in one batch and see only the net result.
         emit('\x1b[?2031h')
         expect(deps.paneMode2031Ref.current.get(1)).toBe(true)
+        expect(deps.paneLastThemeModeRef.current.get(1)).toBe('light')
         emit('\x1b[?2031l')
         expect(deps.paneMode2031Ref.current.get(1)).toBeUndefined()
+        expect(deps.paneLastThemeModeRef.current.get(1)).toBeUndefined()
         expect(replies(transport)).toEqual([])
         dispose()
       })
@@ -185,22 +187,9 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
         dispose()
       })
 
-      it('drops a live subscription when a later chunk withdraws it', async () => {
-        const { deps, emit, dispose } = await connectVisiblePane()
-        // A TUI that exits: the earlier chunk really did register, so the withdrawal has
-        // state to undo — otherwise a theme flip pushes CSI 997 at the shell that replaced it.
-        emit('\x1b[?2031h')
-        expect(deps.paneMode2031Ref.current.get(1)).toBe(true)
-        emit('\x1b[?2031l')
-        expect(deps.paneMode2031Ref.current.get(1)).toBeUndefined()
-        expect(deps.paneLastThemeModeRef.current.get(1)).toBeUndefined()
-        dispose()
-      })
-
       it('discards a half-read escape prefix when the pane swaps PTYs', async () => {
         const { transport, deps, emit, dispose } = await connectVisiblePane()
-        // Why: the tail is a byte range from the old stream. Splicing it onto the first
-        // chunk of a replacement PTY fabricates a subscribe no program ever sent.
+        // Discard old stream tails on PTY replacement so concatenation cannot fabricate a subscription.
         transport.serializeBuffer = vi.fn().mockResolvedValue(null)
         emit('\x1b[?20')
         // droppedOutput latches the hidden-restore PTY id, which is what detects the swap.

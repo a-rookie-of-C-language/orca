@@ -34,7 +34,7 @@ export function TerminalWindowsShellSection({
 }: TerminalWindowsShellSectionProps): React.JSX.Element {
   const showGitBashOption = gitBashAvailable || windowsShell === WINDOWS_GIT_BASH_SHELL
   const showNiubashOption = niubashAvailable || windowsShell === WINDOWS_NIUBASH_SHELL
-  // Why: selecting WSL here would omit its required distro, but an existing WSL default must stay visible.
+  // New WSL choices need a distro; retain only existing WSL defaults here.
   const showWslOption = windowsShell === 'wsl.exe'
 
   return (

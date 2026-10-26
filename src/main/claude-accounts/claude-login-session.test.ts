@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -25,10 +25,16 @@ function folder(runtime: 'wsl' | 'host'): ClaudeCommandConfig {
     : { windowsPath, linuxPath: null, wslDistro: null }
 }
 
-// Stands in for Claude running BROWSER with `link`, then finishing once `done` says so.
+// Publish atomically so the poller cannot read an empty link.
+function handOverClaudeSignInLink(windowsPath: string, link: string): void {
+  const helperPath = join(windowsPath, '.orca-sign-in-browser')
+  writeFileSync(`${helperPath}.tmp`, link)
+  renameSync(`${helperPath}.tmp`, `${helperPath}.link`)
+}
+
 function claudeHandsOver(config: ClaudeCommandConfig, link: string, done: () => boolean) {
   return vi.fn<RunCommand>(async () => {
-    writeFileSync(join(config.windowsPath, '.orca-sign-in-browser.link'), link)
+    handOverClaudeSignInLink(config.windowsPath, link)
     await vi.waitFor(() => expect(done()).toBe(true))
     return ''
   })
@@ -105,11 +111,10 @@ describe('runClaudeLoginSession', () => {
     const openWslSignInLink = vi.fn()
     let cancel: (() => boolean) | null = null
     const runCommand = vi.fn<RunCommand>(async (_args, _config, _ms, options) => {
-      // Claude writes its link as the cancel lands.
-      writeFileSync(join(config.windowsPath, '.orca-sign-in-browser.link'), LINK)
+      handOverClaudeSignInLink(config.windowsPath, LINK)
       expect(cancel?.()).toBe(true)
       expect(options?.signal?.aborted).toBe(true)
-      // Give the link watcher its chance to read the file.
+      // Allow a watcher poll to verify cancellation suppresses delivery.
       await new Promise((resolve) => setTimeout(resolve, 300))
       throw new Error('Claude sign-in was cancelled.')
     })

@@ -1,8 +1,16 @@
-/** orcad's key record on disk: naming, reading, and exclusive first publication. */
 import { createHash, randomBytes } from 'node:crypto'
-import { linkSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import {
+  linkSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import {
   bestEffortFsyncDirectorySync,
@@ -11,17 +19,26 @@ import {
 } from '../../shared/secure-file'
 import { restrictWindowsFile } from '../../shared/secure-path-windows-acl'
 import { ORCAD_MASTER_KEY_BYTES } from './orcad-secret-sealing'
+import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
+import { errorMessage } from '../../shared/error-message'
 
+// Read legacy keyring records only for migration.
 export type StoredKeyState =
   | { version: 1; backend: 'os-keyring'; account: string; check: string }
-  | { version: 1; backend: 'host-file'; key: string; hostBound: boolean; check: string }
+  | {
+      version: 1
+      backend: 'host-file'
+      key: string
+      hostBound: boolean
+      check: string
+    }
 
-export type RecordRead =
+type RecordRead =
   | { kind: 'absent' }
   | { kind: 'record'; stored: StoredKeyState }
   | { kind: 'unreadable'; reason: string }
 
-export function parseStoredState(raw: string): StoredKeyState | null {
+function parseStoredState(raw: string): StoredKeyState | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -36,7 +53,12 @@ export function parseStoredState(raw: string): StoredKeyState | null {
     return null
   }
   if (record.backend === 'os-keyring' && typeof record.account === 'string') {
-    return { version: 1, backend: 'os-keyring', account: record.account, check: record.check }
+    return {
+      version: 1,
+      backend: 'os-keyring',
+      account: record.account,
+      check: record.check
+    }
   }
   if (
     record.backend === 'host-file' &&
@@ -66,20 +88,9 @@ function machineTag(machineId: string | null): string {
     .slice(0, 16)
 }
 
-/**
- * Why one record per machine: hosts sharing a home (NFS) each keep their own key instead of
- * overwriting one another's, and a credential sealed elsewhere fails to unseal rather than
- * being silently re-keyed.
- */
+/** Machine-specific records prevent hosts sharing a home from overwriting each other's keys. */
 export function orcadSecretStateFileName(machineId: string | null): string {
   return `orcad-secret-store-${machineTag(machineId)}.json`
-}
-
-export function keyringAccount(keyDir: string, machineId: string | null): string {
-  const digest = createHash('sha256')
-    .update(`${resolve(keyDir)}\0${machineTag(machineId)}`)
-    .digest('hex')
-  return `home-${digest.slice(0, 16)}`
 }
 
 function isInside(root: string, path: string): boolean {
@@ -87,7 +98,6 @@ function isInside(root: string, path: string): boolean {
   return !fromRoot.startsWith('..') && !isAbsolute(fromRoot)
 }
 
-/** A throwaway key directory (tests, smoke runs) must not leave an item in the user's keyring. */
 export function isTemporaryKeyDir(keyDir: string): boolean {
   const roots = [tmpdir(), '/tmp', '/var/tmp'].flatMap((root) => {
     try {
@@ -99,14 +109,8 @@ export function isTemporaryKeyDir(keyDir: string): boolean {
   let target = resolve(keyDir)
   try {
     target = realpathSync(target)
-  } catch {
-    // Not created yet; the lexical path is what will be created.
-  }
+  } catch {}
   return roots.some((root) => isInside(root, target) || isInside(root, resolve(keyDir)))
-}
-
-function errorCode(error: unknown): unknown {
-  return error instanceof Error && 'code' in error ? error.code : undefined
 }
 
 export function readStoredRecord(statePath: string): RecordRead {
@@ -114,31 +118,36 @@ export function readStoredRecord(statePath: string): RecordRead {
   try {
     raw = readFileSync(statePath, 'utf8')
   } catch (error) {
-    // Why only ENOENT: EACCES on an existing record must never be mistaken for "no key yet".
-    if (errorCode(error) === 'ENOENT') {
+    // Permission failures must not trigger key creation over an existing record.
+    if (hasErrorCode(error, 'ENOENT')) {
       return { kind: 'absent' }
     }
-    return { kind: 'unreadable', reason: `its key record could not be read (${String(error)})` }
+    return {
+      kind: 'unreadable',
+      reason: `its key record could not be read (${String(error)})`
+    }
   }
   const stored = parseStoredState(raw)
-  // Why not regenerate: the record may hold the only copy of the key.
+  // Never regenerate an unreadable record: it may contain the only key copy.
   return stored
     ? { kind: 'record', stored }
-    : { kind: 'unreadable', reason: `its key record ${statePath} is not valid` }
+    : {
+        kind: 'unreadable',
+        reason: `its key record ${statePath} is not valid`
+      }
 }
 
-/** Creates the record only if none exists, already restricted; otherwise says why not. */
 export function publishRecordExclusively(path: string, record: StoredKeyState): string {
   const staging = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
   try {
-    // Why refuse an unrestricted write: the record may carry the master key itself.
+    // Master-key bytes must never be published with unrestricted permissions.
     if (!writeSecureFile(staging, JSON.stringify(record), { durable: true })) {
       return `its key record ${path} could not be restricted to this user`
     }
     try {
       linkSync(staging, path)
     } catch (error) {
-      if (errorCode(error) === 'EEXIST') {
+      if (hasErrorCode(error, 'EEXIST')) {
         return 'exists'
       }
       throw error
@@ -146,25 +155,71 @@ export function publishRecordExclusively(path: string, record: StoredKeyState): 
     bestEffortFsyncDirectorySync(dirname(path))
     return 'published'
   } catch (error) {
-    return `its key record ${path} could not be written (${error instanceof Error ? error.message : String(error)})`
+    return `its key record ${path} could not be written (${errorMessage(error)})`
   } finally {
     rmSync(staging, { force: true })
   }
 }
 
-export function withdrawRecord(path: string, check: string): void {
+export function replaceRecord(
+  path: string,
+  record: StoredKeyState,
+  expected: StoredKeyState
+): string {
+  const staging = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.staging`
   try {
-    if (parseStoredState(readFileSync(path, 'utf8'))?.check === check) {
-      rmSync(path, { force: true })
+    if (!writeSecureFile(staging, JSON.stringify(record), { durable: true })) {
+      return `its key record ${path} could not be restricted to this user`
     }
+    const current = readStoredRecord(path)
+    if (
+      current.kind !== 'record' ||
+      current.stored.backend !== expected.backend ||
+      current.stored.check !== expected.check
+    ) {
+      return 'changed'
+    }
+    renameSync(staging, path)
+    bestEffortFsyncDirectorySync(dirname(path))
+    return 'replaced'
+  } catch (error) {
+    return `its key record ${path} could not be written (${errorMessage(error)})`
+  } finally {
+    rmSync(staging, { force: true })
+  }
+}
+
+/** Sweep only this machine's dead-writer staging files; NFS peer PIDs cannot be judged locally. */
+export function sweepStaleRecordStaging(statePath: string): void {
+  const dir = dirname(statePath)
+  const prefix = `${basename(statePath)}.`
+  let names: string[]
+  try {
+    names = readdirSync(dir)
   } catch {
-    // Left in place, the next start reports the missing keyring item instead of losing data.
+    return
+  }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null
+  for (const name of names) {
+    const pid = name.startsWith(prefix)
+      ? /^(\d+)\.[0-9a-f]{8}\.staging$/.exec(name.slice(prefix.length))?.[1]
+      : undefined
+    if (!pid || Number(pid) === process.pid || isProcessAlive(Number(pid))) {
+      continue
+    }
+    const path = join(dir, name)
+    try {
+      const stat = lstatSync(path)
+      if (stat.isFile() && (uid === null || stat.uid === uid)) {
+        rmSync(path, { force: true })
+      }
+    } catch {}
   }
 }
 
 export async function restrictExistingRecord(path: string): Promise<boolean> {
   try {
-    // Why verify on Windows: the hardening helper does not report a failed ACL restriction.
+    // Verify Windows ACL changes explicitly; the general hardening helper cannot confirm them.
     if (process.platform === 'win32') {
       return await restrictWindowsFile(path)
     }

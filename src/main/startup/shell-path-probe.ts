@@ -8,13 +8,13 @@ export const SHELL_PATH_DELIMITER = '__ORCA_SHELL_PATH__'
 export function shellPathProbe(shell: string): { args: string[]; pathDelimiter: string } {
   if (process.platform !== 'win32') {
     if (pathWin32.basename(shell).toLowerCase() === 'nu') {
-      // Why: Nushell's PATH is a list; POSIX "$PATH" prints a literal instead.
+      // Nushell stores PATH as a list; POSIX quoting would print a literal.
       const command = [
         `print -n '${SHELL_PATH_DELIMITER}';`,
         'print -n ($env.PATH | str join (char esep));',
         `print -n '${SHELL_PATH_DELIMITER}'`
       ].join(' ')
-      // Why: existing interactive login flags preserve $nu.is-interactive configuration.
+      // Retain interactive login flags for $nu.is-interactive rc behavior.
       return { args: ['-ilc', command], pathDelimiter: delimiter }
     }
     const command =
@@ -37,6 +37,6 @@ export function shellPathProbe(shell: string): { args: string[]; pathDelimiter: 
     `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ` +
     `[Console]::Write('${SHELL_PATH_DELIMITER}'); [Console]::Write($env:Path); ` +
     `[Console]::Write('${SHELL_PATH_DELIMITER}')`
-  // Why: omitting -NoProfile is the behavior this probe exists to capture.
+  // Load profiles to capture user configuration; do not pass NoProfile.
   return { args: ['-NoLogo', '-Command', command], pathDelimiter: ';' }
 }

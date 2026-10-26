@@ -15,12 +15,7 @@ import type { RemoteRuntimeMultiplexedTerminal } from './remote-runtime-terminal
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 
-// Why: reproduces the silent frame-drop corruption. The server multiplex path
-// drops Output frames when the websocket buffer is over its cap
-// (encryptedBinaryReply returns false); the wire `seq` is an output high-water, so
-// a drop leaves a detectable gap. This harness drives the real client
-// multiplexer through the same subscribe transport the app uses and forces a
-// drop, asserting the client resyncs instead of rendering a corrupt tail.
+// Simulate multiplex Output drops under websocket backpressure: UTF-16 high-water seq exposes loss, and the real client must resync instead of painting corrupt output.
 
 type SubscribeCallbacks = {
   onResponse: (response: unknown) => void
@@ -41,6 +36,7 @@ class FakeMultiplexServer {
   droppedFrames = 0
   holdNextManualSnapshot = false
   truncateNextRecoverySnapshot = false
+  unavailableNextRecoverySnapshot = false
   dropNextRecoverySnapshotEnd = false
   holdNextRecoverySnapshot = false
   streamNextRecoverySnapshot = false
@@ -78,8 +74,7 @@ class FakeMultiplexServer {
         this.heldManualRequestId = payload.requestId
         return
       }
-      // Resync request: the server serializes the *current* buffer, so recovery
-      // includes everything the client missed.
+      // Snapshot serializes current host buffer, including all missed output.
       this.snapshotData = 'RECOVERED'
       if (typeof payload?.requestId !== 'number' && this.holdNextRecoverySnapshot) {
         // The reply's binary frames were all dropped under backpressure.
@@ -102,6 +97,11 @@ class FakeMultiplexServer {
         this.sendSnapshot(undefined, { truncated: true })
         return
       }
+      if (typeof payload?.requestId !== 'number' && this.unavailableNextRecoverySnapshot) {
+        this.unavailableNextRecoverySnapshot = false
+        this.sendSnapshot(undefined, { unavailable: 'no-serializable-buffer' })
+        return
+      }
       if (typeof payload?.requestId !== 'number' && this.dropNextRecoverySnapshotEnd) {
         this.dropNextRecoverySnapshotEnd = false
         this.sendSnapshot(undefined, { omitEnd: true })
@@ -117,7 +117,7 @@ class FakeMultiplexServer {
 
   private sendSnapshot(
     requestId?: number,
-    options?: { truncated?: boolean; omitEnd?: boolean }
+    options?: { truncated?: boolean; omitEnd?: boolean; unavailable?: string }
   ): void {
     this.send(
       TerminalStreamOpcode.SnapshotStart,
@@ -126,11 +126,12 @@ class FakeMultiplexServer {
         rows: 24,
         seq: options?.truncated ? undefined : this.cursorUnits,
         requestId,
-        truncated: options?.truncated
+        truncated: options?.truncated,
+        unavailable: options?.unavailable
       }),
       0
     )
-    if (!options?.truncated) {
+    if (!options?.truncated && !options?.unavailable) {
       this.send(TerminalStreamOpcode.SnapshotChunk, encodeTerminalStreamText(this.snapshotData), 0)
     }
     if (!options?.omitEnd) {
@@ -143,9 +144,7 @@ class FakeMultiplexServer {
     const startSeq = this.cursorUnits
     this.cursorUnits += text.length
     if (this.dropNextOutput) {
-      // encryptedBinaryReply returned false: frame is NOT sent. The byte
-      // high-water still advances (server keeps producing), so the next frame's
-      // seq jumps past what the client last saw.
+      // Dropped frames never reach client, but host high-water advances so next output exposes the gap.
       this.dropNextOutput = false
       this.droppedFrames += 1
       this.onServerSideDrop?.()
@@ -271,8 +270,7 @@ describe('remote terminal frame-drop resync', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    // The immediate snapshot covers the corrupt tail ('ccc'), so it is not
-    // rendered separately or duplicated after the recovery reset.
+    // Snapshot already covers ccc; do not paint it again after recovery.
     expect(data).toEqual(['aaa'])
     expect(server.droppedFrames).toBe(1)
     // Instead, a fresh authoritative snapshot recovers the terminal.
@@ -285,9 +283,7 @@ describe('remote terminal frame-drop resync', () => {
     expect(data).toEqual(['aaa', 'ddd'])
   })
 
-  // Why: an old host drops output while a hidden pane's stream is paused; the reveal's
-  // own requested image already covers that gap, so a resync would clear and repaint
-  // the TUI one round trip later (#22087).
+  // Reveal’s requested image covers old-host hidden-pause gaps; redundant resync clears/repaints TUI a round trip later (#22087).
   it('takes one requested image on reveal and no untagged resync after paused output', async () => {
     const { data, snapshots, stream } = await subscribeClient()
     server.output('aaa')
@@ -309,8 +305,7 @@ describe('remote terminal frame-drop resync', () => {
     expect(data).toEqual(['aaa', 'live after reveal'])
   })
 
-  // Why: stall probes and previews read the host without repainting the pane, so a gap
-  // they span is still real and must resync.
+  // Stall probes/previews do not repaint; any gap they span still needs resync.
   it('still resyncs a gap that a non-repainting request spanned', async () => {
     const { data, snapshots, stream } = await subscribeClient()
     server.output('aaa')
@@ -337,8 +332,7 @@ describe('remote terminal frame-drop resync', () => {
       server.dropNextOutput = true
       server.output('bbb')
       server.output('ccc')
-      // Recovery retries are backoff-limited, but the live path stays open;
-      // output must not freeze while a jittery host serializes the snapshot.
+      // Backoff limits recovery retries while live output stays open during slow serialization.
       server.output('ddd')
       expect(server.snapshotRequests).toEqual([undefined])
 
@@ -349,6 +343,29 @@ describe('remote terminal frame-drop resync', () => {
       server.output('eee')
       expect(snapshots).toEqual(['INITIAL', '\x1b[?2026l\x1b[2J\x1b[3J\x1b[HRECOVERED'])
       expect(data).toEqual(['aaa', 'ddd', 'eee'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Why: the host answers '' with `unavailable` when no serializer ran; that is not a blank pane.
+  it('retries an unavailable recovery instead of erasing the pane', async () => {
+    vi.useFakeTimers()
+    try {
+      const { data, snapshots } = await subscribeClient()
+      server.unavailableNextRecoverySnapshot = true
+
+      server.output('aaa')
+      server.dropNextOutput = true
+      server.output('bbb')
+      server.output('ccc')
+      expect(server.snapshotRequests).toEqual([undefined])
+      expect(snapshots).toEqual(['INITIAL'])
+
+      await vi.advanceTimersByTimeAsync(500)
+      expect(server.snapshotRequests).toEqual([undefined, undefined])
+      expect(snapshots).toEqual(['INITIAL', '\x1b[?2026l\x1b[2J\x1b[3J\x1b[HRECOVERED'])
+      expect(data).toEqual(['aaa'])
     } finally {
       vi.useRealTimers()
     }
@@ -411,8 +428,7 @@ describe('remote terminal frame-drop resync', () => {
     server.output('ccc')
     expect(server.snapshotRequests).toEqual([undefined])
 
-    // The paired binary Error frame was dropped under backpressure; only the
-    // reliable JSON error event arrives. It must release the resync gate.
+    // Reliable JSON error must release resync even if its paired binary Error frame was dropped.
     subscriptionCallbacks.onResponse({
       ok: true,
       result: { type: 'error', streamId: stream.streamId, message: 'snapshot failed' }
@@ -522,7 +538,7 @@ describe('remote terminal frame-drop resync', () => {
       expect(onTransportClose).not.toHaveBeenCalled()
 
       await vi.advanceTimersByTimeAsync(10_000)
-      expect(onTransportClose).toHaveBeenCalledWith({ recoverable: true })
+      expect(onTransportClose).toHaveBeenCalledWith({ recoverable: true, stalled: true })
     } finally {
       vi.useRealTimers()
     }

@@ -114,7 +114,7 @@ it('forwards the opt-in and pinned runtime only when compilation is needed', () 
 })
 
 it.each(['ssh-windows-hosts', 'node-server-tests'])(
-  'opts in only in prepared Windows PR packaging in %s',
+  'opts in only after Windows preparation, retaining the SSH PR boundary in %s',
   (name) => {
     const workflow = parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8'))
     const job = workflow.jobs[name === 'ssh-windows-hosts' ? 'hosts' : 'persistence']
@@ -140,7 +140,7 @@ it.each(['ssh-windows-hosts', 'node-server-tests'])(
             }
           )
           expect(enabled).toBe(
-            event === 'pull_request' &&
+            (name === 'node-server-tests' || event === 'pull_request') &&
               outcome === 'success' &&
               (name === 'ssh-windows-hosts' || os === 'Windows')
           )
@@ -149,6 +149,24 @@ it.each(['ssh-windows-hosts', 'node-server-tests'])(
     }
   }
 )
+
+it('opts the Windows E2E build into security reuse after Electron preparation', () => {
+  const workflow = parse(readFileSync('.github/workflows/e2e.yml', 'utf8'))
+  const job = workflow.jobs['orcad-serve-mode-switch-windows']
+  const preparation = job.steps.find(
+    (step) => step.uses === './.github/actions/install-node-dependencies'
+  )
+  const build = job.steps.find(
+    (step) => step.name === 'Build the e2e app, CLI, orcad slot and template'
+  )
+  expect(job['runs-on']).toBe('windows-2022')
+  expect(preparation.with['native-runtime']).toBe('electron')
+  expect(job.steps.indexOf(preparation)).toBeLessThan(job.steps.indexOf(build))
+  expect(preparation['continue-on-error']).toBeUndefined()
+  expect(build['continue-on-error']).toBeUndefined()
+  expect(build.env.ORCA_REUSE_PREPARED_WINDOWS_SECURITY).toBe('true')
+  expect(job.env.ORCA_REUSE_PREPARED_WINDOWS_SECURITY).toBeUndefined()
+})
 
 it.each([false, true])('passes an explicit CLI opt-in only when enabled: %s', (enabled) => {
   const { root, output, write } = fixture()

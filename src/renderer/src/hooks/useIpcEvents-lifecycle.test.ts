@@ -123,6 +123,10 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     })
 
     const { installAppLifetimeIpcEvents } = await import('./ipc-events/app-lifetime-ipc-bridge')
+    // Module-owned subscriptions outlive each app bridge installation.
+    const moduleListeners = new Map(listeners)
+    listeners.clear()
+    registrationOrder.length = 0
     vi.stubGlobal('document', documentEvents)
     const firstCleanup = installAppLifetimeIpcEvents()
     await Promise.resolve()
@@ -157,7 +161,15 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     ).toBe(true)
     const activeSubscriptionCount = storeSubscriptions.filter((item) => item.active).length
     expect(activeSubscriptionCount).toBeGreaterThan(0)
-    expect(addDocumentListener.mock.calls.map(([type]) => type)).toEqual(['focusin', 'pointerdown'])
+    const documentListenerTypes = [
+      'focusin',
+      'pointerdown',
+      'compositionstart',
+      'compositionupdate',
+      'compositionend',
+      'input'
+    ]
+    expect(addDocumentListener.mock.calls.map(([type]) => type)).toEqual(documentListenerTypes)
 
     firstCleanup()
     expect(runtimeSubscriptions.every((unsubscribe) => unsubscribe.mock.calls.length === 1)).toBe(
@@ -181,10 +193,8 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     ).toBe(true)
     expect(storeSubscriptions.filter((item) => item.active)).toHaveLength(activeSubscriptionCount)
     expect(addDocumentListener.mock.calls.map(([type]) => type)).toEqual([
-      'focusin',
-      'pointerdown',
-      'focusin',
-      'pointerdown'
+      ...documentListenerTypes,
+      ...documentListenerTypes
     ])
 
     secondCleanup()
@@ -202,6 +212,11 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     expect(
       [...listeners.values()].every((records) =>
         records.every((item) => item.cleanup.mock.calls.length === 1)
+      )
+    ).toBe(true)
+    expect(
+      [...moduleListeners.values()].every((records) =>
+        records.every((item) => item.active && item.cleanup.mock.calls.length === 0)
       )
     ).toBe(true)
   })

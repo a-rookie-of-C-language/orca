@@ -68,8 +68,7 @@ export function WindowsTerminalStep({
   const showNiubashOption = capabilities.niubashAvailable || windowsShell === WINDOWS_NIUBASH_SHELL
 
   const setSelectPortalHost = useCallback((node: HTMLDivElement | null) => {
-    // Why: onboarding sits above body-level portals, so the distro menu must
-    // portal into the overlay to stay clickable.
+    // Portal inside onboarding so its overlay cannot block the distro menu.
     setSelectPortalRoot(node?.closest<HTMLElement>('[data-onboarding-overlay]') ?? node)
   }, [])
 

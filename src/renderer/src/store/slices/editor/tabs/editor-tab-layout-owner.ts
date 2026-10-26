@@ -1,47 +1,10 @@
-// Editor tabs in a layout-owner build (phase C4). The window still draws an open or close first:
-// `openFile` returns at once and its callers focus, reveal and reposition the tab by id. Main then
-// records the tab under the window's ids, with the window's group, and replaces that group's
-// preview by the same shared rule the window used. Main's copy reaches the window through frames.
+// Layout-owner editor opens/closes/promotions/moves/renames reach main before drawing (editor-tab-*-through-layout-owner, restored-editor-move-through-layout-owner).
 
 import type { Tab } from '../../../../../../shared/tab-types'
 import type { LayoutEditorFile } from '../../../../../../shared/workspace-layout/workspace-layout-model'
-import { recordLayoutApply } from '@/runtime/layout-apply-send'
 import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
 import { isEditorTabContentType } from './editor-tab-content-type'
-
-type EditorOwnerState = Parameters<typeof recordLayoutApply>[0] &
-  Pick<AppState, 'openFiles' | 'unifiedTabsByWorktree' | 'groupsByWorktree'>
-
-/** A new editor tab the window just drew. */
-export function recordOpenedEditorTabInLayoutOwner(state: EditorOwnerState, tab: Tab): void {
-  if (!isEditorTabContentType(tab.contentType)) {
-    return
-  }
-  const file = state.openFiles.find(
-    (candidate) => candidate.id === tab.entityId && candidate.worktreeId === tab.worktreeId
-  )
-  recordLayoutApply(state, tab.worktreeId, {
-    type: 'openEditorTab',
-    tabId: tab.id,
-    fileId: tab.entityId,
-    contentType: tab.contentType,
-    groupId: tab.groupId,
-    ...(tab.isPreview ? { preview: true } : {}),
-    // Only edit-mode files are restored after restart; the window saves no other.
-    ...(file?.mode === 'edit' ? { file: restorableEditorFile(file) } : {})
-  })
-}
-
-/** Preview tabs the window just made permanent (activation, an edit, a pin). */
-export function recordPromotedEditorTabsInLayoutOwner(
-  state: EditorOwnerState,
-  tabs: readonly Pick<Tab, 'id' | 'worktreeId'>[]
-): void {
-  for (const tab of tabs) {
-    recordLayoutApply(state, tab.worktreeId, { type: 'promotePreviewTab', tabId: tab.id })
-  }
-}
 
 /** The preview tabs that show a file, which making the file permanent promotes. */
 export function previewEditorTabsOf(
@@ -58,43 +21,6 @@ export function previewEditorTabsOf(
         (!tabId || tab.id === tabId)
     )
   )
-}
-
-/** An editor tab the window just closed. */
-export function recordClosedEditorTabInLayoutOwner(
-  state: EditorOwnerState,
-  tab: Pick<Tab, 'id' | 'worktreeId' | 'contentType'>
-): void {
-  if (isEditorTabContentType(tab.contentType)) {
-    recordLayoutApply(state, tab.worktreeId, { type: 'closeTabs', tabIds: [tab.id] })
-  }
-}
-
-/** Where a reopened editor tab ended up once the window restored its old position. */
-export function recordReopenedEditorTabPositionInLayoutOwner(
-  state: EditorOwnerState,
-  worktreeId: string,
-  fileId: string,
-  groupId: string | undefined
-): void {
-  const tab = (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
-    (candidate) =>
-      candidate.entityId === fileId &&
-      isEditorTabContentType(candidate.contentType) &&
-      (groupId === undefined || candidate.groupId === groupId)
-  )
-  const group = tab
-    ? (state.groupsByWorktree[worktreeId] ?? []).find((candidate) => candidate.id === tab.groupId)
-    : undefined
-  const index = tab && group ? group.tabOrder.indexOf(tab.id) : -1
-  if (tab && group && index !== -1) {
-    recordLayoutApply(state, worktreeId, {
-      type: 'moveTab',
-      tabId: tab.id,
-      toGroupId: group.id,
-      index
-    })
-  }
 }
 
 /** The fields the window's session save keeps for an edit-mode file. */

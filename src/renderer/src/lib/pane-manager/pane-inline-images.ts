@@ -11,30 +11,26 @@ import {
   setTerminalImageAddonLoadHandlers
 } from './terminal-image-addon-loader'
 import { buildInlineImageAddonOptions } from './terminal-inline-image-options'
+import { repaintTerminalAfterImageAdded } from './terminal-image-added-repaint'
 
-// Panes whose setting is on but that opened before the lazy addon chunk
-// resolved. The loader's onLoaded handler drains them into a real attach.
+// Queue enabled panes opened before the lazy chunk resolves; onLoaded drains them.
 const panesAwaitingImageAddon = new Set<ManagedPaneInternal>()
 
-// Keyed on the terminal, not the pane: PTY connections hold a toPublicPane()
-// wrapper, which does not carry imageAddon.
+// Key by terminal: PTY public pane wrappers lack imageAddon and differ from internal panes.
 const terminalsRenderingInlineImages = new WeakSet<Terminal>()
+const imageRepaintByPane = new WeakMap<ManagedPaneInternal, { dispose(): void }>()
 
-/** True only once the addon is really attached — not while its chunk loads or after it fails. */
 export function terminalRendersInlineImages(terminal: Terminal): boolean {
   return terminalsRenderingInlineImages.has(terminal)
 }
 
 setTerminalImageAddonLoadHandlers({
   onLoaded: () => {
-    // attachInlineImages removes the pane it handles from the set, so deleting
-    // the current iterator entry mid-iteration is safe.
     for (const pane of panesAwaitingImageAddon) {
       try {
         attachInlineImages(pane)
       } catch (err) {
-        // Why per-pane: this runs inside the loader promise, so one bad pane
-        // must not strand the rest of the drain or raise an unhandled rejection.
+        // Contain per-pane errors inside the loader promise so one failure neither strands siblings nor escapes unhandled.
         panesAwaitingImageAddon.delete(pane)
         console.warn('[terminal] deferred inline-image attach failed for pane', pane.id, err)
       }
@@ -42,14 +38,12 @@ setTerminalImageAddonLoadHandlers({
   }
 })
 
-/** Attach in place so enabling images preserves scrollback and the PTY binding. */
 export function attachInlineImages(pane: ManagedPaneInternal): void {
   if (pane.imageAddon) {
     return
   }
   const ImageAddonConstructor = getTerminalImageAddonConstructor()
   if (!ImageAddonConstructor) {
-    // Chunk not resolved yet: latch and let the loader's onLoaded attach us.
     pane.imageAttachmentDeferred = true
     panesAwaitingImageAddon.add(pane)
     void primeTerminalImageAddon()
@@ -66,6 +60,10 @@ export function attachInlineImages(pane: ManagedPaneInternal): void {
     imageAddon = new ImageAddonConstructor(options)
     pane.terminal.loadAddon(imageAddon)
     pane.imageAddon = imageAddon
+    const repaint = repaintTerminalAfterImageAdded(pane.terminal, imageAddon)
+    if (repaint) {
+      imageRepaintByPane.set(pane, repaint)
+    }
     terminalsRenderingInlineImages.add(pane.terminal)
   } catch (err) {
     console.warn('[terminal] inline-image addon failed to attach for pane', pane.id, err)
@@ -85,17 +83,16 @@ export function detachInlineImages(pane: ManagedPaneInternal): void {
   panesAwaitingImageAddon.delete(pane)
   pane.imageAttachmentDeferred = false
   terminalsRenderingInlineImages.delete(pane.terminal)
+  imageRepaintByPane.get(pane)?.dispose()
+  imageRepaintByPane.delete(pane)
   if (pane.imageAddon) {
     try {
       pane.imageAddon.dispose()
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     pane.imageAddon = null
   }
 }
 
-/** Enable or disable inline images in-place on a running terminal. */
 export function setInlineImagesEnabled(pane: ManagedPaneInternal, enabled: boolean): void {
   if (enabled) {
     attachInlineImages(pane)
