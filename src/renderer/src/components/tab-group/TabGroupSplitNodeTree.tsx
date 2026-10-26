@@ -268,7 +268,9 @@ function SplitNode({
           tabStrip={tabStrip}
           markdownAnnotationsEnabled={markdownAnnotationsEnabled}
           touchesTopEdge={touchesTopEdge}
-          touchesRightEdge={isHorizontal ? false : touchesRightEdge}
+          // Why: a folded second eases to zero flex, so the first owns the window
+          // corner — its strip must still reserve the toggle + window-controls space.
+          touchesRightEdge={isHorizontal ? hideSecond : touchesRightEdge}
           touchesLeftEdge={touchesLeftEdge}
           touchesBottomEdge={isHorizontal ? touchesBottomEdge : false}
           suppressLeftBorder={suppressLeftBorder}
@@ -306,9 +308,13 @@ function SplitNode({
           hasSplitGroups={hasSplitGroups}
           tabStrip={tabStrip}
           markdownAnnotationsEnabled={markdownAnnotationsEnabled}
-          touchesTopEdge={isHorizontal ? touchesTopEdge : false}
+          // Why: a folded first eases to zero flex, so the second owns the top
+          // edge and corner — its strip must still reserve the chrome space.
+          touchesTopEdge={isHorizontal ? touchesTopEdge : hideFirst}
           touchesRightEdge={touchesRightEdge}
-          touchesLeftEdge={isHorizontal ? false : touchesLeftEdge}
+          // Why: same fold — the second owns the left edge, so the collapsed
+          // sidebar toggle spacer still applies to its strip.
+          touchesLeftEdge={isHorizontal ? hideFirst : touchesLeftEdge}
           touchesBottomEdge={touchesBottomEdge}
           suppressLeftBorder={isHorizontal ? true : suppressLeftBorder}
           suppressRightBorder={suppressRightBorder}
