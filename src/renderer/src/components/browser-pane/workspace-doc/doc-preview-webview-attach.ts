@@ -1,5 +1,5 @@
 import { DOC_PREVIEW_PARTITION } from '../../../../../shared/doc-preview-scheme'
-import { ORCA_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
+import { ORCA_BROWSER_PAGE_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../../shared/browser-guest-web-preferences'
 import {
   moveFocusToRendererBeforeWebviewDetach,
   registerPersistentWebview,
@@ -48,9 +48,6 @@ export function attachDocPreviewWebview({
     webview.setAttribute('webpreferences', ORCA_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE)
   }
   webview.setAttribute('aria-label', ariaLabel)
-  // Browsers paint an undeclared page canvas white; the guest is transparent, so without this the
-  // editor's dark surface shows through and default black text becomes unreadable.
-  webview.style.backgroundColor = '#fff'
   webview.style.display = 'flex'
   webview.style.width = '100%'
   webview.style.height = '100%'
@@ -58,12 +55,10 @@ export function attachDocPreviewWebview({
   webview.addEventListener('did-start-loading', onLoadStarted)
   webview.addEventListener('did-stop-loading', onLoadStopped)
   webview.addEventListener('did-fail-load', onLoadFailed)
-  // Both: a link to a sibling document is a full navigation, a fragment link is an in-page one,
-  // and only the pair together tracks what Back can actually return to.
+  // Track both sibling-document navigation and fragment history for Back/Forward.
   webview.addEventListener('did-navigate', onNavigated)
   webview.addEventListener('did-navigate-in-page', onNavigated)
-  // Why the document names its own tab: a preview is a browser tab, and this is how every other
-  // one is named. What the document cannot do is name it the grant it is served over.
+  // Let document titles name the tab while keeping the internal grant origin hidden.
   webview.addEventListener('page-title-updated', onTitleUpdated)
   webview.addEventListener('console-message', onViewportMessage)
   // Register before append so a guest attached mid-drag cannot swallow the pointer stream.

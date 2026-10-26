@@ -198,8 +198,7 @@ export function createClaudeAccountsApi(): PreloadApi['claudeAccounts'] {
         ACCOUNT_MUTATION_TIMEOUT_MS
       ),
     select: ({ accountId, runtime }) => {
-      // Why: no targeted Claude select RPC exists and the server reads an untargeted
-      // null as the host lane; a concrete account id carries its own lane.
+      // No targeted Claude select RPC; null would clear host lane, while concrete account IDs identify their lane.
       if (runtime === 'wsl' && accountId === null) {
         return Promise.reject(
           new Error(
@@ -300,11 +299,9 @@ export function createCodexAccountsApi(): PreloadApi['codexAccounts'] {
             { accountId },
             ACCOUNT_MUTATION_TIMEOUT_MS
           ),
-    // Why: launch accounts are recorded on the host that owns the PTY, which the
-    // web client never is — report no stale panes rather than reject the sweep.
+    // PTY host owns launch-account records; return no stale panes instead of rejecting the sweep.
     listStalePanes: () => Promise.resolve([]),
-    // Why empty rather than absent: the same host owns both records, so a web
-    // client has no recorded lane to offer and every pane falls to derivation.
+    // No web-owned lane records; empty results let every pane use derivation.
     listRecordedPaneLanes: () => Promise.resolve({}),
     forgetStalePanes: () => Promise.resolve()
   }

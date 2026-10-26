@@ -37,7 +37,6 @@ export function RightSidebarTopActivityBar({
   onChangeActivityBarPosition: (pos: ActivityBarPosition) => void
 }): React.JSX.Element {
   return (
-    /* ── Top activity bar: horizontal icon row ── */
     <ContextMenu>
       <div
         className={cn(
@@ -53,10 +52,7 @@ export function RightSidebarTopActivityBar({
                 className={RIGHT_SIDEBAR_TOP_ACTIVITY_STRIP_CLASS_NAME}
               >
                 <div className={cn('flex min-w-0 shrink', RIGHT_SIDEBAR_HEADER_NO_DRAG_CLASS_NAME)}>
-                  {/* Why: the top strip shares a narrow titlebar with the close
-                      button and desktop window controls. Overflow goes
-                      behind More instead of creating a horizontally
-                      scrollable toolbar. */}
+                  {/* Use More for overflow because this narrow titlebar also holds close/window controls. */}
                   <div className="flex min-w-0 shrink">
                     {topActivityLayout.visibleItems.map((item) => (
                       <ActivityBarButton
@@ -110,10 +106,7 @@ export function RightSidebarTopActivityBar({
               ref={topActivityStripRef}
               className={RIGHT_SIDEBAR_WINDOWS_TOP_ACTIVITY_STRIP_CLASS_NAME}
             >
-              {/* Why: custom desktop chrome has fixed native-style controls
-                  in the titlebar area; keep sidebar navigation in the
-                  sidebar body so the titlebar stays visually native
-                  instead of crowded. */}
+              {/* Keep navigation in the body so custom desktop titlebars remain visually native and uncrowded. */}
               <div className="flex min-w-0 flex-1 shrink">
                 {topActivityLayout.visibleItems.map((item) => (
                   <ActivityBarButton

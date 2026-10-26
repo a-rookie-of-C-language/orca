@@ -670,6 +670,7 @@ import {
   TerminalSetViewerColors,
   TerminalSplit,
   TerminalStopExact,
+  TerminalViewClaudeAgent,
   TerminalWait
 } from './terminal-unary-params'
 import { TerminalGetAutoRestoreFitParams } from './terminal-viewport-methods-params'
@@ -828,6 +829,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSession.readVisual': ReadVisualParams,
   'agentSession.regenerateName': OptionsParams,
   'agentSession.release': HoldParams,
+  'agentSession.rename': RenameParams,
   'agentSession.respondToApproval': RespondParams,
   'agentSession.respondToQuestion': RespondToQuestionParams,
   'agentSession.restartContinue': RestartResumeParams,
@@ -997,6 +999,9 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'connector.answer': ConnectorAnswer,
+  'connector.cancel': ConnectorCancel,
+  'connector.pendingPrompt': ConnectorPendingPrompt,
   'connector.send': ConnectorSend,
   'connector.start': ConnectorStart,
   'credentials.clearMiniMaxApiKey': null,
@@ -1582,8 +1587,10 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.stop': TerminalCloseAll,
   'terminal.stopExact': TerminalStopExact,
   'terminal.subscribe': TerminalSubscribe,
+  'terminal.subscribeClaudeAgentViews': null,
   'terminal.unsubscribe': TerminalUnsubscribe,
   'terminal.updateViewport': TerminalUpdateViewport,
+  'terminal.viewClaudeAgent': TerminalViewClaudeAgent,
   'terminal.wait': TerminalWait,
   'terminalDaemon.asyncIoHealth': null,
   'terminalDaemon.killAll': null,

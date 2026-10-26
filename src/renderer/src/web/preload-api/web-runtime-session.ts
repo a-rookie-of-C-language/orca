@@ -27,7 +27,6 @@ export const webRuntimeState: {
   worktreeVisibilityDefaultsRuntimeValue: WorktreeVisibilityDefaults | null
   activeClient: WebRuntimeClient | null
   activeClientEnvironmentId: string | null
-  cachedWorktrees: { loadedAt: number; worktrees: Worktree[] } | null
   cachedDetectedWorktrees: { loadedAt: number; worktrees: Worktree[] } | null
 } = {
   // Why null outside the DOM: node-pool unit tests import this module through the
@@ -39,7 +38,6 @@ export const webRuntimeState: {
   worktreeVisibilityDefaultsRuntimeValue: null,
   activeClient: null,
   activeClientEnvironmentId: null,
-  cachedWorktrees: null,
   cachedDetectedWorktrees: null
 }
 
@@ -86,7 +84,6 @@ export const manuallyDisconnectedEnvironmentIds = new Set<string>()
 export const runtimeCallQueuePool = new RuntimeRpcCallQueuePool()
 
 export function invalidateRuntimeWorktreeCaches(): void {
-  webRuntimeState.cachedWorktrees = null
   webRuntimeState.cachedDetectedWorktrees = null
 }
 

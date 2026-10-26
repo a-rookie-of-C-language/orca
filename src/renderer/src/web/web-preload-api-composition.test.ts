@@ -12,7 +12,7 @@ describe('web preload API composition', () => {
     vi.doUnmock('../../../shared/e2e-config')
   })
 
-  it('installs the exact concrete surface without enumerating fallback namespaces', async () => {
+  it('keeps fallback namespaces non-enumerable and non-thenable', async () => {
     const globals = installBrowserGlobals('Linux')
     const { installWebPreloadApi } = await import('./web-preload-api')
     installWebPreloadApi()

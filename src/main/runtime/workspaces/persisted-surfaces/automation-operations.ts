@@ -164,9 +164,7 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
     return this.automation.ownerPrecondition(id)
   }
 
-  // Why: lazy initialization — the DB path depends on Electron's userData
-  // which may not be finalized until after app.ready. Also allows unit tests
-  // to inject an in-memory DB without touching the filesystem.
+  // Defer until userData is final; tests can inject an in-memory DB.
   getOrchestrationDb(): OrchestrationDb {
     if (!this._orchestrationDb) {
       this._orchestrationDb = new OrchestrationDb(this.orchestrationDbPath())
@@ -203,7 +201,7 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
 
   /** Wakes the Run for helper mail its creator's settlement moved there, once that committed. */
   private offerHandedBackMail(db: OrchestrationDb, handBack: MailHandBack): void {
-    // Why: a replaced database's consumers are not this runtime's to wake.
+    // A replaced database's consumers belong to another runtime.
     if (this._orchestrationDb !== db) {
       return
     }
@@ -212,7 +210,7 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
         this.mailPointerRepointScheduler.schedule(handBack.mailbox)
         return
       }
-      // Why: re-reading the moved rows means a rolled-back settlement wakes no one.
+      // Re-read committed rows so rolled-back settlements wake nobody.
       for (const type of committedHandBackTypes(db, handBack)) {
         this.notifyMessageArrived(handBack.mailbox, type)
       }

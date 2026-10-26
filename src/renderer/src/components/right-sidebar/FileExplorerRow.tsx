@@ -23,14 +23,12 @@ import { FileExplorerRowContextMenu } from './file-explorer-row-context-menu'
 import { FileExplorerIndentGuides } from './FileExplorerIndentGuides'
 import { FILE_EXPLORER_ROW_HEIGHT, getFileExplorerRowPadding } from './file-explorer-row-layout'
 
-// ─── File / Folder Row with Context Menu ─────────────────────────
-
 export type FileExplorerRowProps = {
   node: TreeNode
   displayDepthOffset?: number
   isExpanded: boolean
   isLoading: boolean
-  /** Why: a failed read leaves no children, which otherwise reads as an empty folder. */
+  /** Distinguish failed reads from empty folders. */
   loadError?: string | null
   isSelected: boolean
   isFlashing: boolean
@@ -163,10 +161,9 @@ export function FileExplorerRow({
             height: FILE_EXPLORER_ROW_HEIGHT
           }}
           ref={setRowDragNode}
-          // Why: the explorer's OS-drop owner reads the target folder from this at drop time.
+          // The OS-drop owner reads the target folder here at drop time.
           data-file-explorer-drop-dir={rowDropDir}
-          // Why: marks this draggable row so the wheel-capture handler can rescue
-          // scroll Chromium swallows over draggable nodes (file-explorer-drag-scroll-marker).
+          // Let wheel capture rescue scrolling Chromium swallows over draggable rows (file-explorer-drag-scroll-marker).
           data-explorer-draggable="true"
           draggable
           onDragStart={(event) => {
@@ -235,15 +232,12 @@ export function FileExplorerRow({
             </>
           )}
           <span
-            // Why: marks the rename hotspot so the row's click handler can drop
-            // the directory toggle on the second click of a double-click rename.
+            // Suppress directory toggling on the second click of a filename double-click rename.
             {...{ [RENAME_HOTSPOT_ATTR]: '' }}
             className={cn(
               'min-w-0 truncate',
               isSelected && !nodeStatus && !isIgnored && 'text-accent-foreground',
-              // Why: italic glyphs overhang their advance width; truncate's
-              // overflow:hidden clips it, shaving the last char (".md" → ".ma").
-              // pr-0.5 reserves room for the slant so the final letter survives.
+              // Reserve space for italic overhang so truncation does not clip the final letter.
               isIgnored && 'italic pr-0.5'
             )}
             style={
@@ -254,8 +248,7 @@ export function FileExplorerRow({
                   : undefined
             }
             onDoubleClick={(e) => {
-              // Why: scope rename to the filename text so "pin preview" and the
-              // directory toggle stay reachable on the icon and empty row area.
+              // Keep icon/empty-row double-clicks available for pin preview and directory toggling.
               e.stopPropagation()
               onStartRename(node)
             }}

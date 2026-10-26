@@ -19,8 +19,7 @@ export function NativeChatEmptyState({
   /** The chat's own sentence for the failure, said once: it takes the generic title's place. */
   headline?: string
   agent?: NativeChatSession['agent']
-  /** The read retries on its own (structured chat), so the error says only that it didn't load,
-   *  never pointing back to the terminal. */
+  /** Structured reads retry automatically; show a loading failure without directing users back to a terminal. */
   retrying?: boolean
   history?: NativeChatSessionHistory
 }): React.JSX.Element {

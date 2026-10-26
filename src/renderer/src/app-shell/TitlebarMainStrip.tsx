@@ -33,7 +33,6 @@ export function RightSidebarToggle(): React.JSX.Element {
   )
 }
 
-/** The titlebar's center/right strip: the tab-strip portal slot and the trailing chrome buttons. */
 export function TitlebarMainStrip({ layout }: { layout: AppChromeLayout }): React.JSX.Element {
   const handleToggleExpand = (): void => {
     if (!layout.effectiveActiveTabId) {

@@ -144,7 +144,6 @@ describe('OrcaRuntimeService terminal startup cwd', () => {
     )
   })
 
-  // A folder deleted since the tab was saved starts at the root, says so once, and heals the tab.
   it.each([
     { name: 'the persisted startup cwd', fallback: false, savedCwd: '/repo/app/packages/web' },
     { name: 'the workspace root once that folder is gone', fallback: true, savedCwd: undefined }
@@ -172,7 +171,6 @@ describe('OrcaRuntimeService terminal startup cwd', () => {
       terminalLayoutsByTabId: {}
     }
     const store = {
-      // wt-1 is a worktree id, not a registered repo, so getRepo returns undefined.
       getRepo: () => undefined,
       getWorkspaceSession: () => session,
       setWorkspaceSession: (next: unknown) => {

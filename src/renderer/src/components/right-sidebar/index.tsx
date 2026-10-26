@@ -92,17 +92,7 @@ function RightSidebarInner({
 
   const panelContent = rightSidebarOpen ? (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden scrollbar-sleek-parent">
-      {/* Why: sidebar panels no longer use key={activeWorktreeId} because
-          the full unmount/remount cycle on every worktree switch triggered
-          an IPC storm (watchWorktree + readDir + git:branchCompare + …)
-          that froze the app for seconds on Windows.  Each panel now reacts
-          to activeWorktreeId changes via store subscriptions and reset
-          effects, keeping the component instance alive across switches. */}
-      {/* Why: live agent activity now renders inline inside each workspace
-          card (WorktreeCardAgents, toggled by the 'inline-agents' card
-          property) rather than in a bottom-docked dashboard panel that
-          competed with file Explorer/Search for vertical space. The right
-          sidebar is back to tab-only content. */}
+      {/* Keep panels mounted across worktree switches; remounts caused Windows IPC storms and multi-second freezes. */}
       <RightSidebarPanelContent effectiveTab={effectiveTab} rightSidebarOpen={rightSidebarOpen} />
     </div>
   ) : null
@@ -235,7 +225,6 @@ function RightSidebarInner({
         panelVisible ? 'overflow-visible' : 'overflow-hidden'
       )}
     >
-      {/* Panel content area */}
       <div
         className="flex flex-col flex-1 min-w-0 bg-sidebar overflow-hidden"
         style={{

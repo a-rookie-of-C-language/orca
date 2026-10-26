@@ -16,7 +16,6 @@ export type DocPreviewGrantRequest = {
   /** Initial filesystem authority; always the opened document's directory. */
   root: string
   entryRelativePath: string
-  /** Browser page the document is being opened in; main registers its guest under this id. */
   browserPageId: string
 }
 
@@ -43,7 +42,6 @@ export type DocPreviewApi = {
     cacheFile: (request: DocPreviewCacheFileRequest) => Promise<boolean>
     /** External link the preview guest tried to open; the renderer turns it into a browser tab. */
     onExternalLink: (callback: (payload: { url: string }) => void) => () => void
-    /** Why the guest is showing an error body instead of the document. */
     onLoadFailure: (callback: (payload: DocPreviewFailure) => void) => () => void
     /** A Tauri preview requested an authorized remote resource that is not cached yet. */
     onResourceRequested: (callback: (payload: DocPreviewResourceRequest) => void) => () => void

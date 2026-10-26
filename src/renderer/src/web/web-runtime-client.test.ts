@@ -1,4 +1,3 @@
-import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../shared/structured-agent-session-surface-capabilities'
 import { pairedRuntimeConnectionFromOffer } from '../../../shared/paired-runtime-connection'
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import type { PairedE2EEClientHandshake } from '../../../shared/paired-e2ee-client-handshake'
@@ -68,8 +67,7 @@ describe('WebRuntimeClient', () => {
     vi.stubGlobal('window', {
       setTimeout,
       clearTimeout,
-      // Why: the connected-state liveness heartbeat arms a window.setInterval, so
-      // the stub must provide interval timers once a client reaches 'connected'.
+      // Connected-state heartbeat needs interval timers in the window stub.
       setInterval,
       clearInterval,
       atob: (value: string) => Buffer.from(value, 'base64').toString('binary'),
@@ -763,7 +761,7 @@ describe('WebRuntimeClient', () => {
     vi.stubGlobal('WebSocket', WebSocket)
     const serverKeys = generateKeyPair()
     const frame = new Uint8Array([9, 8, 7])
-    // host must match the 127.0.0.1 clients dial: a wildcard bind lets a foreign loopback listener claim the port and answer here.
+    // Bind the dialed 127.0.0.1 address; wildcard binding lets a foreign loopback listener claim this port.
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
     const sockets = new Set<WebSocket>()
     wss.on('connection', (socket) => {

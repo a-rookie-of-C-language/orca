@@ -15,7 +15,6 @@ import { normalizeSearchFileMatchCount } from '../../../../shared/search-match-c
 import type { SearchFileResult, SearchMatch } from '../../../../shared/code-search-types'
 import { translate } from '@/i18n/i18n'
 
-// ─── Toggle Button ────────────────────────────────────────
 export function ToggleButton({
   active,
   onClick,
@@ -57,7 +56,6 @@ export function ToggleButton({
   )
 }
 
-// ─── File Result ──────────────────────────────────────────
 export function FileResultRow({
   fileResult,
   onToggleCollapse,
@@ -74,7 +72,6 @@ export function FileResultRow({
 
   return (
     <div className="pt-1.5">
-      {/* File header with context menu */}
       <TooltipProvider delayDuration={400}>
         <Tooltip>
           <ContextMenu>
@@ -121,9 +118,7 @@ export function FileResultRow({
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
-          {/* Why: the row label intentionally truncates long parent paths to
-             keep the result list compact, so the tooltip preserves the full
-             relative path for copy/verification without widening the row. */}
+          {/* Preserve the full path in a tooltip because the row label truncates. */}
           <TooltipContent side="top" sideOffset={6}>
             {fileResult.relativePath}
           </TooltipContent>
@@ -133,7 +128,6 @@ export function FileResultRow({
   )
 }
 
-// ─── Match Item ───────────────────────────────────────────
 export function MatchResultRow({
   match,
   relativePath,
@@ -143,10 +137,9 @@ export function MatchResultRow({
   relativePath: string
   onClick: () => void
 }): React.JSX.Element {
-  // Highlight the matched text within the line
   const parts = useMemo(() => {
     const content = match.lineContent
-    const col = (match.displayColumn ?? match.column) - 1 // convert to 0-indexed
+    const col = (match.displayColumn ?? match.column) - 1
     const len = match.displayMatchLength ?? match.matchLength
 
     if (col >= 0 && col + len <= content.length) {
@@ -164,7 +157,6 @@ export function MatchResultRow({
       }
     }
 
-    // Fallback
     return { before: content, match: '', after: '' }
   }, [
     match.lineContent,
@@ -182,9 +174,7 @@ export function MatchResultRow({
           variant="ghost"
           className="min-h-[18px] h-auto w-full justify-start gap-1 rounded-none py-px pr-2 pl-7 text-left"
           onMouseDown={(event) => {
-            // Why: clicking a result should move focus into the opened editor.
-            // If the sidebar button takes focus first, the browser can restore
-            // it after the click and make the initial reveal feel flaky.
+            // Prevent sidebar focus so the browser cannot restore it after the editor opens.
             if (event.button === 0) {
               event.preventDefault()
             }

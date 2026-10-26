@@ -37,6 +37,7 @@ export function createBrowserApi(): NonNullable<Partial<PreloadApi>['browser']> 
     onDownloadProgress: () => noopUnsubscribe,
     onDownloadFinished: () => noopUnsubscribe,
     onContextMenuRequested: () => noopUnsubscribe,
+    onTargetUrlChanged: () => noopUnsubscribe,
     onContextMenuDismissed: () => noopUnsubscribe,
     onNavigationUpdate: () => noopUnsubscribe,
     onActivateView: () => noopUnsubscribe,
@@ -85,6 +86,7 @@ export function createBrowserApi(): NonNullable<Partial<PreloadApi>['browser']> 
     onGrabModeToggle: () => noopUnsubscribe,
     onGrabActionShortcut: () => noopUnsubscribe,
     sessionListProfiles: () => Promise.resolve([]),
+    onSessionProfilesChanged: () => noopUnsubscribe,
     // Web clients render remote workspaces through the server; no local SSH routing exists.
     prepareSshWorkspacePartition: () =>
       Promise.reject(new Error('browser_local_route_unavailable')),

@@ -94,9 +94,7 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
         requests: args.requests
       }).catch(() => ({ titles: [] }))
     },
-    // Why: the runtime RPC transport has no cancel verb, so the in-flight scan
-    // settles on its own timeout. The renderer's refreshId guard already drops
-    // the late result; this only means web pays for a scan nobody reads.
+    // No RPC cancel verb; refreshId drops late results, but the unused scan runs until its timeout.
     cancelListSessions: () => Promise.resolve(),
     prepareSessionResume: (args: AiVaultPrepareSessionResumeRequest) =>
       callRuntimeResult<AiVaultPrepareSessionResumeResult>('aiVault.prepareSessionResume', args),
@@ -169,8 +167,7 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
   }
 }
 
-// An unparseable id must not normalize into the everything-scope and answer anyway.
-// `all` is a desktop-side merge; it never normalizes to this runtime, so a browser reports no-service.
+// Malformed scopes must not become everything; all is a desktop merge and cannot address this browser’s runtime.
 function addressesOwnRuntime(executionHostScope: ExecutionHostScope | undefined): boolean {
   const ownRuntimeId = toRuntimeExecutionHostId(requireActiveEnvironment().id)
   return (

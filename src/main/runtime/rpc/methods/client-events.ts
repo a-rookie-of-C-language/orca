@@ -16,8 +16,7 @@ export const CLIENT_EVENT_METHODS = [
     params: null,
     handler: async (_params, { runtime, connectionId, clientKind }, emit) => {
       await new Promise<void>((resolve) => {
-        // Why: mobile discards terminalSideEffects; excluding it stops the
-        // per-OSC batch frames from crossing the relay.
+        // Mobile discards terminalSideEffects; filter per-OSC batch frames before they cross the relay.
         const unsubscribe = runtime.onClientEvent(
           (event) => {
             // SSH credentials are an interactive desktop prompt, never a phone surface.
@@ -46,7 +45,7 @@ export const CLIENT_EVENT_METHODS = [
           connectionId
         )
 
-        // Why: listener-first snapshotting closes the subscribe race while restoring state missed during disconnects.
+        // Listen before snapshotting to close the subscribe race and replay sleep state missed during disconnect.
         for (const event of runtime.getTerminalSleepClientEventSnapshot?.() ?? []) {
           emit(event)
         }
@@ -61,7 +60,7 @@ export const CLIENT_EVENT_METHODS = [
           const state = getPublicSshState(getRegisteredSshState(target.id) ?? null)
           return state ? [{ targetId: target.id, state }] : []
         })
-        // Why: attaching the listener before snapshotting closes the reload gap without exposing HUB-private target configuration.
+        // Listen before snapshotting to close reload gaps without exposing HUB-private target configuration.
         emit({ type: 'ready', subscriptionId, snapshot: { sshStates } })
       })
     }

@@ -7,9 +7,6 @@ import type * as SecureFile from '../../shared/secure-file'
 import type { OrcaCloudSession } from './profile-cloud-session-store'
 import { _resetSecretStoreForTests, setSecretStore } from '../../shared/secret-store'
 
-// Pins the auth behaviour that must not change, through public entry points only, so the
-// same file runs unchanged before and after a refactor of session storage.
-
 const net = vi.hoisted(() => ({
   exchange: vi.fn(),
   refresh: vi.fn(),
@@ -18,7 +15,6 @@ const net = vi.hoisted(() => ({
   revoke: vi.fn()
 }))
 
-// Fails the next N writes of a session file, as a disk-full or locked-file moment would.
 const disk = vi.hoisted(() => ({ failSessionWrites: 0 }))
 
 vi.mock('../../shared/secure-file', async (importOriginal) => {
@@ -125,7 +121,6 @@ const storedRefreshToken = (profileId?: string) => {
   return session.status === 'found' ? session.session.refreshToken : session.status
 }
 
-// Signs in with an access token that is already inside the refresh skew when `expiresIn` is small.
 async function signIn(expiresIn = 600_000): Promise<void> {
   net.exchange.mockResolvedValueOnce(issue({ expiresIn }))
   await expect(connectCurrentOrcaProfile(userDataPath)).resolves.toMatchObject({
@@ -544,7 +539,7 @@ describe('cloud auth characterization', () => {
       await signIn(1_000)
       const signedIn = storedRefreshToken()
       const rotated = issue()
-      // The server's grace window: the parent token keeps answering with the same child.
+      // Grace-window replays return the same rotated child token.
       net.refresh.mockImplementation(async (_config: unknown, session: OrcaCloudSession) => {
         if (session.refreshToken === signedIn) {
           return rotated

@@ -192,8 +192,7 @@ async function uploadRuntimeDropPaths(
 async function pasteLocalDropPaths(
   args: NativeDropFlowArgs & { localWslDrop: boolean; targetShell: 'posix' | 'windows' }
 ): Promise<void> {
-  // Why: local WSL worktrees run POSIX shells despite a Windows host, so
-  // dropped paths must use the distro-aware resolver before terminal paste.
+  // Local WSL shells need distro-aware POSIX paths despite their Windows host.
   if (isWslUncPath(args.worktreePath)) {
     try {
       const { resolvedPaths, skipped, failed } = await window.api.fs.resolveDroppedPathsForAgent({
@@ -208,8 +207,7 @@ async function pasteLocalDropPaths(
     return
   }
 
-  // Why: non-WSL local drops stay reference-in-place. Trailing space
-  // separates multiple paths, matching standard drag-and-drop UX.
+  // Keep non-WSL local paths in place; trailing spaces separate multiple dropped paths.
   await pasteResolvedDropPaths({
     ...args,
     paths: args.localWslDrop ? args.dataPaths.map(toLocalWslDropPath) : args.dataPaths,
@@ -249,9 +247,7 @@ async function pasteResolvedDropPaths(
   args: NativeDropFlowArgs & { paths: string[]; targetShell: 'posix' | 'windows' }
 ): Promise<void> {
   args.assertCurrent?.()
-  // Why: pane may have unmounted during upload/resolution (tab closed,
-  // worktree switched). Re-check before writing so we do not call sendInput
-  // on a torn-down PTY.
+  // Upload/resolution can outlive the pane; recheck before writing to its PTY.
   const liveTransport = getCurrentTerminalDropTransport(
     args.manager,
     args.paneTransports,

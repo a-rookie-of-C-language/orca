@@ -36,11 +36,7 @@ export function ensureBrowserPageWebview({
   let activeContainer = container
   const parentDrifted = webview?.parentElement !== container
 
-  // Why: a persisted guest must be torn down and rebuilt when its DOM parent
-  // drifted (moving a <webview> across parents can recreate the guest document)
-  // or when its partition no longer matches — Electron partitions are immutable
-  // after creation, so reuse would keep the stale session. Parent-drift repair
-  // preserves the newly replaced viewport; always verify the resolved container.
+  // Rebuild after parent drift or partition changes: reparenting can recreate the guest and Electron partitions are immutable. Preserve a replacement viewport during parent repair.
   if (webview && (parentDrifted || webview.getAttribute('partition') !== webviewPartition)) {
     if (parentDrifted) {
       void replacePersistentWebview(browserTabId, { preserveViewport: true })
@@ -93,6 +89,9 @@ export function ensureBrowserPageWebview({
   })
   guest.addEventListener('render-process-gone', () => {
     guest.style.visibility = 'hidden'
+  })
+  guest.addEventListener('ipc-message', (event) => {
+    handleGuestWindowCloseMessage(browserTabId, guest, event)
   })
   registerPersistentWebview(browserTabId, webview)
   created = true
