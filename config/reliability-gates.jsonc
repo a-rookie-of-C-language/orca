@@ -9283,7 +9283,7 @@
       "commands": [
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime-terminal-close-continuity.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/components/terminal/initial-terminal.test.ts src/renderer/src/lib/worktree-activation-default-tabs.test.ts src/renderer/src/store/slices/terminals-explicit-empty-hydration.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/worktree-activation-default-tabs.test.ts src/renderer/src/store/slices/terminals-explicit-empty-hydration.test.ts",
         "pnpm dlx node@24 ./node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-pane-authority.test.ts src/main/ipc/agent-hooks.test.ts src/main/ipc/agent-pane-authority-ownership.test.ts src/main/ipc/pty/pty-management.test.ts src/main/persistence/persistence-initial-load.test.ts src/main/persistence/terminal-topology/persistence-pane-identity-migration.test.ts src/main/persistence/terminal-topology/persistence-pty-binding-reconciliation.test.ts src/renderer/src/store/slices/agent-pane-authority.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/renderer/src/store/slices/terminal-tab-retirement.test.ts src/renderer/src/store/slices/terminal-tab-retirement-store.test.ts tests/e2e/completed-worker-retirement-resume.unit.test.ts src/renderer/src/components/shared/kill-all-terminal-surfaces.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/pty-descendant-termination.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/runtime/worktree-teardown.test.ts",
         "pnpm run test:e2e -- tests/e2e/terminal-tab-close-restart-persistence.spec.ts --workers=1",
@@ -9295,7 +9295,6 @@
       "testFiles": [
         "src/main/runtime/orca-runtime-terminal-close-continuity.test.ts",
         "src/main/runtime/orca-runtime.test.ts",
-        "src/renderer/src/components/terminal/initial-terminal.test.ts",
         "src/renderer/src/lib/worktree-activation-default-tabs.test.ts",
         "src/renderer/src/store/slices/terminals-explicit-empty-hydration.test.ts",
         "src/main/agent-hooks/server-pane-authority.test.ts",
@@ -9351,10 +9350,6 @@
           "assertions": [
             "git worktree and folder workspace hydration preserve an explicit empty terminal row"
           ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal/initial-terminal.test.ts",
-          "assertions": ["preserves an explicitly persisted empty terminal list"]
         },
         {
           "file": "src/renderer/src/lib/worktree-activation-default-tabs.test.ts",
@@ -9484,15 +9479,6 @@
           "result": "passed",
           "durationSeconds": 4.49,
           "summary": "Fifteen checks passed after merging latest main, including post-ack session-loss cleanup and the inverse non-destructive pre-ack error proof."
-        },
-        {
-          "date": "2026-08-14",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/components/terminal/initial-terminal.test.ts src/renderer/src/lib/worktree-activation-default-tabs.test.ts src/renderer/src/store/slices/terminals-explicit-empty-hydration.test.ts",
-          "result": "passed",
-          "durationSeconds": 4.71,
-          "summary": "Forty-nine renderer checks preserved explicit empty terminal state for git and folder workspaces and suppressed initial/default recreation only for previously persisted workspace rows."
         },
         {
           "date": "2026-08-14",
