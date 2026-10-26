@@ -17,6 +17,8 @@ export function useRoomLog(roomId: string | null) {
     }[]
   >([])
   const pendingSeq = useRef(-1)
+  const activeRoomId = useRef(roomId)
+  activeRoomId.current = roomId
   const addPendingMessage = useCallback(
     (messageRoomId: string, text: string, targetMemberId?: string) => {
       pendingSeq.current -= 1
@@ -52,6 +54,9 @@ export function useRoomLog(roomId: string | null) {
         'orchestration.roomLog',
         { id: roomId }
       )
+      if (activeRoomId.current !== roomId) {
+        return
+      }
       setLines(result.lines)
       setPending((current) =>
         current.filter(

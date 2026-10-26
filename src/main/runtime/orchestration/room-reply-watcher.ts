@@ -77,9 +77,10 @@ export function resetRoomWatchBudget(db: OrchestrationDb, roomId: string): void 
 }
 
 function spendWatchHop(roomId: string): boolean {
-  const budget = roomWatchBudgets.get(roomId)
+  let budget = roomWatchBudgets.get(roomId)
   if (!budget) {
-    return true
+    budget = { rootSeq: 0, hops: 0 }
+    roomWatchBudgets.set(roomId, budget)
   }
   budget.hops += 1
   return budget.hops <= ROOM_WATCH_HOP_MAX

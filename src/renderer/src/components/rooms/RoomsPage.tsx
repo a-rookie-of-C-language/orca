@@ -82,7 +82,7 @@ export default function RoomsPage(): JSX.Element {
   }, [])
 
   const sendText = useCallback(
-    async (text: string) => {
+    async (text: string, targetMemberId?: string) => {
       if (!selected || !text.trim() || sending) {
         return
       }
@@ -92,7 +92,7 @@ export default function RoomsPage(): JSX.Element {
         directMember && !trimmed.toLowerCase().startsWith(`@${directMember.name.toLowerCase()} `)
           ? `@${directMember.name} ${trimmed}`
           : trimmed
-      const pendingKey = addPendingMessage(roomId, message, directMember?.memberId)
+      const pendingKey = addPendingMessage(roomId, message, targetMemberId ?? directMember?.memberId)
       setComposer('')
       setSending(true)
       try {
@@ -102,7 +102,7 @@ export default function RoomsPage(): JSX.Element {
         }>(LOCAL, 'orchestration.roomSend', {
           id: roomId,
           text: message,
-          ...(directMember ? { targetMemberId: directMember.memberId } : {})
+          ...((targetMemberId ?? directMember?.memberId) ? { targetMemberId: targetMemberId ?? directMember?.memberId } : {})
         })
         await refreshLog()
         discardPendingMessage(pendingKey)
@@ -221,13 +221,14 @@ export default function RoomsPage(): JSX.Element {
     return ids
   }, [rooms])
   const retryMember = useCallback(
-    (_memberId: string) => {
+    (memberId: string) => {
+      const member = selected?.members.find((entry) => entry.memberId === memberId)
       const lastUser = directLines.toReversed().find((line) => !line.memberId)
-      if (lastUser) {
-        void sendText(lastUser.text)
+      if (member && lastUser) {
+        void sendText(lastUser.text, member.memberId)
       }
     },
-    [directLines, sendText]
+    [directLines, selected, sendText]
   )
   const selectRoom = useCallback((roomId: string) => {
     setSelectedId(roomId)

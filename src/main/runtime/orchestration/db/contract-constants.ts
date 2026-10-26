@@ -7,7 +7,7 @@ import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../shared/protocol-vers
 export const LEGACY_RUN_ID = ORCHESTRATION_LEGACY_RUN_ID
 export const UNBOUND_RUN_ID = ORCHESTRATION_UNBOUND_RUN_ID
 
-// Why: a v1.4.198 coordinator sends no Run id, so its remote workers file mail under a per-attachment stub Run.
+// v1.4.198 omits Run id; each remote attachment gets a stub home Run.
 export const FEDERATED_STUB_HOME_RUN_ID_PREFIX = 'run_federated_'
 export function federatedStubHomeRunId(dispatchId: string): string {
   return `${FEDERATED_STUB_HOME_RUN_ID_PREFIX}${dispatchId}`
