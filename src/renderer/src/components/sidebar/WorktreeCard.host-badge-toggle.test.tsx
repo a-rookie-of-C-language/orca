@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeCardProperty } from '../../../../shared/ui-chrome-types'
-import { buildRows } from './worktree-list/grouping/build-rows'
-import { PINNED_GROUP_KEY } from './worktree-list/grouping/group-keys'
+import { buildRows } from './worktree-list/grouping/build-rows.test-fixture'
+import { PINNED_GROUP_KEY } from '../../../../shared/sidebar-list/group-keys'
 import type { WorktreeCardProps } from './worktree-card-model'
 import type { Worktree } from '../../../../shared/worktree/types'
 
@@ -20,28 +20,33 @@ let worktreeCardProperties: WorktreeCardProperty[] = []
 let settings: Partial<GlobalSettings> | null = null
 const WORKTREE_CARD_IMPORT_TIMEOUT_MS = 15_000
 
-vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      deleteStateByWorktreeId: {},
-      fetchHostedReviewForBranch,
-      fetchIssue,
-      fetchLinearIssue,
-      gitConflictOperationByWorktree: {},
-      hostedReviewCache: {},
-      issueCache: {},
-      linearIssueCache: {},
-      openModal,
-      projectGroups: [],
-      remoteBranchConflictByWorktreeId: {},
-      settings,
-      sshConnectionStates: new Map(),
-      sshTargetLabels: new Map(),
-      updateWorktreeMeta,
-      workspacePortScan: null,
-      worktreeCardProperties
+vi.mock('@/store', () => {
+  const getState = () => ({
+    deleteStateByWorktreeId: {},
+    fetchHostedReviewForBranch,
+    fetchIssue,
+    fetchLinearIssue,
+    gitConflictOperationByWorktree: {},
+    hostedReviewCache: {},
+    issueCache: {},
+    linearIssueCache: {},
+    openModal,
+    projectGroups: [],
+    remoteBranchConflictByWorktreeId: {},
+    settings,
+    sshConnectionStates: new Map(),
+    sshTargetLabels: new Map(),
+    updateWorktreeMeta,
+    workspacePortScan: null,
+    worktreeCardProperties
+  })
+  return {
+    useAppStore: Object.assign((selector: (state: unknown) => unknown) => selector(getState()), {
+      getState,
+      subscribe: () => () => {}
     })
-}))
+  }
+})
 
 vi.mock('@/lib/worktree-activation', () => ({
   activateAndRevealWorktree: vi.fn()
@@ -111,7 +116,7 @@ function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
   }
 }
 
-// Imported per test so the mocked store is seeded before the module reads it.
+// Seed mocked store state before importing the card that reads it.
 async function renderCardMarkup(props: Partial<WorktreeCardProps> = {}): Promise<string> {
   const { default: WorktreeCard } = await import('./WorktreeCard')
   return renderToStaticMarkup(

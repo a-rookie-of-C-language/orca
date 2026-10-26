@@ -1,9 +1,8 @@
 import {
   JIRA_PAYLOAD_CHUNK_CHARS,
   JIRA_PAYLOAD_MAX_CHARS
-} from '../../../../shared/jira-payload-stream'
+} from '../../../../shared/jira/jira-payload-stream'
 import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
-import { recoverIntegrationCredentialKey } from '../../../integration-credential-keychain'
 import { JIRA_ATTACHMENT_IMAGE_METHODS } from './jira-attachment-image'
 import { JiraFavouriteFilterParams } from '../../../../shared/rpc-contract/jira-favourite-filter-params'
 import {
@@ -31,8 +30,7 @@ function emitJiraPayload(value: unknown, emit: (result: unknown) => void): void 
   if (payload.length > JIRA_PAYLOAD_MAX_CHARS) {
     throw new Error('Jira payload exceeded the transfer limit.')
   }
-  // Why: remote runtime WebSocket messages are capped at 1 MiB; chunking keeps
-  // authenticated inline images usable over SSH without raising that safety cap.
+  // Chunk inline images under the remote WebSocket's 1 MiB frame cap, including SSH.
   for (let offset = 0; offset < payload.length; offset += JIRA_PAYLOAD_CHUNK_CHARS) {
     emit({ type: 'chunk', content: payload.slice(offset, offset + JIRA_PAYLOAD_CHUNK_CHARS) })
   }
@@ -97,19 +95,13 @@ export const JIRA_METHODS = [
     name: 'jira.status',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => {
-      await recoverIntegrationCredentialKey()
-      return runtime.jiraStatus()
-    }
+    handler: async (_params, { runtime }) => runtime.jiraStatus()
   }),
   defineMethod({
     name: 'jira.readStatus',
     permission: 'workspace',
     params: null,
-    handler: async (_params, { runtime }) => {
-      await recoverIntegrationCredentialKey()
-      return runtime.jiraReadStatus()
-    }
+    handler: async (_params, { runtime }) => runtime.jiraReadStatus()
   }),
   defineMethod({
     name: 'jira.testConnection',
