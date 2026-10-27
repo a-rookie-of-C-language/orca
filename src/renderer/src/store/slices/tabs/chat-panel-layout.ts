@@ -75,19 +75,12 @@ export function normalizeWorktreeChatSide(
 }
 
 /**
- * Both layout modes pin the center chat column: its last chat can be neither
- * closed nor dragged out. Legacy profiles without a mode keep the old rule.
+ * The chat column is no longer pinned: closing or dragging out its last chat
+ * collapses the split like any other pane. `applyDefaultChatPanelLayout` still
+ * marks and separates chat groups, so this only affects the close/drag guard.
  */
-export function shouldPinChatPanelColumn(
-  settings:
-    | { toolsSidebarPosition?: 'left' | 'right'; workspaceMode?: 'work' | 'code' }
-    | null
-    | undefined
-): boolean {
-  if (settings?.workspaceMode === 'work' || settings?.workspaceMode === 'code') {
-    return true
-  }
-  return settings?.toolsSidebarPosition !== 'left'
+export function shouldPinChatPanelColumn(): boolean {
+  return false
 }
 
 /** Separate chat chrome without changing session identities or the focused content. */

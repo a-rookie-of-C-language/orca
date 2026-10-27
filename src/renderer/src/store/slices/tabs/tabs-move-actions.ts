@@ -1,5 +1,4 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { shouldPinChatPanelColumn } from './chat-panel-layout'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { buildActiveSurfacePatch } from './tabs-surface'
 import {
@@ -39,16 +38,6 @@ export function createTabsMoveActions(
         }
         const dedupedSourceGroupOrder = dedupeTabOrder(sourceGroup.tabOrder)
         const sourceOrder = dedupeTabOrder(dedupedSourceGroupOrder.filter((id) => id !== tabId))
-        // Why: DSH mode pins the center chat column; dragging out its last
-        // chat would collapse the column, so refuse the move instead.
-        if (
-          sourceGroup.isChatPanel === true &&
-          sourceOrder.length === 0 &&
-          (state.groupsByWorktree[worktreeId] ?? []).length > 1 &&
-          shouldPinChatPanelColumn(state.settings)
-        ) {
-          return state
-        }
         moved = true
 
         // Why: defensive dedupe so target order can't grow a duplicate id (stale state); see dropUnifiedTab for the same guard.

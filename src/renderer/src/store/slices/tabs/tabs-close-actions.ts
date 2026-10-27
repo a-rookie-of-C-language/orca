@@ -1,5 +1,4 @@
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { shouldPinChatPanelColumn } from './chat-panel-layout'
 import { collapseGroupLayout } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import {
   findGroupForTab,
@@ -54,17 +53,6 @@ export function createTabsCloseActions(
 
       const dedupedGroupOrder = dedupeTabOrder(groupOrder)
       const remainingOrder = dedupeTabOrder(dedupedGroupOrder.filter((id) => id !== tabId))
-      // Why: DSH mode pins the center chat column, so refuse its last chat
-      // before any session teardown runs; callers already handle null.
-      if (
-        group?.isChatPanel === true &&
-        tab.contentType === 'agent-session' &&
-        remainingOrder.length === 0 &&
-        (state.groupsByWorktree[worktreeId] ?? []).length > 1 &&
-        shouldPinChatPanelColumn(state.settings)
-      ) {
-        return null
-      }
 
       if (tab.contentType === 'terminal' && !opts?.terminalRetirementHandled) {
         const wasLastTab =

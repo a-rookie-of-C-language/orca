@@ -80,42 +80,14 @@ beforeEach(() => {
 })
 
 describe('shouldPinChatPanelColumn', () => {
-  it('pins the chat column unless a legacy left-hand layout has no mode', () => {
-    expect(shouldPinChatPanelColumn(undefined)).toBe(true)
-    expect(shouldPinChatPanelColumn(null)).toBe(true)
-    expect(shouldPinChatPanelColumn({})).toBe(true)
-    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'right' })).toBe(true)
-    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'left' })).toBe(false)
-    // Why: both modes fix chat in place, so Code stays pinned despite Explorer on the left.
-    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'left', workspaceMode: 'code' })).toBe(
-      true
-    )
-    expect(shouldPinChatPanelColumn({ toolsSidebarPosition: 'right', workspaceMode: 'work' })).toBe(
-      true
-    )
+  it('never pins the chat column so its last chat can close or move', () => {
+    expect(shouldPinChatPanelColumn()).toBe(false)
   })
 })
 
-describe('pinned chat column tab close', () => {
-  it('refuses to close the last chat without tearing down its session', () => {
+describe('unpinned chat column tab close', () => {
+  it('closes the last chat and collapses the split', () => {
     const store = storeWithChatColumn({ toolsSidebarPosition: 'right' })
-
-    const result = store.getState().closeUnifiedTab('agent-session:chat-1')
-
-    expect(result).toBeNull()
-    expect(mocks.beginClose).not.toHaveBeenCalled()
-    expect(store.getState().unifiedTabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([
-      'agent-session:chat-1',
-      'terminal:1'
-    ])
-    expect(store.getState().groupsByWorktree[WORKTREE]?.map((group) => group.id)).toEqual([
-      CHAT_GROUP,
-      CONTENT_GROUP
-    ])
-  })
-
-  it('closes the last chat once the tools sidebar moves left', () => {
-    const store = storeWithChatColumn({ toolsSidebarPosition: 'left' })
 
     const result = store.getState().closeUnifiedTab('agent-session:chat-1')
 
@@ -129,21 +101,9 @@ describe('pinned chat column tab close', () => {
   })
 })
 
-describe('pinned chat column tab move', () => {
-  it('refuses to drag the last chat out of the column', () => {
+describe('unpinned chat column tab move', () => {
+  it('lets the last chat move out and collapses the split', () => {
     const store = storeWithChatColumn({ toolsSidebarPosition: 'right' })
-
-    const moved = store.getState().moveUnifiedTabToGroup('agent-session:chat-1', CONTENT_GROUP)
-
-    expect(moved).toBe(false)
-    expect(store.getState().groupsByWorktree[WORKTREE]?.map((group) => group.id)).toEqual([
-      CHAT_GROUP,
-      CONTENT_GROUP
-    ])
-  })
-
-  it('lets the last chat move out once the tools sidebar moves left', () => {
-    const store = storeWithChatColumn({ toolsSidebarPosition: 'left' })
 
     const moved = store.getState().moveUnifiedTabToGroup('agent-session:chat-1', CONTENT_GROUP)
 

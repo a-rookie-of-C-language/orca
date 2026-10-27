@@ -325,7 +325,7 @@ export default function TabGroupPanel({
                   isFocused={isFocused}
                 />
               ) : null}
-              {hasSplitGroups && !isChatPanel ? (
+              {hasSplitGroups ? (
                 <TabGroupPaneActionsMenu isFocused={isFocused} onCloseGroup={commands.closeGroup} />
               ) : null}
             </div>
