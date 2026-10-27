@@ -1,7 +1,7 @@
 import type { PreloadApi } from '../../../../preload/api-types'
 import type { RuntimeTerminalCreate } from '../../../../shared/runtime-terminal-contracts'
 import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
-import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime/remote-runtime-pty-id'
 import { callRuntimeResult } from './web-runtime-calls'
 import { requireActiveEnvironment } from './web-runtime-session'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'

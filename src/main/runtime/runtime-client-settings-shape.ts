@@ -36,7 +36,6 @@ export type RuntimeClientSettings = Pick<
   | 'agentSkillSharingEnabled'
   | 'machineName'
   | 'nativeChatPermissionMode'
-  | 'agentNativeChatPermissionModes'
   | 'computerAwakeMode'
   | 'keepComputerAwakeWhileAgentsRun'
 > & {

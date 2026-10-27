@@ -46,6 +46,10 @@ export type QuickLaunchAgentMenuItemsProps = {
   onPromptHandedOff?: (delivered: Promise<unknown>) => void
   /** Nothing to send: e.g. every note is already on its way, so no agent is started. */
   disabled?: boolean
+  /** Host-published terminal: the caller focuses its own surface once the host answers. */
+  onFocusHostTerminal?: () => void
+  /** A New Chat opened at once: its composer takes the focus the menu gives back. */
+  onFocusChat?: (tabId: string) => void
 }
 
 const ROW_NAVIGATION_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'ArrowDown', 'Home', 'End'])
@@ -69,11 +73,7 @@ export function useTabAgentMenuLaunch({
   disabled,
   onFocusHostTerminal,
   onFocusChat
-}: QuickLaunchAgentMenuItemsProps & {
-  onFocusHostTerminal?: () => void
-  /** A New Chat opened at once: its composer takes the focus the menu gives back. */
-  onFocusChat?: (tabId: string) => void
-}) {
+}: QuickLaunchAgentMenuItemsProps) {
   const runLaunch = useCallback(
     (row: NewTabAgentMenuRow) => {
       if (disabled || row.kind === 'chat-unavailable') {
@@ -98,7 +98,6 @@ export function useTabAgentMenuLaunch({
         ...(promptDelivery !== undefined ? { promptDelivery } : {}),
         ...(launchSource !== undefined ? { launchSource } : {}),
         ...(onPromptDelivered !== undefined ? { onPromptDelivered } : {}),
-        ...(onTabOpened !== undefined ? { onTabOpened } : {}),
         // Notes keep their text until it goes out, so the new chat's composer never gets a copy.
         ...(onPromptHandedOff ? { promptKeptByCaller: true as const } : {})
       })
@@ -140,6 +139,7 @@ export function useTabAgentMenuLaunch({
         onFocusHostTerminal?.()
         return
       }
+      onTabOpened?.(result.surface.tabId)
       onFocusTerminal(result.surface.tabId)
     },
     [

@@ -18,7 +18,7 @@ const EMPTY_CHAT_GROUP_IDS: ReadonlySet<string> = new Set()
 const SPLIT_PANE_CLASS =
   'flex min-w-0 min-h-0 flex-1 overflow-hidden transition-[flex-grow,opacity,visibility] duration-200 ease-out motion-reduce:transition-none'
 
-function ResizeHandle({
+export function ResizeHandle({
   direction,
   onResizeStart,
   onResizeEnd,

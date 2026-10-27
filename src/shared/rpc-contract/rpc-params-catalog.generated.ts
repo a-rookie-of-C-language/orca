@@ -647,6 +647,7 @@ import {
   QueuedMessageEditHoldParams,
   QueuedMessageUpdateParams
 } from './structured-agent-session-queued-edit-params'
+import { RenameParams } from './structured-agent-session-rename-params'
 import {
   TerminalDaemonKillOneParams,
   TerminalDaemonRestartSeveredParams
@@ -1015,6 +1016,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'connector.reply': ConnectorReply,
   'connector.send': ConnectorSend,
   'connector.start': ConnectorStart,
+  'connector.watch': ConnectorWatch,
   'credentials.clearMiniMaxApiKey': null,
   'credentials.clearMiniMaxCookie': null,
   'credentials.clearOpenCodeGoApiKey': null,

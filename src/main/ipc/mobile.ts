@@ -262,6 +262,11 @@ export function registerMobileHandlers(
     return true
   })
 
+  ipcMain.handle('mobile:isWebSocketReady', () => {
+    const endpoint = rpcServer.getWebSocketEndpoint()
+    return { ready: endpoint !== null, endpoint }
+  })
+
   ipcMain.handle(
     'mobile:getRelayStatus',
     (): MobileRelayStatusDetail => dependencies.getRelayStatus?.() ?? { status: 'offline' }

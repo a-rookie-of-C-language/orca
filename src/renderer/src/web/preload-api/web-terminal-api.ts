@@ -13,7 +13,7 @@ import { callEnvironmentEnvelope, callRuntimeResult } from './web-runtime-calls'
 import { unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
 import { noopUnsubscribe } from './web-storage'
 import { isTauriNativeHost } from '../tauri-native-host'
-import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime/remote-runtime-pty-id'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type {
   TerminalLeafMoveRequest,

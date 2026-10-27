@@ -10,6 +10,7 @@ import {
   createTauriNativeBrowserWebview,
   isTauriNativeHost
 } from '../../../web/tauri-native-bridge'
+import { handleGuestWindowCloseMessage } from './browser-page-window-close'
 
 export function setBrowserPageWebviewInputLock(
   webview: Electron.WebviewTag,

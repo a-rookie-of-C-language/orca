@@ -1,4 +1,4 @@
-import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
+import { parseRemoteRuntimePtyId } from '../../../../shared/remote-runtime/remote-runtime-pty-id'
 import { unwrapRuntimeRpcResult } from '../../runtime/runtime-rpc-result'
 import { callEnvironmentEnvelope } from './web-runtime-calls'
 

@@ -79,7 +79,6 @@ export type RuntimeStore = {
   moveTerminalLeafToNewTab?: Store['moveTerminalLeafToNewTab']
   applyLayoutCommand?: Store['applyLayoutCommand']
   applyTabRenames?: Store['applyTabRenames']
-  moveTerminalLeafToNewTab?: Store['moveTerminalLeafToNewTab']
   moveTabToWorkspaceAcrossPartitions?: Store['moveTabToWorkspaceAcrossPartitions']
   applyEditorFileRenamesAcrossPartitions?: Store['applyEditorFileRenamesAcrossPartitions']
   getSshRemotePtyLeases?: Store['getSshRemotePtyLeases']

@@ -24,6 +24,9 @@ const state = {
   settings: { openLinksInApp: true, openLinksInAppModifierInverts: false },
   setActiveWorktree: vi.fn(),
   createBrowserTab: vi.fn(),
+  repos: [],
+  endpointProjects: [],
+  endpointProjectHostSetups: [],
   unifiedTabsByWorktree: {
     'source-workspace': [
       {

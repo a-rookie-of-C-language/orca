@@ -175,6 +175,8 @@ export function createWebWslHostsApi(): WslHostsPreloadApi {
     getStatuses: () => callRuntimeResult<WslHostStatus[]>('wslHosts.getStatuses').catch(() => []),
     onStatusChanged: onWslHostStatusChanged,
     setVisibleWork: (args) =>
-      callRuntimeResult<void>('wslHosts.setVisibleWork', args).catch(() => {})
+      callRuntimeResult<void>('wslHosts.setVisibleWork', args).catch(() => {}),
+    // The paired host owns its own window focus; a browser client cannot raise it.
+    focusHost: () => Promise.resolve()
   }
 }

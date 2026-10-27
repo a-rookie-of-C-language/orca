@@ -40,9 +40,7 @@ class RuntimeChild extends EventEmitter {
 
 let child: RuntimeChild
 const signalNames = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
-type TrackedSignal = (typeof signalNames)[number]
-type TrackedSignalListener = (...args: [signal: TrackedSignal]) => void
-let oldListeners: Map<TrackedSignal, TrackedSignalListener[]>
+let oldListeners: Map<NodeJS.Signals, NodeJS.SignalsListener[]>
 
 beforeEach(() => {
   oldListeners = new Map(signalNames.map((signal) => [signal, process.listeners(signal)]))
@@ -64,7 +62,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const signal of signalNames) {
     for (const listener of process.listeners(signal)) {
-      if (!oldListeners.get(signal)?.includes(listener as TrackedSignalListener)) {
+      if (!oldListeners.get(signal)?.includes(listener)) {
         process.off(signal, listener)
       }
     }
@@ -168,17 +166,14 @@ describe('bundled Orca runtime handoff', () => {
       for (const signal of signalNames) {
         const listener = process
           .listeners(signal)
-          .find(
-            (candidate): candidate is TrackedSignalListener =>
-              !oldListeners.get(signal)?.includes(candidate as TrackedSignalListener)
-          )
+          .find((candidate) => !oldListeners.get(signal)?.includes(candidate))
         if (signal === 'SIGHUP' && platform === 'win32') {
           expect(listener).toBeUndefined()
           continue
         }
         expect(listener).toBeDefined()
         if (listener) {
-          process.emit(signal, signal)
+          listener.call(process, signal)
         }
         if (signal === 'SIGHUP') {
           expect(child.kill).not.toHaveBeenCalledWith('SIGHUP')

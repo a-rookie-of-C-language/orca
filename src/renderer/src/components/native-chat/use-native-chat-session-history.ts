@@ -42,8 +42,8 @@ export function useNativeChatSessionHistory(workspaceId: string | null): NativeC
       floatingWorkspacePath: current.floatingWorkspacePath,
       folderWorkspaces: current.folderWorkspaces,
       projectGroups: current.projectGroups,
-      projectHostSetups: current.projectHostSetups,
-      projects: current.projects,
+      endpointProjectHostSetups: current.endpointProjectHostSetups,
+      endpointProjects: current.endpointProjects,
       repos: current.repos,
       settings: current.settings,
       worktreesByRepo: current.worktreesByRepo
@@ -55,13 +55,15 @@ export function useNativeChatSessionHistory(workspaceId: string | null): NativeC
       projectGroups: state.projectGroups,
       repos: state.repos,
       worktreesByRepo: state.worktreesByRepo,
-      projects: state.projects,
+      endpointProjects: state.endpointProjects,
+      endpointProjectHostSetups: state.endpointProjectHostSetups,
       settings: state.settings
     }),
     [
       state.folderWorkspaces,
       state.projectGroups,
-      state.projects,
+      state.endpointProjects,
+      state.endpointProjectHostSetups,
       state.repos,
       state.settings,
       state.worktreesByRepo

@@ -23,6 +23,7 @@ import {
 import { isMissingPathError, resolveRuntimeFilePath } from './web-runtime-worktree-catalog'
 import { noopUnsubscribe } from './web-storage'
 import { isTauriNativeHost } from '../tauri-native-host'
+import { uploadBrowserFilesToWebAgentSessionAttachments } from './web-agent-session-attachment-upload'
 
 const SSH_DOWNLOAD_CHUNK_BYTES = 384 * 1024
 

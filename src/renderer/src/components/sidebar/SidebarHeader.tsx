@@ -9,8 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Input } from '@/components/ui/input'
 import { Sparkles, Bell, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AgentQuestionIcon } from '@/components/AgentQuestionIcon'
-import { useAgentBucketCounts } from '@/components/dashboard/useAgentBucketCounts'
 
 type SidebarHeaderProps = {
   onWorkspaceBoardMenuOpenChange: (open: boolean) => void
@@ -43,14 +41,6 @@ const SidebarHeader = React.memo(function SidebarHeader({
   const setSidebarBody = useAppStore((s) => s.setSidebarBody)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const agentsViewActive = sidebarBody === 'agents'
-  const counts = useAgentBucketCounts()
-  const activityBadgeId = useId()
-  const activityCount = counts.attention || counts.working
-  const activityStatusLabel = counts.attention
-    ? translate('dashboardPopout.bucket.attention', 'Needs You')
-    : counts.working
-      ? translate('dashboardPopout.bucket.working', 'Working')
-      : translate('dashboardPopout.bucket.idle', 'Idle')
   const agentsSidebarIntroShown = useAppStore((s) => s.settings?.agentsSidebarIntroShown === true)
   const migratedFromExperimental = useAppStore(
     (s) => s.settings?.agentsSidebarMigratedFromExperimental === true

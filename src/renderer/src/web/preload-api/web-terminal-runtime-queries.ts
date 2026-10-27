@@ -5,7 +5,7 @@ import { hostScopeCensusIsComplete } from '../../../../shared/runtime-listing-ho
 import {
   parseRemoteRuntimePtyId,
   toRemoteRuntimePtyId
-} from '../../../../shared/remote-runtime-pty-id'
+} from '../../../../shared/remote-runtime/remote-runtime-pty-id'
 import {
   classifyTerminalProcessInspectionFailure,
   clientOnlyUnverifiableInspection,

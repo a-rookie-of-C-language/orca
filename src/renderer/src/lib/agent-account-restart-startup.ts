@@ -78,6 +78,7 @@ export function resolveAgentAccountRestartResumeStartup(
     (entry ? state.getAgentLaunchConfigForStatusEntry(entry) : undefined) ??
     (sleeping?.agent === agent ? sleeping.launchConfig : undefined)
   const resumeTarget = resolveAccountRestartLaunchTarget(state, args, projectRuntime)
+  const worktree = state.getKnownWorktreeById(args.worktreeId)
   const startupPlan = buildAgentResumeStartupPlan({
     agent,
     providerSession,

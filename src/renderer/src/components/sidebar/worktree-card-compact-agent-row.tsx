@@ -26,6 +26,9 @@ import {
   type ProgramStatusPresentation
 } from '../../../../shared/program-status/presentation'
 import { resolveRowProgramStatus } from '@/lib/program-status/agent-row-presentation'
+import { useClaudeAgentRowView } from '@/components/dashboard/use-claude-agent-row-view'
+import { viewClaudeAgentFromRow } from '@/lib/claude-agent-row-view'
+import { ClaudeAgentViewIndicator } from '@/components/ClaudeAgentViewIndicator'
 
 function getCompactAgentPrimary(
   agent: DashboardAgentRowData,

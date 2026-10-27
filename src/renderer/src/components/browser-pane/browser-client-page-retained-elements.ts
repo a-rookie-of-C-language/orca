@@ -80,7 +80,7 @@ export function createBrowserClientPageWebview(options: {
   webview.setAttribute('src', 'about:blank')
   Object.assign(webview.style, { display: 'flex', width: '100%', height: '100%' })
   webview.addEventListener('ipc-message', (event) =>
-    guestMessageHandler?.(options.identity.browserPageId, webview, event)
+    guestMessageHandler?.(options.browserPageId, webview, event)
   )
   return webview
 }

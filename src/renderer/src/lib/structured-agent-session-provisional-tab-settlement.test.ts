@@ -25,7 +25,7 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
     method === 'agentSession.createSupport' ? mocks.createSupport() : new Promise(() => undefined)
 }))
 
-import { beginStructuredAgentSessionProvisionalLaunch } from './structured-agent-session-provisional-tab'
+import { beginStructuredAgentSessionProvisionalLaunch } from './agent-session/structured-agent-session-provisional-tab'
 
 function planSettlingAs(settlement: StructuredAgentLaunchSettlement): AgentSessionLaunchPlan {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: begin() is the only member this path calls.

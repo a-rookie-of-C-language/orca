@@ -37,6 +37,7 @@ export type WorkspaceSpaceApi = {
   cancel: () => Promise<boolean>
   onProgress: (callback: (progress: WorkspaceSpaceScanProgress) => void) => () => void
   openWindow?: () => Promise<void>
+  closeWindow?: () => Promise<void>
   publishWindowState?: (state: unknown) => Promise<void>
   requestWindowState?: () => Promise<void>
   onWindowStateRequested?: (callback: () => void) => () => void

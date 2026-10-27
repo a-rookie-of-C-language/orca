@@ -16,6 +16,7 @@ import {
   withSshMutationExpectation
 } from './runtime-file-routing'
 import { runtimePathExists } from './runtime-file-metadata-client'
+import { getRemoteFileArgs } from './runtime-file-routing'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 
 /** Locates a staged file on the client so main can stream it without the renderer reading it. */

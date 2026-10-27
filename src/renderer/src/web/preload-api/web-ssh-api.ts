@@ -150,6 +150,14 @@ export function createSshApi(): NonNullable<Partial<PreloadApi>['ssh']> {
       }
       return callRuntimeResult<PortForwardEntry[]>('ssh.listPortForwards', args ?? {})
     },
+    listUnrestoredPortForwards: async () => {
+      // Unrestored forwards live in the paired runtime's renderer; browser-only
+      // hosts have none to surface.
+      return []
+    },
+    removeSavedPortForward: async () => {
+      // Saved forwards are persisted on the paired runtime host; no-op here.
+    },
     listDetectedPorts: () => Promise.resolve([]),
     onPortForwardsChanged: onSshPortForwardsChanged,
     onDetectedPortsChanged: () => noopUnsubscribe,

@@ -15,7 +15,7 @@
 
 import { createHash } from 'node:crypto'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentMessageSource } from '../../../shared/agent-session/agent-session-message-source'
 import { parseOrcaSessionAddress } from '../../../shared/orca-session-address'
 import { roomMentionsIn, type RoomMentionable } from '../../../shared/orchestration-room-mentions'
 import type { OrchestrationDb } from './db'

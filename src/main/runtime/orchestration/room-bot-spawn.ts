@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentMessageSource } from '../../../shared/agent-session/agent-session-message-source'
 import { formatOrcaSessionAddress, isOrcaSessionId } from '../../../shared/orca-session-address'
 import { createStructuredAgentSessionId } from '../../../shared/structured-agent-session-create'
 import { createStructuredAgentSessionOperationId } from '../../../shared/structured-agent-session-mutation'

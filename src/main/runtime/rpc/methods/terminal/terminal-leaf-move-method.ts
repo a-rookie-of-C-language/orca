@@ -1,5 +1,5 @@
 import { defineMethod } from '../../core'
-import { parseRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
+import { parseRemoteRuntimePtyId } from '../../../../../shared/remote-runtime/remote-runtime-pty-id'
 import { TerminalMoveLeaf } from '../../../../../shared/rpc-contract/terminal-unary-params'
 import type {
   TerminalLeafMoveRequest,

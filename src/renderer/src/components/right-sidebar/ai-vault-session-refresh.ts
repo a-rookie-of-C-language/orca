@@ -65,6 +65,8 @@ export function useAiVaultSessionRefresh(
 } {
   const enabled = options.enabled !== false
   const { scan, applyScan } = useAppliedAiVaultScan()
+  const associations = useAiVaultAssociationObservation(executionHostScope)
+  const associationsRef = useRef(associations)
   const scanResult = enabled ? (scan?.result ?? null) : null
   const sessions = enabled
     ? (scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS)
@@ -111,6 +113,10 @@ export function useAiVaultSessionRefresh(
       if (!enabled) {
         return
       }
+      const observation = associationsRef.current
+      const associationRevision = observation.getSnapshot()
+      const associationCurrent = () =>
+        observation === associationsRef.current && associationRevision === observation.getSnapshot()
       const hostScope = executionHostScopeRef.current
       const selectedLimit = sessionLimitRef.current
       const baseKey = aiVaultSessionResultCacheKey(hostScope, scopePathsRef.current)
@@ -285,7 +291,17 @@ export function useAiVaultSessionRefresh(
       })
     }
     void refresh({ force: false, reuseLoadedDepth: true })
-  }, [enabled, executionHostScope, refresh, scanScopeKey])
+  }, [enabled, associations, executionHostScope, refresh, scanScopeKey])
+
+  useEffect(
+    () =>
+      associations.subscribe(() => {
+        publicationGateRef.current.cancel()
+        conditionalSnapshotRef.current = null
+        void refresh({ background: true, force: false })
+      }),
+    [associations, refresh]
+  )
 
   // Why: this panel can query the relay before it is ready — at startup, and again for the window
   // in which a reconnect leaves the session not-ready — and the query throws 'SSH relay is not

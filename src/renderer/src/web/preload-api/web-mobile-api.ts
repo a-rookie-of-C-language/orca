@@ -1,7 +1,6 @@
 import type { MobileApi } from '../../../../preload/api/mobile-api'
 import type { MobileRelayStatusDetail } from '../../../../shared/mobile-relay-status'
 import { callRuntimeResult } from './web-runtime-calls'
-import { webRuntimeState } from './web-runtime-session'
 import { onMobileRelayStatusChanged } from './web-mobile-relay-events'
 import { noopUnsubscribe } from './web-storage'
 
@@ -24,8 +23,7 @@ export function createWebMobileApi(): { mobile: MobileApi } {
         callRuntimeResult('mobile.listRuntimeAccessGrants', {}),
       revokeRuntimeAccess: (args) =>
         callRuntimeResult('mobile.revokeRuntimeAccess', args),
-      isWebSocketReady: () =>
-        Promise.resolve({ ready: Boolean(webRuntimeState.activeEnvironment), endpoint: null }),
+      isWebSocketReady: () => callRuntimeResult('mobile.isWebSocketReady', {}),
       getRelayStatus: () => callRuntimeResult<MobileRelayStatusDetail>('mobile.getRelayStatus'),
       onRelayStatusChanged: (callback) => onMobileRelayStatusChanged(callback),
       consumePendingUnpairedDeviceAuthFailure: () => Promise.resolve(false),

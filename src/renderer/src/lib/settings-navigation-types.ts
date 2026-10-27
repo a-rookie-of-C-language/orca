@@ -4,7 +4,9 @@ import type { SettingsSearchEntry } from '@/components/settings/settings-search'
 import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
-export type SettingsNavIcon = ComponentType<LucideProps>
+// Why: lucide-react@0.577's LucideProps omits className despite documenting it,
+// so allow the call-site className through the intersection.
+export type SettingsNavIcon = ComponentType<LucideProps & { className?: string }>
 export type SettingsNavInstallStatus =
   | 'install'
   | 'installed'

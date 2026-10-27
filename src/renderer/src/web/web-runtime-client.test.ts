@@ -38,6 +38,7 @@ import {
   WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY
 } from '../../../shared/protocol-version'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../shared/agent-session-optional-model-capability'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../shared/structured-agent-session-surface-capabilities'
 import { TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY } from '../../../shared/terminal-quick-command-capabilities'
 import { AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY } from '../../../shared/agent-session-background-task-child-views-capability'
 import { AGENT_SESSION_CURRENT_REQUESTS_CLIENT_CAPABILITY } from '../../../shared/agent-session-current-requests-capability'
