@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { TooltipProvider } from '../ui/tooltip'
@@ -38,6 +38,8 @@ describe('fixed chat panel header', () => {
     const { container } = render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[{ ...chat, agentSessionAgent: 'future-agent' }]}
           activeTabId={chat.id}
           onActivate={vi.fn()}
@@ -55,6 +57,8 @@ describe('fixed chat panel header', () => {
       const { container } = render(
         <TooltipProvider>
           <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
             chats={[{ ...chat, agentSessionAgent: agent }]}
             activeTabId={chat.id}
             onActivate={vi.fn()}
@@ -81,31 +85,28 @@ describe('fixed chat panel header', () => {
     }
     const view = render(
       <TooltipProvider>
-        <ChatPanelHeader {...props} activeTabId={chat.id} />
+        <ChatPanelHeader {...props} worktreeId="workspace" groupId="chat-group" activeTabId={chat.id} />
       </TooltipProvider>
     )
     expect(
       view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="claude"]')
     ).toBeTruthy()
-    await act(async () => {
-      fireEvent.click(screen.getByRole('combobox', { name: 'Chat' }))
-    })
     expect(
-      screen
-        .getByRole('option', { name: 'Review changes' })
-        .querySelector('[data-agent-icon="codex"] svg')
+      screen.getByRole('tab', { name: 'Review changes' }).querySelector('[data-agent-icon="codex"]')
     ).toBeTruthy()
-    fireEvent.click(screen.getByRole('option', { name: 'Review changes' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Review changes' }))
     expect(props.onActivate).toHaveBeenCalledWith('chat-2')
     view.rerender(
       <TooltipProvider>
-        <ChatPanelHeader {...props} activeTabId="chat-2" />
+        <ChatPanelHeader {...props} worktreeId="workspace" groupId="chat-group" activeTabId="chat-2" />
       </TooltipProvider>
     )
     expect(
       view.container.querySelector('[data-chat-panel-header] > [data-agent-icon="codex"] svg')
     ).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Chat' }).textContent).toBe('Review changes')
+    expect(
+      screen.getByRole('tab', { name: 'Review changes' }).getAttribute('aria-selected')
+    ).toBe('true')
   })
 
   it('shows the conversation title instead of a tab, with only a close action', () => {
@@ -113,6 +114,8 @@ describe('fixed chat panel header', () => {
     render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[chat]}
           activeTabId={chat.id}
           onActivate={vi.fn()}
@@ -132,6 +135,8 @@ describe('fixed chat panel header', () => {
     const { container } = render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[chat]}
           activeTabId={chat.id}
           onActivate={vi.fn()}
@@ -151,6 +156,8 @@ describe('fixed chat panel header', () => {
     render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[chat, { ...chat, id: 'chat-2', label: 'Review changes' }]}
           activeTabId={chat.id}
           onActivate={activate}
@@ -158,10 +165,7 @@ describe('fixed chat panel header', () => {
         />
       </TooltipProvider>
     )
-    await act(async () => {
-      fireEvent.click(screen.getByRole('combobox', { name: 'Chat' }))
-    })
-    fireEvent.click(await screen.findByRole('option', { name: 'Review changes' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Review changes' }))
     expect(activate).toHaveBeenCalledWith('chat-2')
   })
 
@@ -169,6 +173,8 @@ describe('fixed chat panel header', () => {
     render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[chat]}
           activeTabId={chat.id}
           onActivate={vi.fn()}
@@ -191,6 +197,8 @@ describe('fixed chat panel header', () => {
     render(
       <TooltipProvider>
         <ChatPanelHeader
+          worktreeId="workspace"
+          groupId="chat-group"
           chats={[chat]}
           activeTabId={chat.id}
           onActivate={vi.fn()}

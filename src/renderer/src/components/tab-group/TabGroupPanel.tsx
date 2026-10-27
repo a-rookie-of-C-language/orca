@@ -306,6 +306,8 @@ export default function TabGroupPanel({
                 <ChatPanelHeader
                   chats={agentSessionItems}
                   activeTabId={activeTab.id}
+                  worktreeId={worktreeId}
+                  groupId={groupId}
                   onActivate={commands.activateAgentSession}
                   onClose={commands.closeItem}
                   insetWindowControls={touchesRightEdge}

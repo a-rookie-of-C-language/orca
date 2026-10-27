@@ -17,7 +17,7 @@ import {
   nativeChatRowContentMetrics
 } from './native-chat-row-height-estimate'
 import type { NativeChatResolvedPrompt } from '../../../../shared/native-chat-resolution-receipt'
-import type { NativeChatTurnDiff } from './native-chat-turn-diffs'
+import type { MergedNativeChatTurnDiff } from './native-chat-watched-turn-diffs'
 import {
   NO_NATIVE_CHAT_SUBAGENT_CHOICES,
   NO_NATIVE_CHAT_SUBAGENT_SECTIONS,
@@ -61,7 +61,7 @@ export type NativeChatMessageSlot = {
   turnFolds: boolean
   /** The agent's next row in the same turn follows directly, so the two sit close. */
   continuesTurn?: boolean
-  turnDiff: NativeChatTurnDiff | undefined
+  turnDiff: MergedNativeChatTurnDiff | undefined
   /** A closed roster list hides child sections regardless of their individual expansion state. */
   subagentRoster: NativeChatSubagentRosterState | undefined
   /** Subagent sections this row sits inside; 0 is the conversation. */
@@ -83,7 +83,7 @@ export type NativeChatTranscriptSlotsInput = {
     active: NativeChatTurnStatus | null
     completedByTurn: Readonly<Record<string, NativeChatTurnStatus>>
   }
-  turnDiffs: ReadonlyMap<string, NativeChatTurnDiff>
+  turnDiffs: ReadonlyMap<string, MergedNativeChatTurnDiff>
   /** Turns the reader opened. Everything else with a duration stays folded. */
   expandedTurnKeys: ReadonlySet<string>
   isWorking: boolean

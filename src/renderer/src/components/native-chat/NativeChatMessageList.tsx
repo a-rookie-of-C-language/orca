@@ -62,7 +62,8 @@ import type { AgentSessionLatestTurn } from '../../../../shared/agent-session-wi
 import { isStructuredAgentSessionThinking } from '../../../../shared/structured-agent-session-live-turn'
 import type { NativeChatSettledTurns } from '../../../../shared/native-chat-turn-status'
 import type { NativeChatDiffReveal, NativeChatDiffTarget } from './native-chat-turn-diffs'
-import { useNativeChatTurnDiffs } from './use-native-chat-turn-diffs'
+import { useMergedNativeChatTurnDiffs, useNativeChatTurnDiffs } from './use-native-chat-turn-diffs'
+import { useNativeChatWatchedTurnDiffs } from './use-native-chat-watched-turn-diffs'
 import { transcriptTailRow } from './native-chat-transcript-tail-row'
 
 /** shown prompts have a card in this pane; unshown prompts require input in the agent’s terminal. */
@@ -175,6 +176,14 @@ export function NativeChatMessageList({
     subagentRowsInOrder,
     subagentSections.pathOf
   )
+  const watchedTurnDiffs = useNativeChatWatchedTurnDiffs({
+    runtimeContext,
+    liveTurnKey,
+    settledTurns,
+    isWorking,
+    isVisible
+  })
+  const mergedTurnDiffs = useMergedNativeChatTurnDiffs(turnDiffs, watchedTurnDiffs)
   // Only real tail reasoning counts as thinking; an in-flight request with no output does not.
   const thinking = useMemo(
     () => isStructuredAgentSessionThinking({ items: journalItems ?? [], latestTurn }),
@@ -200,7 +209,7 @@ export function NativeChatMessageList({
     liveTurnKey,
     receipts,
     turnStatuses,
-    turnDiffs,
+    turnDiffs: mergedTurnDiffs,
     expandedTurnKeys: expandedTurnIds,
     isWorking,
     lifecycleWorking,

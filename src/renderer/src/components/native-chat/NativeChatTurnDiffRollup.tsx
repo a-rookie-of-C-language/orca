@@ -10,11 +10,30 @@ import { useNativeChatDisclosure } from './native-chat-disclosure-store'
 import {
   nativeChatTurnDiffEditFile,
   type NativeChatDiffTarget,
-  type NativeChatTurnDiff,
   type NativeChatTurnDiffFile
 } from './native-chat-turn-diffs'
+import {
+  isWatchedTurnDiffFile,
+  type MergedNativeChatTurnDiff,
+  type WatchedTurnDiffFile
+} from './native-chat-watched-turn-diffs'
 
-function TurnDiffFilePatches({ file }: { file: NativeChatTurnDiffFile }): React.JSX.Element {
+function TurnDiffFilePatches({ file }: { file: WatchedTurnDiffFile }): React.JSX.Element {
+  return (
+    <div className="pl-2">
+      {file.patches.map((patch, index) => (
+        <NativeChatDiffCard
+          key={`${patch.file.path}:${index}`}
+          file={patch.file}
+          initialOpen
+          disclosureKey={`turn-diff-watched:${patch.file.path}:${index}`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ToolCallFilePatches({ file }: { file: NativeChatTurnDiffFile }): React.JSX.Element {
   return (
     <div className="pl-2">
       {file.edits.map((edit) => {
@@ -36,12 +55,15 @@ function TurnDiffFileRow({
   file,
   onReveal
 }: {
-  file: NativeChatTurnDiffFile
+  file: MergedNativeChatTurnDiff['files'][number]
   onReveal: (target: NativeChatDiffTarget) => void
 }): React.JSX.Element {
   const pathId = useId()
-  const disclosureKey = `turn-diff:${file.edits[0]?.target.messageId}:${file.path}`
+  const disclosureKey = isWatchedTurnDiffFile(file)
+    ? `turn-diff-watched:${file.path}`
+    : `turn-diff:${file.edits[0]?.target.messageId}:${file.path}`
   const { open, setOpen } = useNativeChatDisclosure(disclosureKey, false)
+  const watched = isWatchedTurnDiffFile(file)
   return (
     <div>
       <div className="flex min-w-0 items-center">
@@ -49,7 +71,7 @@ function TurnDiffFileRow({
           variant="ghost"
           size="xs"
           className="min-w-0 flex-1 justify-start"
-          onClick={() => onReveal(file.target)}
+          onClick={() => (watched ? setOpen(!open) : onReveal(file.target))}
         >
           <span id={pathId} className="min-w-0 truncate font-mono" title={file.path}>
             {file.path}
@@ -73,7 +95,7 @@ function TurnDiffFileRow({
         </Button>
       </div>
       <NativeChatExpandable open={open}>
-        <TurnDiffFilePatches file={file} />
+        {watched ? <TurnDiffFilePatches file={file} /> : <ToolCallFilePatches file={file} />}
       </NativeChatExpandable>
     </div>
   )
@@ -83,7 +105,7 @@ export function NativeChatTurnDiffRollup({
   diff,
   onReveal
 }: {
-  diff: NativeChatTurnDiff
+  diff: MergedNativeChatTurnDiff
   onReveal: (target: NativeChatDiffTarget) => void
 }): React.JSX.Element {
   return (

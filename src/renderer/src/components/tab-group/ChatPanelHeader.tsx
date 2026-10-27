@@ -1,4 +1,4 @@
-import { Pencil, X } from 'lucide-react'
+import { Pencil, Plus, X } from 'lucide-react'
 import type { Tab } from '../../../../shared/tab-types'
 import { resolveUnifiedTabLabel } from '../../../../shared/tab-title-resolution'
 import { useAppStore } from '../../store'
@@ -8,13 +8,23 @@ import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { ImeInput } from '@/lib/ime-text-field'
 import { Button } from '../ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger
+} from '../ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip'
 import { useSortableTabRename } from '../tab-bar/use-sortable-tab-rename'
+import { QuickLaunchAgentMenuItems } from '../tab-bar/QuickLaunchButton'
+import { activateNativeChatAgentLaunchTab } from '@/lib/activate-native-chat-agent-launch-tab'
+import { cn } from '@/lib/utils'
 
 export function ChatPanelHeader({
   chats,
   activeTabId,
+  worktreeId,
+  groupId,
   onActivate,
   onClose,
   allowClose = true,
@@ -22,6 +32,8 @@ export function ChatPanelHeader({
 }: {
   chats: Tab[]
   activeTabId: string
+  worktreeId: string
+  groupId: string
   onActivate: (tabId: string) => void
   onClose: (tabId: string) => void
   /** False hides the close button so a pinned column keeps its last chat. */
@@ -34,6 +46,7 @@ export function ChatPanelHeader({
   const closeLabel = translate('chatPanel.close', 'Close chat')
   const chatLabel = translate('chatPanel.title', 'Chat')
   const renameLabel = translate('chatPanel.rename', 'Rename chat')
+  const newChatLabel = translate('chatPanel.newChat', 'New chat')
   const active = chats.find((tab) => tab.id === activeTabId)
   return (
     <div
@@ -65,6 +78,33 @@ export function ChatPanelHeader({
       ) : (
         <span className="min-w-0 flex-1 truncate text-xs font-medium">{chatLabel}</span>
       )}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={newChatLabel}
+                className="shrink-0"
+              >
+                <Plus />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>{newChatLabel}</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" side="bottom" className="w-56">
+          <DropdownMenuLabel>{newChatLabel}</DropdownMenuLabel>
+          <QuickLaunchAgentMenuItems
+            worktreeId={worktreeId}
+            groupId={groupId}
+            onFocusTerminal={activateNativeChatAgentLaunchTab}
+            onFocusChat={activateNativeChatAgentLaunchTab}
+            launchSource="native_chat"
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
       {allowClose ? (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -146,25 +186,13 @@ function ChatPanelTitle({
           spellCheck={false}
         />
       ) : chats.length > 1 ? (
-        <Select value={active.id} onValueChange={onActivate}>
-          <SelectTrigger size="sm" className="min-w-0 flex-1" aria-label={chatLabel}>
-            <SelectValue>{displayTitle}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {chats.map((tab) => (
-              <SelectItem key={tab.id} value={tab.id}>
-                <span
-                  className="inline-flex shrink-0"
-                  data-agent-icon={tab.agentSessionAgent}
-                  aria-hidden="true"
-                >
-                  <AgentIcon agent={agentTypeToIconAgent(tab.agentSessionAgent)} size={14} />
-                </span>
-                {resolveUnifiedTabLabel(tab, generatedTitles, chatLabel)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <ChatPanelTabStrip
+          chats={chats}
+          activeTabId={active.id}
+          generatedTitles={generatedTitles}
+          chatLabel={chatLabel}
+          onActivate={onActivate}
+        />
       ) : (
         <span className="min-w-0 flex-1 truncate text-xs font-medium" title={displayTitle}>
           {displayTitle}
@@ -186,5 +214,60 @@ function ChatPanelTitle({
         </Tooltip>
       )}
     </>
+  )
+}
+
+/** Horizontal strip for multi-session chat panels: each sibling chat gets a
+ *  click-to-switch chip with its own agent icon. Narrow columns clip the
+ *  strip but the chips shrink to stay reachable. */
+function ChatPanelTabStrip({
+  chats,
+  activeTabId,
+  generatedTitles,
+  chatLabel,
+  onActivate
+}: {
+  chats: Tab[]
+  activeTabId: string
+  generatedTitles: boolean
+  chatLabel: string
+  onActivate: (tabId: string) => void
+}): React.JSX.Element {
+  return (
+    <div
+      className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+      role="tablist"
+      aria-label={chatLabel}
+    >
+      {chats.map((tab) => {
+        const isActive = tab.id === activeTabId
+        const label = resolveUnifiedTabLabel(tab, generatedTitles, chatLabel)
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            title={label}
+            onClick={() => onActivate(tab.id)}
+            className={cn(
+              'flex h-6 min-w-0 max-w-40 shrink items-center gap-1 rounded-md px-1.5 text-xs font-medium transition-colors',
+              isActive
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+            )}
+          >
+            <span
+              className="inline-flex shrink-0"
+              data-agent-icon={tab.agentSessionAgent}
+              aria-hidden="true"
+            >
+              <AgentIcon agent={agentTypeToIconAgent(tab.agentSessionAgent)} size={12} />
+            </span>
+            <span className="min-w-0 truncate">{label}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
