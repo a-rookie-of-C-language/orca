@@ -21,7 +21,7 @@ export type RuntimeServiceCommandSurface = {
   getAiVaultScanProgress: RuntimeAiVaultCommands['getScanProgress']
   prepareAiVaultSessionResume: RuntimeAiVaultCommands['prepare']
   prepareAiVaultSessionDelete: RuntimeAiVaultCommands['prepareDelete']
-  deleteAiVaultSession: RuntimeAiVaultCommands['deleteSession']
+  deleteAiVaultSession: RuntimeAiVaultCommands['delete']
   setSessionSearchEnabled: RuntimeSessionSearchSettingsController['setEnabled']
   onClientEvent: RuntimeClientEventBus['on']
   notifyNativeChatLaunchDraftResolved: RuntimeNativeChatDraftResolutions['notify']
@@ -168,7 +168,7 @@ export function installRuntimeServiceCommandSurface(
     getAiVaultScanProgress: vault.getScanProgress.bind(vault),
     prepareAiVaultSessionResume: vault.prepare.bind(vault),
     prepareAiVaultSessionDelete: vault.prepareDelete.bind(vault),
-    deleteAiVaultSession: vault.deleteSession.bind(vault),
+    deleteAiVaultSession: vault.delete.bind(vault),
     setSessionSearchEnabled: sessionSearchSettings.setEnabled.bind(sessionSearchSettings),
     onClientEvent: events.on.bind(events),
     notifyNativeChatLaunchDraftResolved: drafts.notify.bind(drafts),

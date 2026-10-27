@@ -24,7 +24,16 @@ import {
   toRuntimeExecutionHostId
 } from '../../../../shared/execution-host'
 import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
-import { callRuntimeResult } from './web-runtime-calls'
+import {
+  assertEnvironmentPairing,
+  callRuntimeEnvelope,
+  callRuntimeResult,
+  callEnvironmentEnvelope
+} from './web-runtime-calls'
+import {
+  readRuntimeAiVaultDeleteSessionResponse,
+  runtimeAiVaultDeleteSessionParams
+} from '../../../../shared/ai-vault-runtime-session-delete'
 import { requireActiveEnvironment } from './web-runtime-session'
 import { noopUnsubscribe } from './web-storage'
 import { translate } from '@/i18n/i18n'
@@ -33,19 +42,42 @@ import { invokeNative, isTauriNativeHost } from '../tauri-native-host'
 import { isWslUncPath } from '../../../../shared/wsl-paths'
 
 export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault']> {
-  const search = createSessionSearchClient(
-    (method, params) => callRuntimeResult(method, params),
-    'relay'
-  )
   return {
     // A browser searches only its selected paired runtime.
-    searchSessions: (request, executionHostScope) =>
-      addressesOwnRuntime(executionHostScope)
-        ? search.searchSessions(request)
-        : Promise.resolve({ kind: 'unavailable', reason: 'no-service' }),
+    searchSessions: (request, executionHostScope, isActive = () => true) => {
+      if (!addressesOwnRuntime(executionHostScope)) {
+        return Promise.resolve({ kind: 'unavailable', reason: 'no-service' })
+      }
+      const environment = requireActiveEnvironment()
+      const pairingRevision = environment.pairingRevision ?? environment.createdAt
+      const runtimeId = environment.runtimeId ?? undefined
+      const active = () => isActive() && requireActiveEnvironment().id === environment.id
+      const search = createSessionSearchClient(async (method, params) => {
+        if (!active()) {
+          throw new Error('Session search retired')
+        }
+        const response = await callEnvironmentEnvelope(
+          environment.id,
+          method,
+          params,
+          undefined,
+          pairingRevision,
+          runtimeId,
+          active
+        )
+        if (!response.ok) {
+          throw Object.assign(new Error(response.error.message), { code: response.error.code })
+        }
+        return response.result
+      }, 'relay')
+      return search.searchSessions(request, active)
+    },
     searchStatus: (executionHostScope) =>
       addressesOwnRuntime(executionHostScope)
-        ? search.searchStatus()
+        ? createSessionSearchClient(
+            (method, params) => callRuntimeResult(method, params),
+            'relay'
+          ).searchStatus()
         : Promise.resolve(unavailableSessionSearchStatus()),
     // Runtime-backed web clients can change consent only for their active paired host.
     setSearchEnabled: (executionHostId, enabled): Promise<AiVaultSearchStatus> => {
@@ -69,6 +101,7 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
       if (requestedScope !== 'all' && requestedScope !== executionHostId) {
         return Promise.resolve(webAiVaultUnavailableResult(requestedScope))
       }
+      const hostPairingRevision = environment.pairingRevision ?? environment.createdAt
       // Why: no local filesystem in the browser, so every history scan runs on and is stamped as the paired runtime host.
       return callRuntimeResult<AiVaultListResult>('aiVault.listSessions', {
         includeAntigravityIdeSessions: args?.includeAntigravityIdeSessions,
@@ -77,9 +110,18 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
         ...(requestedScope === executionHostId && args?.afterFingerprint !== undefined
           ? { afterFingerprint: args.afterFingerprint }
           : {}),
+        historyOwnership: args?.historyOwnership,
         scopePaths: args?.scopePaths,
         executionHostId
-      })
+      }).then((result) =>
+        // Fence later host mutations on these rows to the pairing that listed them.
+        result.sessions
+          ? {
+              ...result,
+              sessions: result.sessions.map((session) => ({ ...session, hostPairingRevision }))
+            }
+          : result
+      )
     },
     resolveSessionTitles: (args: AiVaultSessionTitlesArgs) => {
       const environment = requireActiveEnvironment()
@@ -124,8 +166,21 @@ export function createWebAiVaultApi(): NonNullable<Partial<PreloadApi>['aiVault'
     buildHandoffPack: () => Promise.resolve({ text: null }),
     deleteSession: async (args: AiVaultDeleteSessionArgs): Promise<AiVaultDeleteSessionResult> => {
       if (!isTauriNativeHost()) {
-        // A browser must not turn a session delete into a runtime-side hard delete.
-        return { outcome: 'rejected', agent: args.agent, reason: 'non-local-host' }
+        // A browser can delete only on its own paired runtime, which validates the path itself.
+        if (!addressesOwnRuntime(args.executionHostId)) {
+          return { outcome: 'rejected', agent: args.agent, reason: 'non-local-host' }
+        }
+        assertEnvironmentPairing(
+          requireActiveEnvironment().id,
+          args.expectedEnvironmentPairingRevision
+        )
+        return readRuntimeAiVaultDeleteSessionResponse(
+          await callRuntimeEnvelope(
+            'aiVault.deleteSession',
+            runtimeAiVaultDeleteSessionParams(args)
+          ),
+          args.agent
+        )
       }
       const environment = requireActiveEnvironment()
       const runtimeArgs = {

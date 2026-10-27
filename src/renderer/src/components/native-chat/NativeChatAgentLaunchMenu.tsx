@@ -9,7 +9,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { QuickLaunchAgentMenuItems } from '@/components/tab-bar/QuickLaunchButton'
 import { activateNativeChatAgentLaunchTab } from '@/lib/activate-native-chat-agent-launch-tab'
-import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
+import { useAppStore } from '@/store'
 import { agentTypeToIconAgent, formatAgentTypeLabel } from '@/lib/agent-status'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { translate } from '@/i18n/i18n'
@@ -54,12 +54,22 @@ export function NativeChatAgentLaunchMenu({
       </Tooltip>
       <DropdownMenuContent align="start" side="top" className="w-56">
         <DropdownMenuLabel>{label}</DropdownMenuLabel>
-        <QuickLaunchAgentMenuItems
-          worktreeId={worktreeId}
-          onFocusTerminal={focusTerminalTabSurface}
-          onTabOpened={activateNativeChatAgentLaunchTab}
-          launchSource="native_chat"
-        />
+        {(() => {
+          const state = useAppStore.getState()
+          const groupId =
+            state.getTab(terminalTabId)?.groupId ??
+            state.activeGroupIdByWorktree[worktreeId] ??
+            state.groupsByWorktree[worktreeId]?.[0]?.id
+          return groupId ? (
+            <QuickLaunchAgentMenuItems
+              worktreeId={worktreeId}
+              groupId={groupId}
+              onFocusTerminal={activateNativeChatAgentLaunchTab}
+              onFocusChat={activateNativeChatAgentLaunchTab}
+              launchSource="native_chat"
+            />
+          ) : null
+        })()}
       </DropdownMenuContent>
     </DropdownMenu>
   )

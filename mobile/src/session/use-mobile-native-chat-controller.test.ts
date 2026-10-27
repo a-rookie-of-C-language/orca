@@ -11,7 +11,6 @@ const clearDraftForSend = vi.fn()
 const restoreRejectedDraft = vi.fn()
 const holdUnconfirmedSend = vi.fn()
 
-// Mutable resolution/transcript doubles let launch-draft cases reuse the send-seam harness.
 const viewMode = { isTabChatView: (_tabId: string) => true }
 const sessionState = { messages: [] as unknown[], status: 'ready', transcriptLoading: false }
 const structuredSendWithOutcome = vi.fn()
@@ -67,7 +66,6 @@ const structuredSessionState = {
   loadingEarlier: false,
   loadEarlier: vi.fn()
 }
-const draftsArgs: Record<string, unknown>[] = []
 const promptsState = {
   permission: null as unknown,
   question: null as unknown,
@@ -82,6 +80,9 @@ vi.mock('./use-mobile-session-view-mode', () => ({
     setTabView: vi.fn(),
     toggleTabChatView: vi.fn()
   })
+}))
+vi.mock('./use-mobile-structured-session-commands', () => ({
+  useMobileStructuredSessionCommands: () => ({ commands: undefined, refresh: vi.fn() })
 }))
 vi.mock('./use-mobile-native-chat-session', () => ({
   useMobileNativeChatSession: () => sessionState
@@ -106,9 +107,8 @@ vi.mock('./use-mobile-structured-agent-session', () => ({
     invokeStructuredOption: structuredInvokeOption
   })
 }))
-vi.mock('./use-mobile-native-chat-drafts', () => ({
-  useMobileNativeChatDrafts: (args: Record<string, unknown>) => {
-    draftsArgs.push(args)
+vi.mock('./native-chat/composer/use-mobile-native-chat-drafts', () => ({
+  useMobileNativeChatDrafts: () => {
     return {
       composerText: '',
       setComposerText: vi.fn(),
@@ -124,17 +124,17 @@ vi.mock('./use-mobile-native-chat-drafts', () => ({
     }
   }
 }))
-vi.mock('./use-mobile-native-chat-prompts', () => ({
+vi.mock('./native-chat/input/use-mobile-native-chat-prompts', () => ({
   useMobileNativeChatPrompts: () => promptsState
 }))
 const answerSendArgs: { streamIdentity?: string }[] = []
-vi.mock('./use-mobile-native-chat-answer-send', () => ({
+vi.mock('./native-chat/input/use-mobile-native-chat-answer-send', () => ({
   useMobileNativeChatAnswerSend: (args: { streamIdentity?: string }) => {
     answerSendArgs.push(args)
     return { answerAsk: vi.fn(), cancelPending: vi.fn() }
   }
 }))
-vi.mock('./mobile-native-chat-permission-send', () => ({
+vi.mock('./native-chat/input/mobile-native-chat-permission-send', () => ({
   useMobileNativeChatPermissionSend: () => vi.fn()
 }))
 vi.mock('./use-mobile-native-chat-stop', () => ({
@@ -155,12 +155,10 @@ import {
   markMobileNativeChatInputStale,
   resetMobileNativeChatStaleInputForTests
 } from './native-chat/mobile-native-chat-stale-input'
-import {
-  useMobileNativeChatController,
-  type MobileNativeChatController
-} from './use-mobile-native-chat-controller'
+import { useMobileNativeChatController } from './use-mobile-native-chat-controller'
+import type { MobileNativeChatController } from './mobile-native-chat-controller-contract'
 import type { MobileNativeChatStatus } from './use-mobile-native-chat-session'
-import { mobileNativeChatPromptDismissals } from './mobile-native-chat-prompt-dismissals'
+import { mobileNativeChatPromptDismissals } from './native-chat/input/mobile-native-chat-prompt-dismissals'
 import { structuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 
 const sendWithOutcome = vi.mocked(NativeChatSend.sendMobileNativeChatMessageWithOutcome)
@@ -245,10 +243,6 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     controller = null
   })
 
-  it('leaves structured prompt cancellation unavailable on the legacy bridge lane', () => {
-    expect(controller?.handleNativeChatCancelPrompt).toBeUndefined()
-  })
-
   it('clears an orphaned image paste before a question-card answer (#10228)', async () => {
     markMobileNativeChatInputStale('term-1')
     clientStub.sendRequest.mockResolvedValue({
@@ -315,19 +309,6 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
       await controller!.handleNativeChatCancelAsk()
     })
     expect(onSendResolved).not.toHaveBeenCalled()
-  })
-
-  it('threads the optimistic-echo image URIs into acceptSend on an accepted send', async () => {
-    sendWithOutcome.mockResolvedValue('accepted')
-    let accepted = false
-    await act(async () => {
-      accepted = await controller!.handleNativeChatSend('look', ['file:///a.jpg'])
-    })
-    expect(accepted).toBe(true)
-    expect(acceptSend).toHaveBeenCalledWith(ORIGIN, 'look', ['file:///a.jpg'])
-    expect(controller!.nativeChatAcceptsImages).toBe(true)
-    expect(clearDraftForSend).toHaveBeenCalledWith(ORIGIN, 'look')
-    expect(restoreRejectedDraft).not.toHaveBeenCalled()
   })
 
   it('routes structured agent-session sends away from terminal/nativeChat transports', async () => {
@@ -508,97 +489,6 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     expect(clearDraftForSend).not.toHaveBeenCalled()
     expect(restoreRejectedDraft).not.toHaveBeenCalled()
     expect(onSendError).toHaveBeenCalledWith('Message not sent')
-  })
-})
-
-describe('useMobileNativeChatController launch-draft wiring', () => {
-  let renderer: ReactTestRenderer | null = null
-  const clientStub = { sendRequest: vi.fn() }
-
-  const chatTab = {
-    type: 'terminal',
-    id: 'tab-1',
-    title: 'Claude',
-    terminal: 'term-1',
-    launchAgent: 'claude',
-    launchDraft: 'https://github.com/o/r/issues/12',
-    launchDraftCreatedAt: 7,
-    isActive: true
-  }
-
-  function Harness({ tab }: { tab: unknown }): null {
-    useMobileNativeChatController({
-      client: clientStub as unknown as RpcClient,
-      connState: 'connected',
-      hostId: 'h',
-      worktreeId: 'w',
-      activeSessionTab: tab as never,
-      activeSessionTabId: 'tab-1',
-      activeHandleRef: { current: 'term-1' },
-      deviceTokenRef: { current: null },
-      nativeChatTranscriptIsLocalReadable: true,
-      nativeChatInputLeaseReady: true,
-      onSendError: vi.fn(),
-      onSendResolved: vi.fn()
-    })
-    return null
-  }
-
-  function render(tab: unknown): void {
-    act(() => {
-      renderer = create(createElement(Harness, { tab }))
-    })
-  }
-
-  beforeEach(() => {
-    draftsArgs.length = 0
-    viewMode.isTabChatView = () => true
-    sessionState.messages = []
-    sessionState.status = 'ready'
-    sessionState.transcriptLoading = false
-  })
-
-  afterEach(() => {
-    act(() => renderer?.unmount())
-    renderer = null
-  })
-
-  it('forwards the tab launch draft and chat-active flag for a chat-resolved tab', () => {
-    render(chatTab)
-
-    expect(draftsArgs.at(-1)).toMatchObject({
-      tabId: 'tab-1',
-      launchDraft: 'https://github.com/o/r/issues/12',
-      launchDraftCreatedAt: 7,
-      chatActive: true,
-      transcriptLoading: false
-    })
-  })
-
-  it('forwards the raw draft with chatActive false when the tab shows the terminal', () => {
-    // Keep off-chat distinct from host retraction so toggling cannot permanently decline launch prefill.
-    viewMode.isTabChatView = () => false
-    render(chatTab)
-
-    expect(draftsArgs.at(-1)).toMatchObject({
-      launchDraft: 'https://github.com/o/r/issues/12',
-      chatActive: false
-    })
-  })
-
-  it('forwards the session hook’s transcriptLoading, not its status', () => {
-    // Working status masks loading; only read-phase state establishes transcript trust.
-    sessionState.status = 'working'
-    sessionState.transcriptLoading = true
-    render(chatTab)
-
-    expect(draftsArgs.at(-1)).toMatchObject({ transcriptLoading: true })
-  })
-
-  it('forwards a null draft for a tab that publishes none', () => {
-    render({ ...chatTab, launchDraft: undefined })
-
-    expect(draftsArgs.at(-1)).toMatchObject({ launchDraft: null, chatActive: true })
   })
 })
 

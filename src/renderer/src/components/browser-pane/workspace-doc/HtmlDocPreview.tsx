@@ -38,6 +38,8 @@ import {
   isDirectSshFileContext
 } from '@/runtime/runtime-direct-ssh-file-read'
 import { isTauriNativeHost } from '@/web/tauri-native-bridge'
+import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
+import { subscribeDocPreviewExternalLinkConfirmation } from './doc-preview-external-link-confirmation'
 
 type PreviewState = 'loading' | 'ready' | 'unavailable'
 
@@ -45,6 +47,7 @@ const MAX_ASSET_FAILURES = 50
 
 export function HtmlDocPreview({
   previewId,
+  browserWorkspaceId,
   filePath,
   relativePath,
   worktreeId,
@@ -55,6 +58,7 @@ export function HtmlDocPreview({
   convertedFrom = null,
   convertedTo = null
 }: HtmlDocPreviewProps): React.JSX.Element {
+  const confirm = useConfirmationDialog()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
   const reloadRef = useRef<(() => void) | null>(null)
@@ -139,6 +143,7 @@ export function HtmlDocPreview({
   useEffect(() => {
     let disposed = false
     let detach: (() => void) | undefined
+    let unsubscribeExternalLinks: (() => void) | undefined
     let loadFailed = false
     const onLoadStarted = (): void => {
       resetBrowserOverlayViewport()
@@ -281,6 +286,12 @@ export function HtmlDocPreview({
         if (!handle || disposed || !containerRef.current) {
           return
         }
+        unsubscribeExternalLinks = subscribeDocPreviewExternalLinkConfirmation(confirm, {
+          grantId: handle.grantId,
+          owner: handle.location.owner,
+          worktreeId,
+          browserWorkspaceId
+        })
         const attached = attachDocPreviewWebview({
           previewId,
           container: containerRef.current,
@@ -324,9 +335,12 @@ export function HtmlDocPreview({
       webviewRef.current = null
       unsubscribeFailure?.()
       unsubscribeResource?.()
+      unsubscribeExternalLinks?.()
       detach?.()
     }
   }, [
+    browserWorkspaceId,
+    confirm,
     filePath,
     offerDirectoryAccess,
     previewId,

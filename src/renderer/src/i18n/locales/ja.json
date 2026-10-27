@@ -303,6 +303,23 @@
     "followSymlinkedDirectoriesDescription": "クイックオープンでリンクされたフォルダーを検索し、ファイルエクスプローラーでローカルのリンクされたフォルダーを展開します。",
     "accounts": {
       "claudeRemoveFolder": "Orca はこのアカウントの Claude フォルダーとサインイン情報をこのコンピュータから削除します。システムのデフォルトと共有しているチャット履歴は残ります。このアカウントが選択されている場合、次に起動する Claude はシステムのデフォルトを使用します。"
+    },
+    "sourceControl": {
+      "actionModel": {
+        "on": "オン",
+        "off": "オフ",
+        "invalidArgs": "{{value0}} の CLI 引数が無効です。設定 → Source Control AI で修正してください。",
+        "model": "モデル",
+        "agentDefault": "Agent の既定",
+        "effortDefault": "既定",
+        "savedModel": "設定のモデル: {{value0}}",
+        "permissionsDefaultHint": "このアクションが独自の CLI 引数を設定しない限り、ターミナルでは Agent の権限が使用されます。",
+        "chatsOnly": "チャットにのみ適用",
+        "terminalsOnly": "ターミナルにのみ適用",
+        "extraArgs": "追加の CLI 引数",
+        "launchOptions": "モデルと権限",
+        "savedLaunchOptions": "保存されたオプション: {{value0}}。古いサーバーでは、サーバー側の権限設定が使用されます。"
+      }
     }
   },
   "menu": {
@@ -416,7 +433,7 @@
       "7cbfbf622f": "フローティングワークスペースを再試行するか、閉じてから再度開きます。",
       "1b3024bcd6": "フローティングワークスペースでエラーが発生しました。",
       "8d1e160ed1": "サイドバーを再試行するか、タブを切り替えてこのサーフェスを再読み込みしてください。",
-      "ed6b168d00": "ツールサイドバーでエラーが発生しました。",
+      "ed6b168d00": "右側のサイドバーでエラーが発生しました。",
       "03a14f6b5b": "ページを再試行するか、別の Orca サーフェスに移動します。",
       "b7a714db1e": "このページでエラーが発生しました。",
       "98d4ea2823": "このワークスペースでは、ターミナル、ブラウザ、またはエディターのレンダリングに失敗しました。再マウントを試してください。",
@@ -427,7 +444,7 @@
       "c1cf0b0e4a": "ペインを折りたたむ",
       "8504ddf267": "アプリはまだ実行中です。シェルを再試行するか、メニューを使用してクラッシュの詳細を報告します。",
       "df1d56bf87": "ワークスペースシェルでエラーが発生しました。",
-      "9e0b441a91": "ツールサイドバーを切り替え",
+      "9e0b441a91": "右サイドバーを切り替えます",
       "e81217c1b7": "アプリ名を非表示",
       "5096cbbc86": "Orca",
       "8b0b8eb54f": "アプリケーションメニュー",
@@ -447,7 +464,7 @@
       "4f08ae8311": "タスク",
       "ca6c6eece7": "スキル",
       "1b9d9d065f": "設定",
-      "c184e056de": "ツールサイドバーを切り替え（{{value0}}）",
+      "c184e056de": "右サイドバーを切り替えます ({{value0}})",
       "f7aa73e785": "進む ({{value0}})",
       "cf9099fe98": "進む",
       "fe21e8f6f5": "戻る ({{value0}})",
@@ -3433,7 +3450,10 @@
               "failed": {
                 "toast": {
                   "62a0af2cb4": "ターミナルのクリップボードコピーを確認できませんでした",
-                  "fdd3e7e977": "ターミナルアプリがコピーを要求しましたが、システムクリップボードに反映されたことを Orca で確認できませんでした。"
+                  "fdd3e7e977": "ターミナルアプリがコピーを要求しましたが、システムクリップボードに反映されたことを Orca で確認できませんでした。",
+                  "de286dcfe1": "ターミナルのコピーにはクリックが必要です",
+                  "84c938ffa2": "ブラウザがターミナルアプリからのコピーをブロックしました。「コピー」をクリックするとクリップボードに入ります。",
+                  "a73165c6c5": "コピー"
                 }
               }
             }
@@ -4300,7 +4320,8 @@
               "metric": {
                 "workingSetDescription": "合計ワーキングセット(WS): 現在 RAM に常駐しているページです。共有ページが複数のプロセスに表示されることがあり、Windows がページアウトしたメモリはここには含まれません。",
                 "privateBytesDescription": "合計プライベートバイト: これらのプロセスがコミットしたメモリで、常駐中かページアウト済みかを問わず計上されます。ホストがコミット制限に対して計上する値であるため、ページングによって上のワーキングセットが縮小しても増え続けます。",
-                "rssDescription": "合計レジデントセットサイズ(RSS)。共有またはエイリアスされたページが複数のプロセスに表示されることがあります。"
+                "rssDescription": "合計レジデントセットサイズ(RSS)。共有またはエイリアスされたページが複数のプロセスに表示されることがあります。",
+                "footprintDescription": "合計メモリフットプリント。アクティビティモニタに表示される値と同じで、各プロセスが所有するメモリ(グラフィックスメモリを含む)です。プロセス間で共有されるページは二重に計上されません。"
               }
             },
             "manager": {
@@ -5556,7 +5577,9 @@
           "51001182e3": "空のディレクトリ",
           "971d85cc84": "このホスト上のプロジェクトとして開きます · {{value0}}",
           "00c4235c10": "「{{value0}}」に一致するものはありません",
-          "largeInputNoMatches": "この長い入力に一致するものはありません"
+          "largeInputNoMatches": "この長い入力に一致するものはありません",
+          "entriesLabel": "フォルダーの項目",
+          "inputLabel": "フィルターまたはパス"
         },
         "SleepTwinWorkspaceDialog": {
           "title": "Sleep Workspace",
@@ -6052,16 +6075,16 @@
           "sshTargetNotFoundDetail": "ワークスペースを更新するかホストに再接続してから、もう一度お試しください。",
           "sshTargetInvalid": "SSH ホストの設定が不完全です。",
           "sshTargetInvalidDetail": "SSH ホストを編集するか再接続してから、もう一度お試しください。",
-          "sshAliasRequired": "VS Code には、このホストの SSH 設定エイリアスが必要です。",
+          "sshAliasRequired": "このエディターには、このホストの SSH 設定エイリアスが必要です。",
           "sshAliasRequiredDetail": "ローカルの SSH 設定に {{host}}:{{port}} の Host エイリアスを追加し、ワークスペースを再接続してから、もう一度お試しください。",
           "remoteEditorUnsupported": "このアプリは SSH ワークスペースを開けません。",
-          "remoteEditorUnsupportedDetail": "VS Code を選択するか、このアプリをローカルで使用してください。",
+          "remoteEditorUnsupportedDetail": "VS Code、Cursor、Zed のいずれかを選択するか、アプリをローカルで使用してください。",
           "remotePathInvalid": "このパスは SSH ホストでは無効です。",
           "remotePathInvalidDetail": "ワークスペースを更新してから、もう一度お試しください。",
-          "remoteLaunchFailed": "VS Code でパスを開けませんでした。",
-          "remoteLaunchFailedDetail": "このマシンに設定されている VS Code のコマンドを確認してください。",
+          "remoteLaunchFailed": "エディターでパスを開けませんでした。",
+          "remoteLaunchFailedDetail": "このマシンで設定されているエディターのコマンドを確認してください。",
           "wsl": "WSL",
-          "remoteEditorHint": "SSH ホスト上のフォルダーを開くことができるのは VS Code のみです。",
+          "remoteEditorHint": "SSH ホスト上のフォルダーを開くことができるのは VS Code、Cursor、Zed のみです。",
           "remoteRuntimeEditorHint": "このコンピュータ上のアプリは、Orca が SSH を介してサーバーに到達した場合にのみ、このサーバーのファイルを開くことができます。"
         },
         "WorktreeTitleInlineRename": {
@@ -8128,7 +8151,11 @@
           "chatErrorEscalationNeedsChat": "使用するには、試験的機能の設定でチャット UI をオンにしてください。",
           "chatErrorEscalationKeywordError": "エラー",
           "chatErrorEscalationKeywordChat": "チャット",
-          "7bc082f4de": "インストールコマンドのコピー"
+          "7bc082f4de": "インストールコマンドのコピー",
+          "heartbeatTitle": "ワーカーのハートビート",
+          "heartbeatDescription": "割り当てられたワーカーが数分ごとに状況を知らせるので、コーディネーターは作業中の Agent と応答しなくなった Agent を見分けられます。オフにするとコーディネーターへのメッセージは減りますが、その定期連絡がなくなります。変更後に割り当てられたワーカーに適用されます。",
+          "heartbeatKeywordHeartbeat": "ハートビート",
+          "heartbeatKeywordStalled": "停止"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "Agent がコンテキストを引き継ぎ、Orca を通じて作業を調整できるようにします。",
@@ -8959,7 +8986,9 @@
           "editingPrefix": "編集中",
           "allowRemoteCliControl": "このホストの orca CLI による Orca の操作を許可する",
           "allowRemoteCliControlHelp": "新しいホストではデフォルトでオンです。このホストで実行される orca コマンドが、このホストのワークスペース内に限り、接続中のみ、このデスクトップの Orca ブラウザのタブを開いて操作できるようにし、このホストで古い Orca が起動したターミナルが自身の監督下の作業についてオーケストレーションコマンド（check、inbox、send、ask、reply）を実行できるようにします。ファイル、クリップボード、Cookie は読み取れません。オフの場合、このホスト自身の Orca サーバーにのみアクセスします。",
-          "addHost": "ホストを追加"
+          "addHost": "ホストを追加",
+          "reconnectOnLaunch": "起動時に再接続",
+          "reconnectOnLaunchHelp": "オフにすると、Orca は起動時にこのホストと、それを経由する Orca サーバーを、接続するまで切断したままにします。"
         },
         "TasksPane": {
           "f71d8a9dd3": "タスクプロバイダー",
@@ -12834,7 +12863,9 @@
           "behindCheckFailed": "Orca サーバーを実行しています。Orca はこのアプリより古いかどうかを確認できませんでした。",
           "refusedBlockedReason": "このホストにはまだ Orca がセットアップされていません。{{reason}}",
           "setupContactLost": "Orca はサーバーのセットアップ中にこのホストとの接続を失いました。ホスト上では何も停止されませんでした。続行するには再度接続してください。",
-          "runtimeNoexec": "このホストでは ~/.orca-remote からのプログラムの実行が許可されていないため、Orca はそこでサーバーを起動できません。これは通常、ホームフォルダーが noexec でマウントされていることを意味します。ホストの管理者にそこでプログラムの実行を許可するよう依頼してから、再度接続してください。"
+          "runtimeNoexec": "このホストでは ~/.orca-remote からのプログラムの実行が許可されていないため、Orca はそこでサーバーを起動できません。これは通常、ホームフォルダーが noexec でマウントされていることを意味します。ホストの管理者にそこでプログラムの実行を許可するよう依頼してから、再度接続してください。",
+          "refusedLeaveBehind": "このホストの保存済み項目の一部は Orca サーバーに移動できません: {{items}}。「それでも移行」を選ぶとホストに接続し、これらはこのコンピューターに残ります。",
+          "refusedLeaveBehindUnnamed": "このホストの保存済み項目の一部は Orca サーバーに移動できません。「それでも移行」を選ぶとホストに接続し、これらはこのコンピューターに残ります。"
         },
         "deltaMove": {
           "action": "新規プロジェクトを移動…",
@@ -13116,6 +13147,16 @@
           "searchLabel": "ビルドの検索",
           "searchPlaceholder": "ビルドを検索…",
           "noMatches": "一致するビルドはありません。"
+        },
+        "notification": {
+          "settings": {
+            "copy": {
+              "macFailureTitle": "macOS で通知が表示されませんでした",
+              "macFailureDescription": "システム設定で Orca の「通知を許可」をオンにしてください。",
+              "windowsFailureTitle": "Windows で通知が表示されませんでした",
+              "windowsFailureDescription": "Windows の設定で Orca の通知をオンにしてください。"
+            }
+          }
         }
       },
       "right": {
@@ -14001,7 +14042,7 @@
             "70893f017b": "側",
             "7b415c39e9": "トップ",
             "864111caa2": "アクティビティバーの位置",
-            "e8e2e4ce74": "ツールサイドバーを切り替え",
+            "e8e2e4ce74": "右サイドバーを切り替えます",
             "441733b630": "ポート",
             "83a10e3c44": "チェック",
             "0314901467": "ソース管理",
@@ -14009,7 +14050,7 @@
             "8bc2bbc3a0": "エクスプローラ",
             "45b78f03bc": "側",
             "34af8aadf5": "トップ",
-            "9fffaf17c1": "ツールサイドバーを切り替え（{{value0}}）",
+            "9fffaf17c1": "右サイドバーを切り替えます ({{value0}})",
             "b37ff4a89a": "ポート",
             "9f83375839": "チェック",
             "6306b48afd": "source-control",
@@ -14330,7 +14371,8 @@
             "resumeInChatFailed": "新規チャットでこのセッションを再開できませんでした。",
             "resumeInNewCliUnavailable": "このセッションは CLI で開けません。",
             "resumeInNewCliHostTooOld": "このチャットを新しい CLI で再開するには、チャットを実行しているホストの Orca を更新してください。",
-            "folderWorkspaceUnavailable": "フォルダーワークスペースは利用できなくなりました。"
+            "folderWorkspaceUnavailable": "フォルダーワークスペースは利用できなくなりました。",
+            "sessionDeleteCheckingHost": "{{value0}} を確認しています…"
           },
           "AiVaultPanelControls": {
             "scanningSessions": "セッションをスキャンしています",
@@ -14471,12 +14513,14 @@
             "resumeInNewNativeChat": "新しいチャットで再開",
             "resumeInNewCli": "新しいターミナルで再開",
             "resumeInNewCliTooltipFork": "この会話のコピーを使って、新しいターミナル Agent のセッションを開始します。",
-            "resumeInNewCliTooltipChat": "このチャットは変更されません。"
+            "resumeInNewCliTooltipChat": "このチャットは変更されません。",
+            "deleteReasonHostUpdateRequired": "ここからセッションを削除するには {{value0}} を更新してください。"
           },
           "AiVaultSessionDeleteDialog": {
             "title": "このセッションを削除しますか?",
             "description": "「{{value0}}」を削除します。削除すると、{{value1}} 自体のコマンドラインからも再開できなくなります。",
-            "confirm": "削除"
+            "confirm": "削除",
+            "remoteDescription": "「{{value0}}」は {{value2}} から削除されます。削除後は {{value1}} 自身のコマンドラインからも再開できなくなります。"
           },
           "FileExplorerNameFilter": {
             "26fb73c6e3": "ファイルを検索",
@@ -15675,6 +15719,9 @@
             "0d6efe9cf4": "プロジェクトやワークツリーが保護されたフォルダーにある場合、macOS で推奨されます。",
             "dac08ec03e": "開いています…",
             "6e3d62b816": "フルディスクアクセスを開く"
+          },
+          "FeatureWallTourSurface": {
+            "reopenHint": "ヘルプ > Orca を探索 からいつでも再度開けます。"
           }
         },
         "tips": {
@@ -15701,7 +15748,8 @@
             "53905bd076": "開発プレビュー: スキル設定ターミナルを開きます。",
             "1da82af45b": "Orca CLI には注意が必要です",
             "ce13a742d0": "orcaをPATHに登録しました。",
-            "d1a86c7eb5": "[設定] を開いて CLI セットアップを完了します。"
+            "d1a86c7eb5": "[設定] を開いて CLI セットアップを完了します。",
+            "cliInstallFailed": "Orca CLI をインストールできませんでした。"
           },
           "CmdJPaletteFeatureTipVisual": {
             "ab94e16d44": "ワークツリー「{{value0}}」を作成する",
@@ -16706,6 +16754,17 @@
           },
           "copy": {
             "copyFailed": "クラッシュレポートの詳細をコピーできませんでした。"
+          },
+          "CrashReportDialogSurface": {
+            "reportTitle": "クラッシュを報告",
+            "uiErrorTitle": "Orca で回復可能な UI エラーが発生しました",
+            "closedTitle": "Orca が予期せず終了しました",
+            "reportDescription": "プライバシーに配慮したクラッシュレポートを送信します。利用可能な場合は、機密情報を除去した最近の診断ログが含まれます。",
+            "uiErrorDescription": "プライバシーに配慮した診断レポートを送信して、失敗した UI の把握にご協力ください。",
+            "closedDescription": "プライバシーに配慮した診断レポートを送信して、何が起きたかの把握にご協力ください。",
+            "reportNotesPlaceholder": "任意: 何が起きましたか？",
+            "uiErrorNotesPlaceholder": "任意: この UI エラーの前に何をしていましたか？",
+            "closedNotesPlaceholder": "任意: Orca が終了する前に何をしていましたか？"
           }
         }
       },
@@ -18529,6 +18588,16 @@
         "cancelled": "この通常の SSH ターミナルは開始前に閉じられました。",
         "terminalUnavailable": "Orca はここでターミナルを開けませんでした。",
         "openHint": "Orca がホスト上でセットアップできない間も、ホストで作業を続けられます。"
+      },
+      "PullRequestConfirmation": {
+        "closeTitle": "PR #{{number}} を閉じますか？",
+        "mergeLabel": "マージコミットを作成",
+        "mergeTitle": "マージコミットを作成して PR #{{number}} をマージしますか？",
+        "rebaseLabel": "リベースしてマージ",
+        "rebaseTitle": "PR #{{number}} をリベースしてマージしますか？",
+        "reopenTitle": "PR #{{number}} を再度開きますか？",
+        "squashLabel": "スカッシュしてマージ",
+        "squashTitle": "PR #{{number}} をスカッシュしてマージしますか？"
       }
     },
     "i18n": {
@@ -18764,7 +18833,8 @@
         "agentNotSignedIn": "{{agent}} にサインインしてください。",
         "thenSendAgain": "その後、メッセージをもう一度送信してください。",
         "runCommandWhenDone": "終わったら /{{command}} を実行してください。",
-        "commandAfterAnswer": "Agent の質問または承認に回答してから、/{{command}} を実行してください。"
+        "commandAfterAnswer": "Agent の質問または承認に回答してから、/{{command}} を実行してください。",
+        "fullAccessAsRoot": "{{agent}} は root として実行されている間はフルアクセスを使用しません。このチャットを実行しているコンピューターの [設定 → Agent] で {{agent}} に別の権限を選択してから、新しいチャットを開始してください。"
       },
       "writeNotice": {
         "notDoneReadHistory": "このチャットの履歴を読み込めませんでした。",
@@ -19058,7 +19128,8 @@
         "runLiveToolOne": "1つのツールを使用する",
         "runLiveToolMany": "{{value0}} ツールの使用",
         "showBrowserPage": "表示",
-        "showBrowserPageLabel": "{{value0}} を表示"
+        "showBrowserPageLabel": "{{value0}} を表示",
+        "runListSeparator": "、"
       },
       "status": {
         "responding": "Agent が応答中です",
@@ -19091,7 +19162,8 @@
         "notSavedYet": "{{agent}} はまだこの会話を保存していません。応答してから再度お試しください。",
         "cannotResume": "この {{agent}} の会話はネイティブチャットで再開できません。",
         "exitUnconfirmedFromTerminal": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。",
-        "exitUnconfirmed": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。"
+        "exitUnconfirmed": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。",
+        "hostUpdateRequired": "チャット UI で続けるには、このホストの Orca を更新してください。"
       },
       "state": {
         "loading": {
@@ -19275,10 +19347,10 @@
           "stoppedCount": "{{value0}} が停止しました",
           "unverifiableCount": "{{value0}} 件は状態を取得できません"
         },
-        "startedOne": "1 人のサブ Agent を解雇しました",
-        "startedN": "{{value0}} サブ Agent をキックオフしました",
-        "ranOne": "1 人のサブ Agent を実行しました",
-        "ranN": "{{value0}} サブ Agent を実行しました",
+        "startedOne": "1 個のサブ Agent を起動しました",
+        "startedN": "{{value0}} 個のサブ Agent を起動しました",
+        "ranOne": "1 個のサブ Agent を実行しました",
+        "ranN": "{{value0}} 個のサブ Agent を実行しました",
         "tokens": "{{value0}} トークン",
         "unnamed": "サブ Agent"
       },
@@ -19448,7 +19520,13 @@
       "explicitChatWsl": "WSL ではチャットを利用できません。ターミナルで Agent を開いてください。",
       "explicitChatSsh": "SSH 接続ではチャットを利用できません。ターミナルで Agent を開いてください。",
       "structuredSessionTerminalNotVisible": "Orca はターミナルで {{value0}} を開きましたが、起動が終了したときにここに表示できませんでした。チャットの下書きが保存されました。",
-      "explicitChatUnavailable": "このワークスペースではチャットを実行できません。Agent のインストール状況を確認するか、ターミナルで開いてください。"
+      "explicitChatUnavailable": "このワークスペースではチャットを実行できません。Agent のインストール状況を確認するか、ターミナルで開いてください。",
+      "goalControl": {
+        "settingsRejected": "Codex は選択したモデルと推論量を適用できませんでした。目標の変更は送信されていません。選択内容を確認して、もう一度お試しください。",
+        "settingsUnconfirmed": "Codex は選択したモデルと推論量の適用を確認しませんでした。目標の変更は送信されていません。チャットを確認して、もう一度お試しください。",
+        "pauseUnconfirmed": "Codex の実行は停止しましたが、目標の一時停止は確認されていません。続行する前に目標を確認してください。",
+        "stopUnconfirmed": "Codex の停止を確認できませんでした。続行する前にチャットを確認してください。"
+      }
     },
     "tab": {
       "bar": {
@@ -20639,7 +20717,20 @@
         "restartingOne": "{{account}} で Claude セッションを 1 件再起動中",
         "restartingOther": "{{account}} で Claude セッションを {{count}} 件再起動中",
         "settingRestart": "常に再起動する",
-        "settingKeep": "再起動しない"
+        "settingKeep": "再起動しない",
+        "groupOnAccount": "{{account}} で実行中",
+        "groupElsewhere": "{{account}} 以外",
+        "groupCantMove": "移動できません",
+        "selectGroup": "{{group}} のセッションをすべて選択",
+        "reasonWsl": "WSL ターミナル",
+        "reasonOwnFolder": "独自の Claude フォルダーを使用",
+        "reasonUnknownAccount": "アカウント不明",
+        "reasonNoSession": "再開できません",
+        "reviewBodyOne": "他の Claude セッション 1 件は {{next}} に移動されませんでした。",
+        "reviewBodyOther": "他の Claude セッション {{count}} 件は {{next}} に移動されませんでした。",
+        "notMovedOne": "他の 1 件のセッションは移動されませんでした。",
+        "notMovedOther": "他の {{count}} 件のセッションは移動されませんでした。",
+        "review": "確認"
       }
     },
     "hostSignIn": {
@@ -21216,5 +21307,12 @@
   },
   "browserTab": {
     "agentDriving": "Agent がこのページを使用中です"
+  },
+  "agentLaunch": {
+    "opencode": {
+      "updateRequired": "このバージョンの OpenCode では、選択したモデルで安全に起動できません。OpenCode を対応バージョンに更新するか、モデルの指定を省略してください。",
+      "invalidConfig": "OpenCode は選択したモデルを起動設定に適用できませんでした。OpenCode の起動設定を確認して再試行するか、モデルの指定を省略してください。",
+      "unsupportedLaunch": "OpenCode はこの起動に選択したモデルを適用できません。対応する起動引数で新しいローカルターミナルを開くか、モデルの指定を省略してください。"
+    }
   }
 }

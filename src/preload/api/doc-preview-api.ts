@@ -1,4 +1,4 @@
-import type { DocPreviewFailure } from '../../shared/doc-preview-scheme'
+import type { DocPreviewExternalLink, DocPreviewFailure } from '../../shared/doc-preview-scheme'
 
 export type DocPreviewGrantOwner =
   | { kind: 'ssh'; connectionId: string }
@@ -41,7 +41,7 @@ export type DocPreviewApi = {
     /** Cache an already-authorized remote file for the Tauri protocol handler. */
     cacheFile: (request: DocPreviewCacheFileRequest) => Promise<boolean>
     /** External link the preview guest tried to open; the renderer turns it into a browser tab. */
-    onExternalLink: (callback: (payload: { url: string }) => void) => () => void
+    onExternalLink: (callback: (payload: DocPreviewExternalLink) => void) => () => void
     onLoadFailure: (callback: (payload: DocPreviewFailure) => void) => () => void
     /** A Tauri preview requested an authorized remote resource that is not cached yet. */
     onResourceRequested: (callback: (payload: DocPreviewResourceRequest) => void) => () => void

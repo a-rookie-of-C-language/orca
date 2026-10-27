@@ -189,7 +189,15 @@ import {
   SetValue,
   TypeText
 } from './computer-schemas-params'
-import { ConnectorSend, ConnectorStart } from './connector-params'
+import {
+  ConnectorAnswer,
+  ConnectorCancel,
+  ConnectorPendingPrompt,
+  ConnectorReply,
+  ConnectorSend,
+  ConnectorStart,
+  ConnectorWatch
+} from './connector-params'
 import { CredentialValueParams } from './credential-params'
 import {
   AttachParams as AttachParamsOfEmulatorParams,
@@ -524,7 +532,8 @@ import {
   PreflightAgentDetection,
   PreflightCheck,
   PreflightDetectRemoteAgents,
-  PreflightDetectRemoteWindowsTerminalCapabilities
+  PreflightDetectRemoteWindowsTerminalCapabilities,
+  PreflightProjectAgentDetection
 } from './preflight-params'
 import {
   ProjectHostSetupClone,
@@ -561,6 +570,7 @@ import {
   CloseLifecycleTab,
   CloseTab,
   CreateTerminalTab,
+  MovePaneToNewTab,
   MoveTab,
   SaveMarkdownTab,
   SessionTabsUnsubscribe,
@@ -1002,6 +1012,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'connector.answer': ConnectorAnswer,
   'connector.cancel': ConnectorCancel,
   'connector.pendingPrompt': ConnectorPendingPrompt,
+  'connector.reply': ConnectorReply,
   'connector.send': ConnectorSend,
   'connector.start': ConnectorStart,
   'credentials.clearMiniMaxApiKey': null,
@@ -1410,7 +1421,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'plugins.rollbackMarketplacePlugin': PluginMarketplaceInstalledPluginParams,
   'plugins.setEnabled': PluginSetEnabledParams,
   'preflight.check': PreflightCheck,
-  'preflight.detectAgents': PreflightAgentDetection,
+  'preflight.detectAgents': PreflightProjectAgentDetection,
   'preflight.detectRemoteAgents': PreflightDetectRemoteAgents,
   'preflight.detectRemoteWindowsTerminalCapabilities':
     PreflightDetectRemoteWindowsTerminalCapabilities,
@@ -1465,6 +1476,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'session.tabs.list': WorktreeTabSelector,
   'session.tabs.listAll': null,
   'session.tabs.move': MoveTab,
+  'session.tabs.movePaneToNewTab': MovePaneToNewTab,
   'session.tabs.setTabProps': SetTabProps,
   'session.tabs.subscribe': WorktreeTabSelector,
   'session.tabs.subscribeAll': null,

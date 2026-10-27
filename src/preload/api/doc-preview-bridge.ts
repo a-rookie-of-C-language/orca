@@ -5,7 +5,8 @@ import {
   DOC_PREVIEW_AUTHORIZE_DIRECTORY_CHANNEL,
   DOC_PREVIEW_MINT_GRANT_CHANNEL,
   DOC_PREVIEW_REVOKE_GRANT_CHANNEL,
-  type DocPreviewFailure
+  type DocPreviewFailure,
+  type DocPreviewExternalLink
 } from '../../shared/doc-preview-scheme'
 import type { DocPreviewGrantRequest } from '../api/doc-preview-api'
 import type { PreloadApi } from '../api-types'
@@ -18,8 +19,8 @@ export const docPreviewApi = {
   authorizeDirectory: (grantId: string, relativePath: string): Promise<boolean> =>
     ipcRenderer.invoke(DOC_PREVIEW_AUTHORIZE_DIRECTORY_CHANNEL, grantId, relativePath),
   cacheFile: () => Promise.resolve(false),
-  onExternalLink: (callback: (payload: { url: string }) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: { url: string }): void =>
+  onExternalLink: (callback: (payload: DocPreviewExternalLink) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: DocPreviewExternalLink): void =>
       callback(payload)
     ipcRenderer.on(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL, listener)
     return () => ipcRenderer.removeListener(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL, listener)

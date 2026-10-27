@@ -34,6 +34,7 @@ import {
   invalidateAiVaultSessionListCache,
   listAiVaultSessions
 } from '../ai-vault/cached-session-list'
+import { deleteAiVaultSessionForRemoteClient } from '../ai-vault/host-session-delete'
 import { resolveLocalAiVaultSessionTitles } from '../ai-vault/session-title-resolver'
 import { validateAiVaultSessionDeleteTarget } from '../ai-vault/session-delete-target'
 import { invalidateSessionParseCacheEntry } from '../ai-vault/session-scanner-parse-cache'
@@ -104,6 +105,12 @@ export class RuntimeAiVaultCommands {
 
   getScanProgress(scanKey: string) {
     return Promise.resolve(localAiVaultScanProgress(scanKey))
+  }
+
+  delete(
+    args: Omit<AiVaultDeleteSessionArgs, 'executionHostId'>
+  ): Promise<AiVaultDeleteSessionResult> {
+    return deleteAiVaultSessionForRemoteClient(args)
   }
 
   prepare(args: AiVaultPrepareSessionResumeArgs): Promise<AiVaultPrepareSessionResumeResult> {
