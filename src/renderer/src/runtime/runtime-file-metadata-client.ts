@@ -34,7 +34,9 @@ export async function listRuntimeMarkdownDocuments(
 export async function statRuntimePath(
   context: RuntimeFileOperationArgs,
   absolutePath: string,
-  access?: LocalFileAccess
+  access?: LocalFileAccess,
+  /** A user act; may start a stopped WSL distro. Local stats only. */
+  options: { wakeWslDistro?: boolean } = {}
 ): Promise<{ size: number; isDirectory: boolean; mtime: number }> {
   if (isDirectSshFileContext(context)) {
     return statDirectSshFile(context, absolutePath)
@@ -45,7 +47,8 @@ export async function statRuntimePath(
     return window.api.fs.stat({
       filePath: absolutePath,
       connectionId: context.connectionId,
-      ...localAccess(context.connectionId, access)
+      ...localAccess(context.connectionId, access),
+      ...(options.wakeWslDistro && !context.connectionId ? { wakeWslDistro: true } : {})
     })
   }
   return callRuntimeRpc<{ size: number; isDirectory: boolean; mtime: number }>(

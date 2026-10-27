@@ -2,6 +2,7 @@ import React from 'react'
 import { CircleX, Inbox, SearchX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
+import { useAppStore } from '@/store'
 
 export function SidebarWorktreeListEmptyState({
   hasFilters,
@@ -13,6 +14,7 @@ export function SidebarWorktreeListEmptyState({
   // Why: dsh names an empty list with a centered glyph over the text, so a
   // filtered-to-nothing list reads differently from having no workspaces.
   const Glyph = hasFilters ? SearchX : Inbox
+  const discoveryCompleted = useAppStore((s) => s.startupWorktreeRefreshCompleted)
   return (
     <div
       data-worktree-sidebar-container
@@ -21,12 +23,16 @@ export function SidebarWorktreeListEmptyState({
     >
       <div className="worktree-sidebar-scrollbar flex h-full flex-col overflow-y-auto overflow-x-hidden pl-1 scrollbar-sleek pt-px">
         <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-[11px] text-muted-foreground">
-          <span data-testid="sidebar-empty-state-glyph" className="text-muted-foreground/60">
-            <Glyph className="size-6" strokeWidth={1.75} />
-          </span>
-          <span>
-            {translate('auto.components.sidebar.WorktreeList.b7acbf038b', 'No workspaces found')}
-          </span>
+          {discoveryCompleted && (
+            <>
+              <span data-testid="sidebar-empty-state-glyph" className="text-muted-foreground/60">
+                <Glyph className="size-6" strokeWidth={1.75} />
+              </span>
+              <span>
+                {translate('auto.components.sidebar.WorktreeList.b7acbf038b', 'No workspaces found')}
+              </span>
+            </>
+          )}
           {hasFilters && (
             <Button
               variant="secondary"

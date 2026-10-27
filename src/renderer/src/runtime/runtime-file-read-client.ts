@@ -64,7 +64,8 @@ export async function readRuntimeFileContent({
   access,
   terminalArtifactGrantId,
   expectedEnvironmentPairingRevision,
-  pageOversizedBinary
+  pageOversizedBinary,
+  wakeWslDistro
 }: RuntimeFileReadArgs): Promise<RuntimeReadableFileContent> {
   assertExternalSshReadOwnership(target, connectionId, expectedExternalSshTargetId)
   if (isDirectSshFileContext({ target, connectionId })) {
@@ -80,7 +81,8 @@ export async function readRuntimeFileContent({
       filePath,
       connectionId,
       includeLocalLogMetadata,
-      ...localAccess(connectionId, access)
+      ...localAccess(connectionId, access),
+      ...(wakeWslDistro && !connectionId ? { wakeWslDistro } : {})
     })
   }
   // Why: decided synchronously so ordinary reads pin their pairing without an extra await.

@@ -8,6 +8,7 @@ import {
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
+import { repoMatchesHostIdentity } from '@/store/slices/repo-host-identity'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { normalizeAgentProviderSession } from '../../../shared/agent-session-resume'
 import {
@@ -104,7 +105,10 @@ export function resolveAgentAccountRestartResumeStartup(
     // Both restart executors spawn in the tab's start folder.
     launchCwd:
       state.tabsByWorktree[args.worktreeId]?.find((tab) => tab.id === args.tabId)?.startupCwd ??
-      worktree?.path
+      state.getKnownWorktreeById(
+        args.worktreeId,
+        getExecutionHostIdForWorktree(state, args.worktreeId)
+      )?.path
   })
   if (!startupPlan) {
     return null
@@ -159,9 +163,11 @@ function resolveAccountRestartLaunchTarget(
   args: AccountRestartTarget,
   projectRuntime: ProjectExecutionRuntimeResolution | undefined
 ): AgentResumeLaunchTarget {
-  const worktree = state.getKnownWorktreeById(args.worktreeId)
-  const repo = worktree ? state.repos.find((entry) => entry.id === worktree.repoId) : null
   const executionHostId = getExecutionHostIdForWorktree(state, args.worktreeId)
+  const worktree = state.getKnownWorktreeById(args.worktreeId, executionHostId)
+  const repo = worktree
+    ? state.repos.find((entry) => repoMatchesHostIdentity(entry, worktree.repoId, executionHostId))
+    : null
   return resolveAgentResumeLaunchTarget({
     projectRuntime,
     connectionId: repo?.connectionId,

@@ -96,6 +96,7 @@ function isRuntimeClientEvent(
     message.type === 'browserProfilesChanged' ||
     message.type === 'linearLinkedIssueUpdated' ||
     message.type === 'activateWorktree' ||
-    message.type === 'worktreeTerminalSleepState'
+    message.type === 'worktreeTerminalSleepState' ||
+    message.type === 'workspaceViewChanged'
   )
 }

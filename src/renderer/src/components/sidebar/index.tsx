@@ -24,6 +24,7 @@ import { lazyWithRetry } from '@/lib/lazy-with-retry'
 import { LocalGitToolchainScanBanner } from './LocalGitToolchainScanBanner'
 import { SeveredTerminalDaemonBanner } from './SeveredTerminalDaemonBanner'
 import { StalledTerminalDaemonBanner } from './StalledTerminalDaemonBanner'
+import { StartupWorktreeRefreshStatus } from './StartupWorktreeRefreshStatus'
 
 // Keep the Agents activity pipeline out of the workspace view’s initial bundle.
 const SidebarAgentsList = lazyWithRetry(() => import('./SidebarAgentsList'))
@@ -245,6 +246,7 @@ function Sidebar({
             ) : (
               <>
                 <LocalGitToolchainScanBanner />
+                <StartupWorktreeRefreshStatus />
                 <WorktreeList
                   scrollOffsetRef={worktreeScrollOffsetRef}
                   scrollAnchorRef={worktreeScrollAnchorRef}
