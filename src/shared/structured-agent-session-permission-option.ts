@@ -62,8 +62,13 @@ export function structuredAgentSessionPermissionDescriptor(state: {
   if (!support || (!own && !support.modes.some((mode) => mode === state.permissionMode))) {
     return null
   }
-  const current =
-    state.reportedPermissionMode === undefined && !own && state.permissionOwnSupported !== true
+  // An explicit chat pick is the person's answer even while the running agent
+  // still reports its launch mode; Claude applies the pick on the next turn.
+  const intent = own ? null : state.permissionMode
+  const showingIntent = intent !== null
+  const current = showingIntent
+    ? (intent ?? undefined)
+    : state.reportedPermissionMode === undefined && state.permissionOwnSupported !== true
       ? (state.permissionMode ?? undefined)
       : (state.reportedPermissionMode ?? undefined)
   const reported = support.modes.find((mode) => mode === current)
@@ -91,7 +96,7 @@ export function structuredAgentSessionPermissionDescriptor(state: {
     valueSource:
       current === undefined
         ? 'unknown'
-        : state.reportedPermissionMode === undefined
+        : showingIntent || state.reportedPermissionMode === undefined
           ? 'applied'
           : 'reported',
     transport: 'agent-session',

@@ -149,4 +149,26 @@ describe('the permission mode picker', () => {
     ).not.toContain('permissionMode')
     expect(structuredAgentSessionOptionPicks(state, { permissionMode: 'full-access' })).toEqual([])
   })
+
+  it('shows the picked mode while the running agent still reports its launch mode', () => {
+    // Claude fixes approval at startup: the pick lands next turn, but the pill
+    // must answer what the person asked for, not what the child still runs.
+    const state = live('claude', { permissionMode: 'auto', reportedPermissionMode: 'ask' })
+    const descriptor = permission(state)
+    expect(descriptor).toMatchObject({
+      valueSource: 'applied',
+      kind: { currentValue: 'auto' }
+    })
+  })
+
+  it('shows the reported mode when the chat follows agent permissions', () => {
+    const state = live('claude', {
+      permissionMode: 'own',
+      reportedPermissionMode: 'accept-edits'
+    })
+    expect(permission({ ...state, permissionOwnSupported: true })).toMatchObject({
+      valueSource: 'reported',
+      kind: { currentValue: 'accept-edits' }
+    })
+  })
 })
