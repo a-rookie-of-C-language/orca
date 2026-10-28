@@ -140,14 +140,28 @@ const pill = (name: string): HTMLElement => screen.getByRole('button', { name })
 const isOpen = (trigger: HTMLElement): boolean =>
   trigger.closest('[data-testid="picker-root"]')?.getAttribute('data-open') === 'true'
 
+/** Open the effort pill's popover; its levels only exist once the picker mounts. */
+const openEffort = (): HTMLElement => {
+  const trigger = screen.getByRole('button', { name: /^Effort/ })
+  trigger.click()
+  return trigger
+}
+
 const effortLevels = (): HTMLElement[] =>
   within(screen.getByRole('radiogroup', { name: 'Effort' })).getAllByRole('radio')
+
+/** The write group holding the effort levels, for busy/release assertions. */
+const effortBusy = (): string | null | undefined =>
+  screen
+    .getByRole('radiogroup', { name: 'Effort' })
+    .closest('[data-busy]')
+    ?.getAttribute('aria-disabled')
 
 afterEach(() => cleanup())
 
 describe('NativeChatSessionOptionPickers', () => {
   it.each(['model', 'effort'])(
-    'opens the one picker when a slash command asks for the %s',
+    'opens its picker when a slash command asks for the %s',
     async (id) => {
       const demandModelCatalog = vi.fn()
       const demanding = { ...surface, demandModelCatalog }
@@ -159,7 +173,8 @@ describe('NativeChatSessionOptionPickers', () => {
           pickerRequest={null}
         />
       )
-      expect(isOpen(pill('Model Opus 4.8, Effort High'))).toBe(false)
+      const target = (): HTMLElement => pill(id === 'effort' ? 'Effort High' : 'Model Opus 4.8')
+      expect(isOpen(target())).toBe(false)
       expect(demandModelCatalog).not.toHaveBeenCalled()
 
       rerender(
@@ -170,12 +185,13 @@ describe('NativeChatSessionOptionPickers', () => {
           pickerRequest={{ id, consume: () => {} }}
         />
       )
-      await waitFor(() => expect(isOpen(pill('Model Opus 4.8, Effort High'))).toBe(true))
-      expect(demandModelCatalog).toHaveBeenCalledTimes(1)
+      await waitFor(() => expect(isOpen(target())).toBe(true))
+      // Only the model pill's popover warms the model catalog.
+      expect(demandModelCatalog).toHaveBeenCalledTimes(id === 'effort' ? 0 : 1)
     }
   )
 
-  it('keeps the picker a slash command opened when the next model lacks that option', () => {
+  it('keeps a gone effort row, switched off, inside the still-open effort picker', () => {
     const request = { id: 'effort', consume: () => {} }
     const { rerender } = render(
       <NativeChatSessionOptionPickers
@@ -185,7 +201,7 @@ describe('NativeChatSessionOptionPickers', () => {
         pickerRequest={request}
       />
     )
-    expect(isOpen(pill('Model Opus 4.8, Effort High'))).toBe(true)
+    expect(isOpen(pill('Effort High'))).toBe(true)
 
     rerender(
       <NativeChatSessionOptionPickers
@@ -195,8 +211,11 @@ describe('NativeChatSessionOptionPickers', () => {
         pickerRequest={request}
       />
     )
-    expect(isOpen(pill('Model Opus 4.8'))).toBe(true)
     expect(effortLevels().every((level) => level.hasAttribute('disabled'))).toBe(true)
+    expect(effortLevels().map((level) => level.getAttribute('aria-checked'))).toEqual([
+      'false',
+      'false'
+    ])
   })
 
   // Consume session-held requests even across composer remounts so prompts cannot reopen the picker.
@@ -222,12 +241,12 @@ describe('NativeChatSessionOptionPickers', () => {
       )
     }
     const { rerender } = render(<Session />)
-    await waitFor(() => expect(isOpen(pill('Model Opus 4.8, Effort High'))).toBe(true))
+    await waitFor(() => expect(isOpen(pill('Model Opus 4.8'))).toBe(true))
 
     rerender(<Session {...gone} />)
     expect(screen.queryByRole('button', { name: /^Model/ })).toBeNull()
     rerender(<Session />)
-    expect(isOpen(pill('Model Opus 4.8, Effort High'))).toBe(false)
+    expect(isOpen(pill('Model Opus 4.8'))).toBe(false)
   })
 
   it('sends a picked model to the session surface', async () => {
@@ -243,7 +262,7 @@ describe('NativeChatSessionOptionPickers', () => {
     await waitFor(() => expect(setOption).toHaveBeenCalledExactlyOnceWith('model', 'sonnet'))
   })
 
-  it('opens one picker upwards from the pill, anchored at its right edge', () => {
+  it('opens its pickers upwards from each pill, anchored at their right edges', () => {
     render(
       <NativeChatSessionOptionPickers
         surface={surface}
@@ -252,13 +271,14 @@ describe('NativeChatSessionOptionPickers', () => {
       />
     )
 
-    const content = screen.getByTestId('picker-content')
-    expect(content.getAttribute('data-side')).toBe('top')
-    expect(content.getAttribute('data-align')).toBe('end')
-    expect(content.getAttribute('data-collision-padding')).toBe('8')
+    for (const content of screen.getAllByTestId('picker-content')) {
+      expect(content.getAttribute('data-side')).toBe('top')
+      expect(content.getAttribute('data-align')).toBe('end')
+      expect(content.getAttribute('data-collision-padding')).toBe('8')
+    }
   })
 
-  it('shows the model and its option values in one pill', () => {
+  it('shows the model and non-effort option values in one pill, effort in its own', () => {
     const { rerender } = render(
       <NativeChatSessionOptionPickers
         surface={surface}
@@ -266,7 +286,8 @@ describe('NativeChatSessionOptionPickers', () => {
         isWorking={false}
       />
     )
-    expect(pill('Model Opus 4.8, Effort High · Fast').textContent).toBe('Opus 4.8High · Fast')
+    expect(pill('Model Opus 4.8, Session options Fast').textContent).toBe('Opus 4.8Fast')
+    expect(pill('Effort High').textContent).toBe('EffortHigh')
 
     rerender(
       <NativeChatSessionOptionPickers
@@ -287,13 +308,12 @@ describe('NativeChatSessionOptionPickers', () => {
     expect(pill('Model Opus 4.8, Session options Fast').textContent).toBe('Opus 4.8Fast')
   })
 
-  it('disables the pill while the agent is working', () => {
+  it('disables the pills while the agent is working', () => {
     render(
       <NativeChatSessionOptionPickers surface={surface} snapshot={[model(), effort]} isWorking />
     )
-    expect(pill('Model Opus 4.8, Effort High').parentElement?.getAttribute('data-disabled')).toBe(
-      'true'
-    )
+    expect(pill('Model Opus 4.8').parentElement?.getAttribute('data-disabled')).toBe('true')
+    expect(pill('Effort High').parentElement?.getAttribute('data-disabled')).toBe('true')
   })
 
   it('renders a session with no reported model without an empty model control', () => {
@@ -570,6 +590,7 @@ describe('NativeChatSessionOptionPickers', () => {
         isWorking={false}
       />
     )
+    openEffort()
     const [low, high] = effortLevels()
     expect([low?.textContent, high?.textContent]).toEqual(['Low', 'High'])
     expect([low?.getAttribute('aria-checked'), high?.getAttribute('aria-checked')]).toEqual([
@@ -615,6 +636,7 @@ describe('NativeChatSessionOptionPickers', () => {
         isWorking={false}
       />
     )
+    openEffort()
     const described = (name: string): string | null | undefined => {
       const id = screen.getByRole('radio', { name }).getAttribute('aria-describedby')
       return id ? document.getElementById(id)?.textContent : null
@@ -623,7 +645,7 @@ describe('NativeChatSessionOptionPickers', () => {
     expect(described('Med')).toBe('Medium')
     expect(described('XHigh')).toBe('Extra high Deepest reasoning')
     expect(described('Max')).toBeNull()
-    expect(pill('Model Opus 4.8, Effort Med')?.textContent).toBe('Opus 4.8Med')
+    expect(pill('Effort Med').textContent).toBe('EffortMed')
   })
 
   it('shows concurrent model and effort picks and releases only the settled descriptor', async () => {
@@ -646,12 +668,10 @@ describe('NativeChatSessionOptionPickers', () => {
         isWorking={false}
       />
     )
+    openEffort()
     const held = (): (string | null | undefined)[] => [
       screen.getByRole('listbox').getAttribute('aria-busy'),
-      screen
-        .getByRole('radiogroup', { name: 'Effort' })
-        .closest('[data-busy]')
-        ?.getAttribute('aria-disabled')
+      effortBusy()
     ]
     expect(held()).toEqual(['false', 'false'])
 
@@ -659,7 +679,7 @@ describe('NativeChatSessionOptionPickers', () => {
     await waitFor(() =>
       expect(screen.getByRole('radio', { name: 'Low' }).getAttribute('aria-checked')).toBe('true')
     )
-    expect(pill('Model Opus 4.8, Effort Low')).not.toBeNull()
+    expect(pill('Effort Low')).not.toBeNull()
     expect(held()).toEqual(['false', 'true'])
     screen.getByRole('option', { name: 'Sonnet 5' }).click()
     expect(setOption.mock.calls).toEqual([
@@ -717,15 +737,16 @@ describe('NativeChatSessionOptionPickers', () => {
     expect(isOpen(trigger)).toBe(false)
   })
 
-  // The popover hangs from its bottom edge: a row that vanished would slide the list.
+  // The model popover hangs from its bottom edge: a row that vanished would slide the list.
   it('keeps a row the next model lacks, switched off, while the picker is mounted', () => {
     const { rerender } = render(
       <NativeChatSessionOptionPickers
         surface={surface}
-        snapshot={[model(), effort, fast]}
+        snapshot={[model(), fast]}
         isWorking={false}
       />
     )
+    pill('Model Opus 4.8, Session options Fast').click()
     rerender(
       <NativeChatSessionOptionPickers
         surface={surface}
@@ -747,10 +768,5 @@ describe('NativeChatSessionOptionPickers', () => {
     const fastSwitch = screen.getByRole('switch', { name: 'Fast mode' })
     expect(fastSwitch).toHaveProperty('disabled', true)
     expect(fastSwitch.getAttribute('aria-checked')).toBe('false')
-    expect(effortLevels().map((level) => level.getAttribute('aria-checked'))).toEqual([
-      'false',
-      'false'
-    ])
-    expect(effortLevels().every((level) => level.hasAttribute('disabled'))).toBe(true)
   })
 })

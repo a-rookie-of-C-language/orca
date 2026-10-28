@@ -95,7 +95,12 @@ export function structuredAgentSessionPermissionDescriptor(state: {
           ? 'applied'
           : 'reported',
     transport: 'agent-session',
-    settable: state.permissionOwnSupported !== null && current !== undefined
+    // A host that accepts per-chat modes can take a new pick even when it has
+    // not reported a running mode yet; without that support there is nothing to
+    // write and nothing truthful to reflect back.
+    settable:
+      state.permissionOwnSupported === true ||
+      (state.permissionOwnSupported !== null && current !== undefined)
   }
 }
 

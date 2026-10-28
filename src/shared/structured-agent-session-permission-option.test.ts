@@ -49,14 +49,16 @@ describe('the permission mode picker', () => {
     for (const reportedPermissionMode of [undefined, null, 'full-access', 'read-only']) {
       const descriptor = permission({ ...capable, reportedPermissionMode })
       expect(descriptor).toMatchObject({
-        settable: typeof reportedPermissionMode === 'string',
+        // A host that takes per-chat modes can accept a fresh pick even before
+        // it reports the agent's running mode.
+        settable: true,
         kind: {
           currentValue: reportedPermissionMode ?? undefined,
           choices: expect.not.arrayContaining([expect.objectContaining({ value: 'own' })])
         }
       })
     }
-    expect(permission({ ...capable, permissionMode: 'ask' })?.settable).toBe(false)
+    expect(permission({ ...capable, permissionMode: 'ask' })?.settable).toBe(true)
   })
 
   it('shows the seeded mode before the agent starts, beside the quiet model pill', () => {

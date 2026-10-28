@@ -20,6 +20,7 @@ import {
 } from './native-chat-session-option-labels'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
 import { runSessionOptionSurfaceCall } from './native-chat-session-option-surface-call'
+import { NativeChatEffortPicker } from './NativeChatEffortPicker'
 import { NativeChatModelCombobox } from './NativeChatModelCombobox'
 import { useNativeChatPickerFocusReturn } from './native-chat-picker-focus-return'
 import { NativeChatSessionOptionRows } from './NativeChatSessionOptionRows'
@@ -143,7 +144,8 @@ function SessionOptionPopover(props: {
   const [requestedOptionId, setRequestedOptionId] = useState<string | null>(null)
   if (props.request !== seenRequest) {
     setSeenRequest(props.request)
-    if (props.request) {
+    // Effort lives in its own pill now; its request opens that picker, not this one.
+    if (props.request && props.request.id !== 'effort') {
       setOpen(true)
       setRequestedOptionId(props.request.id === model.id ? null : props.request.id)
     }
@@ -173,10 +175,6 @@ function SessionOptionPopover(props: {
       return
     }
     focusReturn.notePick()
-    // Why: effort is the last thing set before typing, so its level closes the picker.
-    if (descriptor.id === 'effort') {
-      setOpen(false)
-    }
     if (descriptor.kind.currentValue !== value) {
       props.onSet(descriptor, value)
     }
@@ -304,9 +302,14 @@ function NativeChatSessionOptionPickersInner({
     return null
   }
   const model = withPendingValue(reportedModel, pending.get(reportedModel.id) ?? null)
-  const options = sortNativeChatSessionOptions(snapshot).map((descriptor) =>
-    withPendingValue(descriptor, pending.get(descriptor.id) ?? null)
-  )
+  // Effort graduates to its own pill beside the model: it is the control people
+  // reach for between sends, so it does not live behind the options popover.
+  const allOptions = sortNativeChatSessionOptions(snapshot)
+  const effort = allOptions.find((descriptor) => descriptor.id === 'effort') ?? null
+  const options = allOptions
+    .filter((descriptor) => descriptor.id !== 'effort')
+    .map((descriptor) => withPendingValue(descriptor, pending.get(descriptor.id) ?? null))
+  const effortShown = effort ? withPendingValue(effort, pending.get(effort.id) ?? null) : null
 
   const markPending = (id: string) => (pick: PendingPick | null) => {
     setPending((current) => {
@@ -342,6 +345,22 @@ function NativeChatSessionOptionPickersInner({
           )
         }
         focusComposer={focusComposer}
+      />
+      {/* Always mounted: the picker itself holds a dropped effort while it is open. */}
+      <NativeChatEffortPicker
+        descriptor={effortShown}
+        isWorking={isWorking}
+        busy={effortShown !== null && pending.has(effortShown.id)}
+        request={pickerRequest?.id === 'effort' ? pickerRequest : null}
+        onSet={(value) =>
+          effortShown
+            ? runSessionOptionSurfaceCall(
+                { id: effortShown.id, value },
+                markPending(effortShown.id),
+                () => surface.setOption(effortShown.id, value)
+              )
+            : undefined
+        }
       />
     </div>
   )
